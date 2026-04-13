@@ -38,7 +38,19 @@
       ],
       "newArchEnabled": false
     },
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#FF922E"
+        }
+      ]
+    ],
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#FF922E"
+    },
     "scheme": "carematch",
     "extra": {
       "eas": {
