@@ -33,7 +33,7 @@ router.get('/notifications', adminController.getNotifications);
 router.post('/notifications/send', [
   body('title').notEmpty().trim().isLength({ min: 1, max: 200 }).withMessage('제목을 입력해주세요. (1~200자)'),
   body('body').notEmpty().trim().isLength({ min: 1, max: 2000 }).withMessage('내용을 입력해주세요. (1~2000자)'),
-  body('target').notEmpty().isIn(['all', 'individual', 'all_devices']).withMessage('발송 대상을 선택해주세요.'),
+  body('target').notEmpty().isIn(['all', 'individual', 'all_devices', 'guardians', 'caregivers']).withMessage('발송 대상을 선택해주세요.'),
   body('type').optional().isIn(['MATCHING', 'APPLICATION', 'CONTRACT', 'PAYMENT', 'CARE_RECORD', 'EXTENSION', 'PENALTY', 'SYSTEM']).withMessage('유효한 알림 유형을 선택해주세요.'),
 ], adminController.sendNotification);
 router.delete('/notifications/unsent', adminController.deleteUnsentNotifications);

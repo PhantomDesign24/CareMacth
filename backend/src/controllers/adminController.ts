@@ -1704,13 +1704,16 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { target, userId, title, body, type } = req.body;
+    const { target, userId, title, body, type, linkUrl, imageUrl } = req.body;
 
     if (!title || !body) {
       throw new AppError('제목과 내용을 입력해주세요.', 400);
     }
 
     const notificationType = type || 'SYSTEM';
+    const notificationData: Record<string, any> = {};
+    if (linkUrl) notificationData.url = linkUrl;
+    if (imageUrl) notificationData.imageUrl = imageUrl;
 
     if (target === 'individual') {
       if (!userId) {
@@ -1722,18 +1725,84 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
         throw new AppError('사용자를 찾을 수 없습니다.', 404);
       }
 
-      await prisma.notification.create({
+      const notification = await prisma.notification.create({
         data: {
           userId,
           type: notificationType,
           title,
           body,
+          data: Object.keys(notificationData).length ? notificationData : undefined,
         },
       });
+
+      // FCM 푸시 발송
+      if (user.fcmToken) {
+        const adminFb = await import('../config/firebase');
+        const firebase = adminFb.default;
+        if (firebase.apps.length) {
+          try {
+            await firebase.messaging().send({
+              token: user.fcmToken,
+              notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
+              data: { ...Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)])), notificationId: notification.id },
+              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', ...(imageUrl ? { imageUrl } : {}) } },
+            });
+            await prisma.notification.update({ where: { id: notification.id }, data: { pushSent: true, pushSuccess: true, pushSentAt: new Date() } });
+          } catch {
+            await prisma.notification.update({ where: { id: notification.id }, data: { pushSent: true, pushSuccess: false, pushError: '발송 실패', pushSentAt: new Date() } });
+          }
+        }
+      }
 
       res.status(201).json({
         success: true,
         message: `${user.name}님에게 알림이 발송되었습니다.`,
+      });
+    } else if (target === 'guardians' || target === 'caregivers') {
+      // 보호자/간병인 필터 발송
+      const role = target === 'guardians' ? 'GUARDIAN' : 'CAREGIVER';
+      const users = await prisma.user.findMany({
+        where: { isActive: true, role },
+        select: { id: true, fcmToken: true },
+      });
+
+      if (users.length === 0) {
+        throw new AppError('발송 대상 사용자가 없습니다.', 400);
+      }
+
+      await prisma.notification.createMany({
+        data: users.map((u) => ({
+          userId: u.id,
+          type: notificationType,
+          title,
+          body,
+          data: Object.keys(notificationData).length ? notificationData : undefined,
+        })),
+      });
+
+      // FCM 푸시 발송
+      const adminFb = await import('../config/firebase');
+      const firebase = adminFb.default;
+      let pushCount = 0;
+      if (firebase.apps.length) {
+        const tokens = users.filter(u => u.fcmToken).map(u => u.fcmToken!);
+        if (tokens.length > 0) {
+          try {
+            const result = await firebase.messaging().sendEachForMulticast({
+              tokens,
+              notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
+              data: Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)])),
+              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default' } },
+            });
+            pushCount = result.successCount;
+          } catch {}
+        }
+      }
+
+      const roleLabel = target === 'guardians' ? '보호자' : '간병인';
+      res.status(201).json({
+        success: true,
+        message: `${roleLabel} ${users.length}명 알림 저장, ${pushCount}명 푸시 발송`,
       });
     } else if (target === 'all_devices') {
       // 전체 디바이스 발송 (비회원 포함)
@@ -1761,6 +1830,7 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
             type: notificationType,
             title,
             body,
+            data: Object.keys(notificationData).length ? notificationData : undefined,
           })),
         });
       }
@@ -1772,8 +1842,9 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
         try {
           const result = await firebase.messaging().sendEachForMulticast({
             tokens,
-            notification: { title, body },
-            android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default' } },
+            notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
+            data: Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)])),
+            android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', ...(imageUrl ? { imageUrl } : {}) } },
           });
           successCount = result.successCount;
         } catch (e) {
@@ -1789,7 +1860,7 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
       // 전체 회원 발송
       const users = await prisma.user.findMany({
         where: { isActive: true },
-        select: { id: true },
+        select: { id: true, fcmToken: true },
       });
 
       if (users.length === 0) {
@@ -1802,12 +1873,32 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
           type: notificationType,
           title,
           body,
+          data: Object.keys(notificationData).length ? notificationData : undefined,
         })),
       });
 
+      // FCM 푸시 발송
+      const adminFb = await import('../config/firebase');
+      const firebase = adminFb.default;
+      let pushCount = 0;
+      if (firebase.apps.length) {
+        const tokens = users.filter(u => u.fcmToken).map(u => u.fcmToken!);
+        if (tokens.length > 0) {
+          try {
+            const result = await firebase.messaging().sendEachForMulticast({
+              tokens,
+              notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
+              data: Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)])),
+              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default' } },
+            });
+            pushCount = result.successCount;
+          } catch {}
+        }
+      }
+
       res.status(201).json({
         success: true,
-        message: `${users.length}명에게 알림이 발송되었습니다.`,
+        message: `${users.length}명 알림 저장, ${pushCount}명 푸시 발송`,
       });
     }
   } catch (error) {

@@ -184,7 +184,7 @@ export async function getAdminNotifications(params?: { type?: string; page?: num
   });
 }
 
-export async function sendAdminNotification(data: { target: string; userId?: string; title: string; body: string; type?: string }) {
+export async function sendAdminNotification(data: { target: string; userId?: string; title: string; body: string; type?: string; linkUrl?: string; imageUrl?: string }) {
   return apiRequest("/admin/notifications/send", { method: "POST", body: data });
 }
 

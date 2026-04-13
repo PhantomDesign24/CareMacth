@@ -67,11 +67,13 @@ const NOTIFICATION_TYPES = [
 
 export default function NotificationsPage() {
   // Send form state
-  const [target, setTarget] = useState<"all" | "individual" | "all_devices">("all");
+  const [target, setTarget] = useState<"all" | "individual" | "all_devices" | "guardians" | "caregivers">("all");
   const [userId, setUserId] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [sendType, setSendType] = useState("SYSTEM");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -117,7 +119,11 @@ export default function NotificationsPage() {
       alert("개별 발송 시 사용자 ID를 입력해주세요.");
       return;
     }
-    const confirmMsg = target === "all_devices" ? "비회원 포함 전체 디바이스에 푸시를 발송하시겠습니까?" : target === "all" ? "전체 회원에게 알림을 발송하시겠습니까?" : "해당 사용자에게 알림을 발송하시겠습니까?";
+    const targetLabels: Record<string, string> = {
+      all: "전체 회원", guardians: "보호자", caregivers: "간병인",
+      all_devices: "비회원 포함 전체 디바이스", individual: "해당 사용자",
+    };
+    const confirmMsg = `${targetLabels[target] || target}에게 알림을 발송하시겠습니까?`;
     if (!confirm(confirmMsg)) {
       return;
     }
@@ -131,11 +137,15 @@ export default function NotificationsPage() {
         title: title.trim(),
         body: body.trim(),
         type: sendType,
+        ...(linkUrl.trim() && { linkUrl: linkUrl.trim() }),
+        ...(imageUrl.trim() && { imageUrl: imageUrl.trim() }),
       });
       setSendResult({ type: "success", message: result?.message || "알림이 발송되었습니다." });
       setTitle("");
       setBody("");
       setUserId("");
+      setLinkUrl("");
+      setImageUrl("");
       // Refresh the list
       fetchNotifications();
     } catch (err: any) {
@@ -160,40 +170,26 @@ export default function NotificationsPage() {
           {/* 대상 */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">대상</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="target"
-                  value="all"
-                  checked={target === "all"}
-                  onChange={() => setTarget("all")}
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-sm text-gray-700">전체 회원</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="target"
-                  value="all_devices"
-                  checked={target === "all_devices"}
-                  onChange={() => setTarget("all_devices")}
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-sm text-gray-700">전체 디바이스 (비회원 포함)</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="target"
-                  value="individual"
-                  checked={target === "individual"}
-                  onChange={() => setTarget("individual")}
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-sm text-gray-700">개별</span>
-              </label>
+            <div className="flex flex-wrap gap-3">
+              {[
+                { value: "all", label: "전체 회원" },
+                { value: "guardians", label: "보호자만" },
+                { value: "caregivers", label: "간병인만" },
+                { value: "all_devices", label: "전체 디바이스 (비회원 포함)" },
+                { value: "individual", label: "개별" },
+              ].map((opt) => (
+                <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="target"
+                    value={opt.value}
+                    checked={target === opt.value}
+                    onChange={() => setTarget(opt.value as typeof target)}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-700">{opt.label}</span>
+                </label>
+              ))}
             </div>
           </div>
 
@@ -249,6 +245,35 @@ export default function NotificationsPage() {
               maxLength={2000}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
+          </div>
+
+          {/* 클릭 시 이동 URL */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">클릭 시 이동 URL <span className="text-gray-400 font-normal">(선택)</span></label>
+            <input
+              type="text"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="예: /dashboard/guardian, https://cm.phantomdesign.kr/find-work"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            />
+          </div>
+
+          {/* 이미지 URL */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">이미지 URL <span className="text-gray-400 font-normal">(선택)</span></label>
+            <input
+              type="text"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="예: https://cm.phantomdesign.kr/uploads/banner.png"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            />
+            {imageUrl && (
+              <div className="mt-2">
+                <img src={imageUrl} alt="미리보기" className="h-20 rounded-lg border object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+              </div>
+            )}
           </div>
 
           {/* 결과 메시지 */}
