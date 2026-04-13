@@ -62,6 +62,7 @@ export default function App() {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
+  const [userToken, setUserToken] = useState('');
   const [showExitModal, setShowExitModal] = useState(false);
 
   // 푸시 알림 등록
@@ -172,6 +173,7 @@ export default function App() {
       if (data.type === 'USER_INFO') {
         if (data.name) setUserName(data.name);
         if (data.email) setUserEmail(data.email);
+        if (data.token) setUserToken(data.token);
       }
       // 로그인 시 FCM 토큰을 유저에 연결
       if (data.type === 'USER_LOGIN' && data.userId) {
@@ -253,9 +255,10 @@ export default function App() {
                   type: 'USER_INFO',
                   name: user.name || p.email || '',
                   email: p.email || '',
+                  token: token,
                 }));
               }).catch(function() {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_INFO', name: p.email || '', email: p.email || '' }));
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_INFO', name: p.email || '', email: p.email || '', token: token }));
               });
           }
         } catch(e) {}
@@ -311,16 +314,19 @@ export default function App() {
               </View>
               <Switch
                 value={pushEnabled}
-                onValueChange={(val) => {
+                onValueChange={async (val) => {
                   setPushEnabled(val);
-                  if (webViewRef.current) {
-                    webViewRef.current.injectJavaScript(`
-                      fetch('/api/notifications/push-setting', {
+                  if (userToken) {
+                    try {
+                      await fetch(`https://${DOMAIN}/api/notifications/push-setting`, {
                         method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('cm_access_token') },
-                        body: JSON.stringify({ enabled: ${val} })
-                      }).catch(function(){}); true;
-                    `);
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
+                        body: JSON.stringify({ enabled: val }),
+                      });
+                    } catch {}
+                  } else {
+                    Alert.alert('로그인 필요', '푸시 설정을 변경하려면 로그인이 필요합니다.');
+                    setPushEnabled(!val);
                   }
                 }}
                 trackColor={{ false: '#ddd', true: '#FFD4A8' }}
@@ -334,10 +340,31 @@ export default function App() {
               </View>
               <Switch
                 value={biometricEnabled}
-                onValueChange={(val) => {
-                  setBiometricEnabled(val);
-                  // TODO: AsyncStorage에 저장 → 로그인 페이지에서 확인
-                  Alert.alert(val ? '생체인증 활성화' : '생체인증 비활성화', val ? '다음 로그인 시 생체인증을 사용합니다.' : '생체인증이 비활성화되었습니다.');
+                onValueChange={async (val) => {
+                  if (val) {
+                    // 활성화 시 생체인증 가능 여부 확인
+                    try {
+                      const compatible = await LocalAuthentication.hasHardwareAsync();
+                      if (!compatible) {
+                        Alert.alert('지원 안 됨', '이 기기는 생체인증을 지원하지 않습니다.');
+                        return;
+                      }
+                      const enrolled = await LocalAuthentication.isEnrolledAsync();
+                      if (!enrolled) {
+                        Alert.alert('등록 필요', '기기에 생체인증이 등록되어 있지 않습니다. 기기 설정에서 등록해주세요.');
+                        return;
+                      }
+                      // 테스트 인증
+                      const result = await LocalAuthentication.authenticateAsync({ promptMessage: '생체인증을 등록합니다' });
+                      if (result.success) {
+                        setBiometricEnabled(true);
+                        Alert.alert('활성화 완료', '다음 로그인 시 생체인증을 사용합니다.');
+                      }
+                    } catch { Alert.alert('오류', '생체인증 설정에 실패했습니다.'); }
+                  } else {
+                    setBiometricEnabled(false);
+                    Alert.alert('비활성화', '생체인증이 비활성화되었습니다.');
+                  }
                 }}
                 trackColor={{ false: '#ddd', true: '#FFD4A8' }}
                 thumbColor={biometricEnabled ? '#FF922E' : '#f4f3f4'}
@@ -417,10 +444,15 @@ export default function App() {
               Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
                 { text: '취소', style: 'cancel' },
                 { text: '로그아웃', style: 'destructive', onPress: () => {
-                  if (webViewRef.current) {
-                    webViewRef.current.injectJavaScript("localStorage.removeItem('cm_access_token'); localStorage.removeItem('cm_refresh_token'); window.location.href = '/auth/login'; true;");
-                  }
+                  setUserName('');
+                  setUserEmail('');
+                  setUserToken('');
                   setActiveTab('home');
+                  setTimeout(() => {
+                    if (webViewRef.current) {
+                      webViewRef.current.injectJavaScript("localStorage.removeItem('cm_access_token'); localStorage.removeItem('cm_refresh_token'); window.location.href = '/auth/login'; true;");
+                    }
+                  }, 200);
                 }},
               ]);
             }}
