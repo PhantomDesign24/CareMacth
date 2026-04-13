@@ -62,9 +62,23 @@ export default function App() {
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userToken, setUserToken] = useState('');
-  const [showExitModal, setShowExitModal] = useState(false);
   const [biometricReady, setBiometricReady] = useState(false);
   const [showBiometricLogin, setShowBiometricLogin] = useState(false);
+
+  // 커스텀 모달 상태
+  const [modal, setModal] = useState<{
+    visible: boolean;
+    icon?: string;
+    iconColor?: string;
+    title: string;
+    message: string;
+    buttons: { text: string; style?: 'primary' | 'danger' | 'cancel'; onPress?: () => void }[];
+  }>({ visible: false, title: '', message: '', buttons: [] });
+
+  const showModal = (config: Omit<typeof modal, 'visible'>) => {
+    setModal({ ...config, visible: true });
+  };
+  const hideModal = () => setModal(prev => ({ ...prev, visible: false }));
 
   // 앱 시작 시 저장된 생체인증 토큰 확인
   useEffect(() => {
@@ -177,10 +191,16 @@ export default function App() {
           webViewRef.current.goBack();
           return true;
         }
-        Alert.alert('앱 종료', '케어매치를 종료하시겠습니까?', [
-          { text: '취소', style: 'cancel' },
-          { text: '종료', onPress: () => BackHandler.exitApp() },
-        ]);
+        showModal({
+          icon: 'exit-outline',
+          iconColor: '#FF922E',
+          title: '앱 종료',
+          message: '케어매치를 종료하시겠습니까?',
+          buttons: [
+            { text: '취소', style: 'cancel', onPress: hideModal },
+            { text: '종료', style: 'danger', onPress: () => BackHandler.exitApp() },
+          ],
+        });
         return true;
       });
       return () => handler.remove();
@@ -416,7 +436,7 @@ export default function App() {
                       });
                     } catch {}
                   } else {
-                    Alert.alert('로그인 필요', '푸시 설정을 변경하려면 로그인이 필요합니다.');
+                    showModal({ icon: 'lock-closed-outline', iconColor: '#FF922E', title: '로그인 필요', message: '푸시 설정을 변경하려면 로그인이 필요합니다.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] });
                     setPushEnabled(!val);
                   }
                 }}
@@ -433,28 +453,28 @@ export default function App() {
                 value={biometricEnabled}
                 onValueChange={async (val) => {
                   if (!userToken) {
-                    Alert.alert('로그인 필요', '생체인증을 설정하려면 먼저 로그인해주세요.');
+                    showModal({ icon: 'lock-closed-outline', iconColor: '#FF922E', title: '로그인 필요', message: '생체인증을 설정하려면 먼저 로그인해주세요.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] });
                     return;
                   }
                   if (val) {
                     try {
                       const compatible = await LocalAuthentication.hasHardwareAsync();
-                      if (!compatible) { Alert.alert('지원 안 됨', '이 기기는 생체인증을 지원하지 않습니다.'); return; }
+                      if (!compatible) { showModal({ icon: 'warning-outline', iconColor: '#F5A623', title: '지원 안 됨', message: '이 기기는 생체인증을 지원하지 않습니다.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] }); return; }
                       const enrolled = await LocalAuthentication.isEnrolledAsync();
-                      if (!enrolled) { Alert.alert('등록 필요', '기기 설정에서 지문 또는 Face ID를 등록해주세요.'); return; }
+                      if (!enrolled) { showModal({ icon: 'finger-print', iconColor: '#F5A623', title: '등록 필요', message: '기기 설정에서 지문 또는 Face ID를 등록해주세요.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] }); return; }
                       const result = await LocalAuthentication.authenticateAsync({ promptMessage: '생체인증을 등록합니다' });
                       if (result.success) {
                         await SecureStore.setItemAsync('biometric_enabled', 'true');
                         await SecureStore.setItemAsync('saved_token', userToken);
                         setBiometricEnabled(true);
-                        Alert.alert('설정 완료', '다음부터 생체인증으로 바로 로그인됩니다.');
+                        showModal({ icon: 'checkmark-circle', iconColor: '#2ECC71', title: '설정 완료', message: '다음부터 생체인증으로 바로 로그인됩니다.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] });
                       }
-                    } catch { Alert.alert('오류', '생체인증 설정에 실패했습니다.'); }
+                    } catch { showModal({ icon: 'close-circle', iconColor: '#E74C3C', title: '오류', message: '생체인증 설정에 실패했습니다.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] }); }
                   } else {
                     await SecureStore.deleteItemAsync('biometric_enabled');
                     await SecureStore.deleteItemAsync('saved_token');
                     setBiometricEnabled(false);
-                    Alert.alert('비활성화', '생체인증이 비활성화되었습니다.');
+                    showModal({ icon: 'finger-print', iconColor: '#999', title: '비활성화', message: '생체인증이 비활성화되었습니다.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] });
                   }
                 }}
                 trackColor={{ false: '#ddd', true: '#FFD4A8' }}
@@ -532,21 +552,27 @@ export default function App() {
           <TouchableOpacity
             style={styles.mypageLogout}
             onPress={() => {
-              Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
-                { text: '취소', style: 'cancel' },
-                { text: '로그아웃', style: 'destructive', onPress: async () => {
-                  setUserName('');
-                  setUserEmail('');
-                  setUserToken('');
-                  // 생체인증 토큰은 유지 (다음 로그인 시 사용)
-                  setActiveTab('home');
-                  setTimeout(() => {
-                    if (webViewRef.current) {
-                      webViewRef.current.injectJavaScript("localStorage.removeItem('cm_access_token'); localStorage.removeItem('cm_refresh_token'); window.location.href = '/auth/login'; true;");
-                    }
-                  }, 200);
-                }},
-              ]);
+              showModal({
+                icon: 'log-out-outline',
+                iconColor: '#E74C3C',
+                title: '로그아웃',
+                message: '로그아웃 하시겠습니까?',
+                buttons: [
+                  { text: '취소', style: 'cancel', onPress: hideModal },
+                  { text: '로그아웃', style: 'danger', onPress: () => {
+                    hideModal();
+                    setUserName('');
+                    setUserEmail('');
+                    setUserToken('');
+                    setActiveTab('home');
+                    setTimeout(() => {
+                      if (webViewRef.current) {
+                        webViewRef.current.injectJavaScript("localStorage.removeItem('cm_access_token'); localStorage.removeItem('cm_refresh_token'); window.location.href = '/auth/login'; true;");
+                      }
+                    }, 200);
+                  }},
+                ],
+              });
             }}
           >
             <Ionicons name="log-out-outline" size={20} color="#E74C3C" />
@@ -600,6 +626,43 @@ export default function App() {
           );
         })}
       </View>
+
+      {/* 커스텀 모달 */}
+      <Modal visible={modal.visible} transparent animationType="fade" onRequestClose={hideModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            {modal.icon && (
+              <View style={[styles.modalIconWrap, { backgroundColor: (modal.iconColor || '#FF922E') + '15' }]}>
+                <Ionicons name={modal.icon as any} size={32} color={modal.iconColor || '#FF922E'} />
+              </View>
+            )}
+            <Text style={styles.modalTitle}>{modal.title}</Text>
+            <Text style={styles.modalMessage}>{modal.message}</Text>
+            <View style={styles.modalButtons}>
+              {modal.buttons.map((btn, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={[
+                    styles.modalButton,
+                    btn.style === 'primary' && styles.modalButtonPrimary,
+                    btn.style === 'danger' && styles.modalButtonDanger,
+                    btn.style === 'cancel' && styles.modalButtonCancel,
+                    modal.buttons.length === 1 && { flex: 1 },
+                  ]}
+                  onPress={btn.onPress || hideModal}
+                >
+                  <Text style={[
+                    styles.modalButtonText,
+                    btn.style === 'primary' && { color: '#fff' },
+                    btn.style === 'danger' && { color: '#fff' },
+                    btn.style === 'cancel' && { color: '#666' },
+                  ]}>{btn.text}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -708,6 +771,28 @@ const styles = StyleSheet.create({
   bioLoginButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   bioLoginSkip: { marginTop: 20 },
   bioLoginSkipText: { color: '#999', fontSize: 14 },
+
+  // 커스텀 모달
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center', alignItems: 'center', padding: 32,
+  },
+  modalBox: {
+    backgroundColor: '#fff', borderRadius: 20, padding: 28,
+    width: '100%', maxWidth: 320, alignItems: 'center',
+  },
+  modalIconWrap: {
+    width: 64, height: 64, borderRadius: 32,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
+  },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+  modalMessage: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  modalButtons: { flexDirection: 'row', gap: 10, width: '100%' },
+  modalButton: { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+  modalButtonPrimary: { backgroundColor: '#FF922E' },
+  modalButtonDanger: { backgroundColor: '#E74C3C' },
+  modalButtonCancel: { backgroundColor: '#F5F5F5' },
+  modalButtonText: { fontSize: 15, fontWeight: '600' },
 
   // 마이페이지
   mypageContainer: { flex: 1, backgroundColor: '#F5F6F8' },

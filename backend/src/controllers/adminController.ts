@@ -1763,7 +1763,7 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
       const role = target === 'guardians' ? 'GUARDIAN' : 'CAREGIVER';
       const users = await prisma.user.findMany({
         where: { isActive: true, role },
-        select: { id: true, fcmToken: true },
+        select: { id: true, fcmToken: true, pushEnabled: true },
       });
 
       if (users.length === 0) {
@@ -1785,7 +1785,7 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
       const firebase = adminFb.default;
       let pushCount = 0;
       if (firebase.apps.length) {
-        const tokens = users.filter(u => u.fcmToken).map(u => u.fcmToken!);
+        const tokens = users.filter(u => u.fcmToken && u.pushEnabled !== false).map(u => u.fcmToken!);
         if (tokens.length > 0) {
           try {
             const result = await firebase.messaging().sendEachForMulticast({
@@ -1809,9 +1809,17 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
       const admin = await import('../config/firebase');
       const firebase = admin.default;
 
-      const deviceTokens = await prisma.deviceToken.findMany({
+      // pushEnabled=false인 유저의 토큰은 제외
+      const disabledUsers = await prisma.user.findMany({
+        where: { pushEnabled: false },
+        select: { fcmToken: true },
+      });
+      const disabledTokens = new Set(disabledUsers.map(u => u.fcmToken).filter(Boolean));
+
+      const allDeviceTokens = await prisma.deviceToken.findMany({
         select: { token: true },
       });
+      const deviceTokens = allDeviceTokens.filter(d => !disabledTokens.has(d.token));
 
       if (deviceTokens.length === 0) {
         throw new AppError('등록된 디바이스가 없습니다.', 400);
@@ -1860,7 +1868,7 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
       // 전체 회원 발송
       const users = await prisma.user.findMany({
         where: { isActive: true },
-        select: { id: true, fcmToken: true },
+        select: { id: true, fcmToken: true, pushEnabled: true },
       });
 
       if (users.length === 0) {
@@ -1882,7 +1890,7 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
       const firebase = adminFb.default;
       let pushCount = 0;
       if (firebase.apps.length) {
-        const tokens = users.filter(u => u.fcmToken).map(u => u.fcmToken!);
+        const tokens = users.filter(u => u.fcmToken && u.pushEnabled !== false).map(u => u.fcmToken!);
         if (tokens.length > 0) {
           try {
             const result = await firebase.messaging().sendEachForMulticast({
