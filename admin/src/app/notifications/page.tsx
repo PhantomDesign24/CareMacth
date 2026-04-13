@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   getAdminNotifications,
   sendAdminNotification,
+  deleteUnsentNotifications,
   type AdminNotification,
 } from "@/lib/api";
 
@@ -279,7 +280,7 @@ export default function NotificationsPage() {
             발송 이력
             <span className="ml-2 text-sm font-normal text-gray-400">총 {total}건</span>
           </h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <label className="text-sm text-gray-500">유형:</label>
             <select
               value={filterType}
@@ -290,6 +291,21 @@ export default function NotificationsPage() {
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
+            <button
+              onClick={async () => {
+                if (!confirm("미발송 알림을 모두 삭제하시겠습니까?")) return;
+                try {
+                  const res: any = await deleteUnsentNotifications();
+                  alert(res?.message || "삭제 완료");
+                  fetchNotifications();
+                } catch (e: any) {
+                  alert(e?.message || "삭제 실패");
+                }
+              }}
+              className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-600 hover:bg-red-100 transition-colors"
+            >
+              미발송 일괄 삭제
+            </button>
           </div>
         </div>
 

@@ -1815,6 +1815,22 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
   }
 };
 
+// DELETE /notifications/unsent - 미발송 알림 일괄 삭제
+export const deleteUnsentNotifications = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const result = await prisma.notification.deleteMany({
+      where: { pushSent: false },
+    });
+
+    res.json({
+      success: true,
+      message: `미발송 알림 ${result.count}건이 삭제되었습니다.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ─── Education (Admin) ──────────────────────────────────
 
 // GET /education - 교육 과정 목록 (관리자용, 수강 통계 포함)

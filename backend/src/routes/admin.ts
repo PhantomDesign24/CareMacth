@@ -36,6 +36,7 @@ router.post('/notifications/send', [
   body('target').notEmpty().isIn(['all', 'individual', 'all_devices']).withMessage('발송 대상을 선택해주세요.'),
   body('type').optional().isIn(['MATCHING', 'APPLICATION', 'CONTRACT', 'PAYMENT', 'CARE_RECORD', 'EXTENSION', 'PENALTY', 'SYSTEM']).withMessage('유효한 알림 유형을 선택해주세요.'),
 ], adminController.sendNotification);
+router.delete('/notifications/unsent', adminController.deleteUnsentNotifications);
 
 // 환자 관리
 router.get('/patients', adminController.getPatients);

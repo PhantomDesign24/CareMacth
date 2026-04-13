@@ -188,6 +188,10 @@ export async function sendAdminNotification(data: { target: string; userId?: str
   return apiRequest("/admin/notifications/send", { method: "POST", body: data });
 }
 
+export async function deleteUnsentNotifications() {
+  return apiRequest("/admin/notifications/unsent", { method: "DELETE" });
+}
+
 // ─── Patients ─────────────────────────────────────────
 export async function getPatients(params?: { search?: string; status?: string; page?: number; limit?: number; gender?: string; mobilityStatus?: string }) {
   return apiRequest<PaginatedResponse<Patient>>("/admin/patients", {
