@@ -10,6 +10,9 @@ import {
   View,
   Text,
   TouchableOpacity,
+  ScrollView,
+  Switch,
+  Linking,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -46,7 +49,7 @@ const TABS: Tab[] = [
   { key: 'home', label: '홈', icon: 'home-outline', iconFocused: 'home', path: '/' },
   { key: 'request', label: '간병요청', icon: 'add-circle-outline', iconFocused: 'add-circle', path: '/care-request' },
   { key: 'status', label: '내간병', icon: 'heart-outline', iconFocused: 'heart', path: '/dashboard/guardian' },
-  { key: 'mypage', label: '마이페이지', icon: 'person-outline', iconFocused: 'person', path: '/dashboard/guardian' },
+  { key: 'mypage', label: '마이페이지', icon: 'person-outline', iconFocused: 'person', path: '' },
 ];
 
 export default function App() {
@@ -56,6 +59,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [biometricChecked, setBiometricChecked] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(true);
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
 
   // 생체 인증
   useEffect(() => {
@@ -163,10 +169,10 @@ export default function App() {
     }
   }, [canGoBack]);
 
-  // 탭 클릭 → 웹뷰 URL 변경
+  // 탭 클릭 → 웹뷰 URL 변경 (마이페이지는 네이티브)
   const handleTabPress = useCallback((tab: Tab) => {
     setActiveTab(tab.key);
-    if (webViewRef.current) {
+    if (tab.key !== 'mypage' && tab.path && webViewRef.current) {
       webViewRef.current.injectJavaScript(
         `window.location.href = '${tab.path}'; true;`
       );
@@ -189,6 +195,11 @@ export default function App() {
       if (data.type === 'CALL') {
         // 전화 걸기
       }
+      // 유저 정보 수신
+      if (data.type === 'USER_INFO') {
+        if (data.name) setUserName(data.name);
+        if (data.email) setUserEmail(data.email);
+      }
       // 로그인 시 FCM 토큰을 유저에 연결
       if (data.type === 'USER_LOGIN' && data.userId) {
         try {
@@ -201,8 +212,10 @@ export default function App() {
           console.log('Push: 유저 FCM 토큰 연결 완료', data.userId);
         } catch (e) { console.log('Push: 유저 토큰 연결 실패', e); }
       }
-      // 로그아웃 시 FCM 토큰에서 유저 연결 해제
+      // 로그아웃 시 FCM 토큰에서 유저 연결 해제 + 유저 정보 초기화
       if (data.type === 'USER_LOGOUT') {
+        setUserName('');
+        setUserEmail('');
         try {
           const tokenData = await Notifications.getDevicePushTokenAsync();
           await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
@@ -263,6 +276,7 @@ export default function App() {
         try {
           var p = JSON.parse(atob(existing.split('.')[1]));
           if (p.id) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: p.id }));
+          if (p.name || p.email) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_INFO', name: p.name || '', email: p.email || '' }));
         } catch(e) {}
       }
     })();
@@ -318,24 +332,137 @@ export default function App() {
         </View>
       )}
 
-      {/* 웹뷰 */}
-      <WebView
-        ref={webViewRef}
-        source={{ uri: WEB_URL }}
-        style={styles.webview}
-        onNavigationStateChange={onNavigationChange}
-        onLoadEnd={() => setLoading(false)}
-        onMessage={onMessage}
-        injectedJavaScript={injectedJS}
-        javaScriptEnabled
-        domStorageEnabled
-        allowsBackForwardNavigationGestures
-        allowsInlineMediaPlayback
-        sharedCookiesEnabled
-        pullToRefreshEnabled
-        geolocationEnabled
-        userAgent={`CareMatch-Patient/${Platform.OS}`}
-      />
+      {/* 마이페이지 (네이티브) */}
+      {activeTab === 'mypage' ? (
+        <ScrollView style={styles.mypageContainer}>
+          {/* 프로필 */}
+          <View style={styles.mypageProfile}>
+            <View style={styles.mypageAvatar}>
+              <Ionicons name="person" size={32} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.mypageName}>{userName || '로그인이 필요합니다'}</Text>
+              {userEmail ? <Text style={styles.mypageEmail}>{userEmail}</Text> : null}
+            </View>
+          </View>
+
+          {/* 알림 설정 */}
+          <View style={styles.mypageSection}>
+            <Text style={styles.mypageSectionTitle}>알림 설정</Text>
+            <View style={styles.mypageRow}>
+              <View style={styles.mypageRowLeft}>
+                <Ionicons name="notifications-outline" size={20} color="#FF922E" />
+                <Text style={styles.mypageRowText}>푸시 알림</Text>
+              </View>
+              <Switch
+                value={pushEnabled}
+                onValueChange={(val) => {
+                  setPushEnabled(val);
+                  if (!val) {
+                    Alert.alert('알림 끄기', '앱 설정에서 알림을 비활성화할 수 있습니다.', [
+                      { text: '취소', onPress: () => setPushEnabled(true) },
+                      { text: '설정으로 이동', onPress: () => Linking.openSettings() },
+                    ]);
+                  }
+                }}
+                trackColor={{ false: '#ddd', true: '#FFD4A8' }}
+                thumbColor={pushEnabled ? '#FF922E' : '#f4f3f4'}
+              />
+            </View>
+          </View>
+
+          {/* 서비스 */}
+          <View style={styles.mypageSection}>
+            <Text style={styles.mypageSectionTitle}>서비스</Text>
+            <TouchableOpacity style={styles.mypageRow} onPress={() => {
+              setActiveTab('status');
+              if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/dashboard/guardian'; true;");
+            }}>
+              <View style={styles.mypageRowLeft}>
+                <Ionicons name="heart-outline" size={20} color="#FF922E" />
+                <Text style={styles.mypageRowText}>내 간병 관리</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.mypageRow} onPress={() => {
+              setActiveTab('request');
+              if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/care-request'; true;");
+            }}>
+              <View style={styles.mypageRowLeft}>
+                <Ionicons name="add-circle-outline" size={20} color="#FF922E" />
+                <Text style={styles.mypageRowText}>간병 요청하기</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+          </View>
+
+          {/* 정보 */}
+          <View style={styles.mypageSection}>
+            <Text style={styles.mypageSectionTitle}>정보</Text>
+            <TouchableOpacity style={styles.mypageRow} onPress={() => Linking.openURL(`https://${DOMAIN}/terms`)}>
+              <View style={styles.mypageRowLeft}>
+                <Ionicons name="document-text-outline" size={20} color="#999" />
+                <Text style={styles.mypageRowText}>이용약관</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.mypageRow} onPress={() => Linking.openURL(`https://${DOMAIN}/privacy`)}>
+              <View style={styles.mypageRowLeft}>
+                <Ionicons name="shield-checkmark-outline" size={20} color="#999" />
+                <Text style={styles.mypageRowText}>개인정보처리방침</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.mypageRow} onPress={() => Linking.openURL('tel:1588-0000')}>
+              <View style={styles.mypageRowLeft}>
+                <Ionicons name="call-outline" size={20} color="#999" />
+                <Text style={styles.mypageRowText}>고객센터 (1588-0000)</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+          </View>
+
+          {/* 로그아웃 */}
+          <TouchableOpacity
+            style={styles.mypageLogout}
+            onPress={() => {
+              Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
+                { text: '취소', style: 'cancel' },
+                { text: '로그아웃', style: 'destructive', onPress: () => {
+                  if (webViewRef.current) {
+                    webViewRef.current.injectJavaScript("localStorage.removeItem('cm_access_token'); localStorage.removeItem('cm_refresh_token'); window.location.href = '/auth/login'; true;");
+                  }
+                  setActiveTab('home');
+                }},
+              ]);
+            }}
+          >
+            <Ionicons name="log-out-outline" size={20} color="#E74C3C" />
+            <Text style={styles.mypageLogoutText}>로그아웃</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.mypageVersion}>케어매치 v1.0.0</Text>
+        </ScrollView>
+      ) : (
+        /* 웹뷰 */
+        <WebView
+          ref={webViewRef}
+          source={{ uri: WEB_URL }}
+          style={styles.webview}
+          onNavigationStateChange={onNavigationChange}
+          onLoadEnd={() => setLoading(false)}
+          onMessage={onMessage}
+          injectedJavaScript={injectedJS}
+          javaScriptEnabled
+          domStorageEnabled
+          allowsBackForwardNavigationGestures
+          allowsInlineMediaPlayback
+          sharedCookiesEnabled
+          pullToRefreshEnabled
+          geolocationEnabled
+          userAgent={`CareMatch-Patient/${Platform.OS}`}
+        />
+      )}
 
       {/* 네이티브 하단 탭바 */}
       <View style={styles.tabBar}>
@@ -448,6 +575,41 @@ const styles = StyleSheet.create({
   },
   authSkip: { marginTop: 16 },
   authSkipText: { color: '#999', fontSize: 14 },
+
+  // 마이페이지
+  mypageContainer: { flex: 1, backgroundColor: '#F5F6F8' },
+  mypageProfile: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF922E',
+    padding: 24, paddingTop: 16,
+  },
+  mypageAvatar: {
+    width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.25)',
+    justifyContent: 'center', alignItems: 'center', marginRight: 14,
+  },
+  mypageName: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  mypageEmail: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  mypageSection: {
+    backgroundColor: '#fff', marginHorizontal: 16, marginTop: 16,
+    borderRadius: 14, overflow: 'hidden',
+  },
+  mypageSectionTitle: {
+    fontSize: 13, fontWeight: '600', color: '#999',
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6,
+  },
+  mypageRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
+  },
+  mypageRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  mypageRowText: { fontSize: 15, color: '#333', fontWeight: '500' },
+  mypageLogout: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginHorizontal: 16, marginTop: 24, paddingVertical: 14,
+    borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#FFE0E0',
+  },
+  mypageLogoutText: { fontSize: 15, color: '#E74C3C', fontWeight: '600' },
+  mypageVersion: { textAlign: 'center', fontSize: 12, color: '#ccc', marginTop: 12, marginBottom: 32 },
 });
 
 registerRootComponent(App);
