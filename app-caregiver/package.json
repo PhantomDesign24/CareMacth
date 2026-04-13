@@ -4,22 +4,29 @@
   "main": "App.tsx",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "build:android": "eas build -p android",
     "build:ios": "eas build -p ios"
   },
   "dependencies": {
-    "expo": "~50.0.0",
-    "expo-status-bar": "~1.11.1",
-    "react": "18.2.0",
-    "react-native": "0.73.4",
-    "react-native-webview": "13.6.4"
+    "expo": "~54.0.0",
+    "expo-status-bar": "~3.0.0",
+    "expo-notifications": "~0.31.0",
+    "expo-device": "~7.0.0",
+    "expo-secure-store": "~15.0.0",
+    "expo-image-picker": "~17.0.0",
+    "expo-location": "~18.0.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-webview": "^13.12.0",
+    "react-native-safe-area-context": "~5.6.0",
+    "@expo/vector-icons": "^15.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
-    "@types/react": "~18.2.45",
-    "typescript": "^5.3.0"
+    "@types/react": "~19.1.0",
+    "typescript": "~5.9.0"
   },
   "private": true
 }
