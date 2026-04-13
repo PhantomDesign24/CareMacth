@@ -559,15 +559,21 @@ export default function App() {
                 message: '로그아웃 하시겠습니까?',
                 buttons: [
                   { text: '취소', style: 'cancel', onPress: hideModal },
-                  { text: '로그아웃', style: 'danger', onPress: () => {
+                  { text: '로그아웃', style: 'danger', onPress: async () => {
                     hideModal();
                     setUserName('');
                     setUserEmail('');
                     setUserToken('');
                     setActiveTab('home');
+                    // 생체인증 설정되어 있으면 로그아웃 후 생체인증 화면 표시
+                    const bioEnabled = await SecureStore.getItemAsync('biometric_enabled');
+                    const savedToken = await SecureStore.getItemAsync('saved_token');
                     setTimeout(() => {
                       if (webViewRef.current) {
                         webViewRef.current.injectJavaScript("localStorage.removeItem('cm_access_token'); localStorage.removeItem('cm_refresh_token'); window.location.href = '/auth/login'; true;");
+                      }
+                      if (bioEnabled === 'true' && savedToken) {
+                        setShowBiometricLogin(true);
                       }
                     }, 200);
                   }},
