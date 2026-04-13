@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI } from "@/lib/api";
 import { formatDate, formatContractStatus, formatCareType, formatLocation } from "@/lib/format";
@@ -146,9 +147,16 @@ export default function CaregiverDashboard() {
     }
   }, []);
 
+  const router = useRouter();
+
   useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('cm_access_token') : null;
+    if (!token) {
+      router.replace('/auth/login');
+      return;
+    }
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, router]);
 
   const handleStatusChange = async (status: Status) => {
     setCurrentStatus(status);
