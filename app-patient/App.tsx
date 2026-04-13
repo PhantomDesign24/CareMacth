@@ -22,8 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Device from 'expo-device';
-// import { patientApi } from './src/services/api';
-const patientApi: any = null;
+import * as SecureStore from 'expo-secure-store';
 
 const DOMAIN = 'cm.phantomdesign.kr';
 const WEB_URL = `https://${DOMAIN}`;
@@ -64,6 +63,51 @@ export default function App() {
   const [userEmail, setUserEmail] = useState('');
   const [userToken, setUserToken] = useState('');
   const [showExitModal, setShowExitModal] = useState(false);
+  const [biometricReady, setBiometricReady] = useState(false);
+  const [showBiometricLogin, setShowBiometricLogin] = useState(false);
+
+  // 앱 시작 시 저장된 생체인증 토큰 확인
+  useEffect(() => {
+    (async () => {
+      try {
+        const enabled = await SecureStore.getItemAsync('biometric_enabled');
+        const savedToken = await SecureStore.getItemAsync('saved_token');
+        if (enabled === 'true' && savedToken) {
+          setBiometricEnabled(true);
+          setShowBiometricLogin(true);
+        }
+      } catch {}
+      setBiometricReady(true);
+    })();
+  }, []);
+
+  // 생체인증 로그인 시도
+  const tryBiometricLogin = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: '생체인증으로 로그인',
+        fallbackLabel: '비밀번호로 로그인',
+        disableDeviceFallback: false,
+      });
+      if (result.success) {
+        const savedToken = await SecureStore.getItemAsync('saved_token');
+        if (savedToken) {
+          setUserToken(savedToken);
+          setShowBiometricLogin(false);
+          // WebView에 토큰 주입
+          setTimeout(() => {
+            if (webViewRef.current) {
+              webViewRef.current.injectJavaScript(`
+                localStorage.setItem('cm_access_token', '${savedToken}');
+                window.location.href = '/dashboard/guardian';
+                true;
+              `);
+            }
+          }, 300);
+        }
+      }
+    } catch {}
+  };
 
   // 푸시 알림 등록
   useEffect(() => {
@@ -145,13 +189,21 @@ export default function App() {
 
   // 탭 클릭 → 웹뷰 URL 변경 (마이페이지는 네이티브)
   const handleTabPress = useCallback((tab: Tab) => {
+    if (tab.key === 'mypage' && !userToken) {
+      // 비로그인 시 로그인 페이지로 이동
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript("window.location.href = '/auth/login'; true;");
+      }
+      setActiveTab('home');
+      return;
+    }
     setActiveTab(tab.key);
     if (tab.key !== 'mypage' && tab.path && webViewRef.current) {
       webViewRef.current.injectJavaScript(
         `window.location.href = '${tab.path}'; true;`
       );
     }
-  }, []);
+  }, [userToken]);
 
   // 웹뷰 URL 변경 시 탭 상태 동기화
   const onNavigationChange = (navState: any) => {
@@ -173,7 +225,14 @@ export default function App() {
       if (data.type === 'USER_INFO') {
         if (data.name) setUserName(data.name);
         if (data.email) setUserEmail(data.email);
-        if (data.token) setUserToken(data.token);
+        if (data.token) {
+          setUserToken(data.token);
+          // 생체인증 활성화 상태면 토큰 저장
+          const bioEnabled = await SecureStore.getItemAsync('biometric_enabled');
+          if (bioEnabled === 'true') {
+            await SecureStore.setItemAsync('saved_token', data.token);
+          }
+        }
       }
       // 로그인 시 FCM 토큰을 유저에 연결
       if (data.type === 'USER_LOGIN' && data.userId) {
@@ -273,6 +332,38 @@ export default function App() {
     true;
   `;
 
+  // 생체인증 로그인 화면
+  if (showBiometricLogin && biometricReady) {
+    return (
+      <SafeAreaProvider>
+      <View style={styles.bioLoginScreen}>
+        <StatusBar style="dark" />
+        <View style={styles.bioLoginLogo}>
+          <Ionicons name="heart" size={48} color="#FF922E" />
+        </View>
+        <Text style={styles.bioLoginTitle}>케어매치</Text>
+        <Text style={styles.bioLoginDesc}>생체인증으로 로그인하세요</Text>
+        <TouchableOpacity style={styles.bioLoginButton} onPress={tryBiometricLogin}>
+          <Ionicons name="finger-print" size={24} color="#fff" />
+          <Text style={styles.bioLoginButtonText}>생체인증 로그인</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bioLoginSkip} onPress={() => setShowBiometricLogin(false)}>
+          <Text style={styles.bioLoginSkipText}>아이디/비밀번호로 로그인</Text>
+        </TouchableOpacity>
+      </View>
+      </SafeAreaProvider>
+    );
+  }
+
+  // 생체인증 확인 중
+  if (!biometricReady) {
+    return (
+      <View style={styles.bioLoginScreen}>
+        <ActivityIndicator size="large" color="#FF922E" />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaProvider>
     <SafeAreaView style={styles.container}>
@@ -341,27 +432,27 @@ export default function App() {
               <Switch
                 value={biometricEnabled}
                 onValueChange={async (val) => {
+                  if (!userToken) {
+                    Alert.alert('로그인 필요', '생체인증을 설정하려면 먼저 로그인해주세요.');
+                    return;
+                  }
                   if (val) {
-                    // 활성화 시 생체인증 가능 여부 확인
                     try {
                       const compatible = await LocalAuthentication.hasHardwareAsync();
-                      if (!compatible) {
-                        Alert.alert('지원 안 됨', '이 기기는 생체인증을 지원하지 않습니다.');
-                        return;
-                      }
+                      if (!compatible) { Alert.alert('지원 안 됨', '이 기기는 생체인증을 지원하지 않습니다.'); return; }
                       const enrolled = await LocalAuthentication.isEnrolledAsync();
-                      if (!enrolled) {
-                        Alert.alert('등록 필요', '기기에 생체인증이 등록되어 있지 않습니다. 기기 설정에서 등록해주세요.');
-                        return;
-                      }
-                      // 테스트 인증
+                      if (!enrolled) { Alert.alert('등록 필요', '기기 설정에서 지문 또는 Face ID를 등록해주세요.'); return; }
                       const result = await LocalAuthentication.authenticateAsync({ promptMessage: '생체인증을 등록합니다' });
                       if (result.success) {
+                        await SecureStore.setItemAsync('biometric_enabled', 'true');
+                        await SecureStore.setItemAsync('saved_token', userToken);
                         setBiometricEnabled(true);
-                        Alert.alert('활성화 완료', '다음 로그인 시 생체인증을 사용합니다.');
+                        Alert.alert('설정 완료', '다음부터 생체인증으로 바로 로그인됩니다.');
                       }
                     } catch { Alert.alert('오류', '생체인증 설정에 실패했습니다.'); }
                   } else {
+                    await SecureStore.deleteItemAsync('biometric_enabled');
+                    await SecureStore.deleteItemAsync('saved_token');
                     setBiometricEnabled(false);
                     Alert.alert('비활성화', '생체인증이 비활성화되었습니다.');
                   }
@@ -443,10 +534,11 @@ export default function App() {
             onPress={() => {
               Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
                 { text: '취소', style: 'cancel' },
-                { text: '로그아웃', style: 'destructive', onPress: () => {
+                { text: '로그아웃', style: 'destructive', onPress: async () => {
                   setUserName('');
                   setUserEmail('');
                   setUserToken('');
+                  // 생체인증 토큰은 유지 (다음 로그인 시 사용)
                   setActiveTab('home');
                   setTimeout(() => {
                     if (webViewRef.current) {
@@ -596,6 +688,26 @@ const styles = StyleSheet.create({
   },
   authSkip: { marginTop: 16 },
   authSkipText: { color: '#999', fontSize: 14 },
+
+  // 생체인증 로그인
+  bioLoginScreen: {
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#fff', padding: 40,
+  },
+  bioLoginLogo: {
+    width: 80, height: 80, borderRadius: 20, backgroundColor: '#FFF5EB',
+    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
+  },
+  bioLoginTitle: { fontSize: 24, fontWeight: 'bold', color: '#FF922E' },
+  bioLoginDesc: { fontSize: 14, color: '#999', marginTop: 8 },
+  bioLoginButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginTop: 40, backgroundColor: '#FF922E',
+    paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12,
+  },
+  bioLoginButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  bioLoginSkip: { marginTop: 20 },
+  bioLoginSkipText: { color: '#999', fontSize: 14 },
 
   // 마이페이지
   mypageContainer: { flex: 1, backgroundColor: '#F5F6F8' },
