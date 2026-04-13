@@ -2,7 +2,6 @@ import { registerRootComponent } from 'expo';
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
-  SafeAreaView,
   StyleSheet,
   Platform,
   BackHandler,
@@ -12,6 +11,7 @@ import {
   Text,
   TouchableOpacity,
 } from 'react-native';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -228,6 +228,7 @@ export default function App() {
   }
 
   return (
+    <SafeAreaProvider>
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" backgroundColor="#ffffff" />
 
@@ -286,6 +287,7 @@ export default function App() {
         })}
       </View>
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
