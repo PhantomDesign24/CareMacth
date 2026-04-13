@@ -1,3 +1,4 @@
+import { registerRootComponent } from 'expo';
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -372,3 +373,5 @@ const styles = StyleSheet.create({
   authSkip: { marginTop: 16 },
   authSkipText: { color: '#999', fontSize: 14 },
 });
+
+registerRootComponent(App);
