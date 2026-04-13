@@ -17,9 +17,21 @@ export const registerDeviceToken = async (req: Request, res: Response, next: Nex
     // 디바이스 토큰 저장/갱신
     await prisma.deviceToken.upsert({
       where: { token },
-      update: { platform, userId: userId || undefined, updatedAt: new Date() },
-      create: { token, platform, userId: userId || undefined },
+      update: { platform, userId: userId === null ? null : (userId || undefined), updatedAt: new Date() },
+      create: { token, platform, userId: userId === null ? null : (userId || undefined) },
     });
+
+    // userId가 명시적으로 null이면 연결 해제 (로그아웃)
+    if (userId === null) {
+      // 해당 토큰에 연결된 유저의 fcmToken 클리어
+      const deviceToken = await prisma.deviceToken.findUnique({ where: { token } });
+      if (deviceToken) {
+        await prisma.user.updateMany({
+          where: { fcmToken: token },
+          data: { fcmToken: null },
+        });
+      }
+    }
 
     // userId가 있으면 User.fcmToken에도 저장 (기존 푸시 로직 호환)
     if (userId) {

@@ -32,6 +32,9 @@ const prisma = new PrismaClient();
 // 보안 미들웨어
 // ===========================================
 
+// Apache 리버스 프록시 뒤에서 동작하므로 trust proxy 설정
+app.set('trust proxy', 1);
+
 // Helmet: 보안 HTTP 헤더 설정
 // 응답 압축 (gzip)
 app.use(compression());

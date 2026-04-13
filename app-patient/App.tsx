@@ -201,6 +201,18 @@ export default function App() {
           console.log('Push: 유저 FCM 토큰 연결 완료', data.userId);
         } catch (e) { console.log('Push: 유저 토큰 연결 실패', e); }
       }
+      // 로그아웃 시 FCM 토큰에서 유저 연결 해제
+      if (data.type === 'USER_LOGOUT') {
+        try {
+          const tokenData = await Notifications.getDevicePushTokenAsync();
+          await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: tokenData.data, platform: Platform.OS, userId: null }),
+          });
+          console.log('Push: 유저 FCM 토큰 연결 해제 완료');
+        } catch (e) { console.log('Push: 유저 토큰 연결 해제 실패', e); }
+      }
     } catch {}
   };
 
@@ -236,6 +248,15 @@ export default function App() {
           } catch(e) {}
         }
       };
+      // 로그아웃 감지: localStorage에서 토큰이 제거되면 앱에 전달
+      var origRemoveItem = localStorage.removeItem;
+      localStorage.removeItem = function(key) {
+        origRemoveItem.apply(this, arguments);
+        if (key === 'cm_access_token' && window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGOUT' }));
+        }
+      };
+
       // 이미 로그인된 상태면 바로 전달
       var existing = localStorage.getItem('cm_access_token');
       if (existing && window.ReactNativeWebView) {
