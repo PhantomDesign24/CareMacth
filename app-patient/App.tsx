@@ -190,9 +190,9 @@ export default function App() {
     // 하단 탭바 높이만큼 웹 padding 추가
     document.body.style.paddingBottom = '70px';
 
-    // 앱에서는 웹 헤더/푸터 숨기기 (네이티브 탭바 사용)
+    // 앱에서는 웹 푸터만 숨기기 (네이티브 탭바 사용, 헤더는 유지)
     var style = document.createElement('style');
-    style.textContent = 'header { display: none !important; } footer { display: none !important; }';
+    style.textContent = 'footer { display: none !important; }';
     document.head.appendChild(style);
 
     // 간병인 전용 메뉴 숨기기
@@ -236,7 +236,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container}>
       <StatusBar style="dark" backgroundColor="#ffffff" />
 
       {/* 로딩 오버레이 */}
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
-    paddingBottom: Platform.OS === 'ios' ? 34 : 8,
+    paddingBottom: 8,
     paddingTop: 8,
   },
   tabItem: {

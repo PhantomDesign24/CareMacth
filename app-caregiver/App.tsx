@@ -116,9 +116,9 @@ export default function App() {
     window.APP_TYPE = 'CAREGIVER';
     window.APP_PLATFORM = '${Platform.OS}';
 
-    // 앱에서는 웹 헤더/푸터 숨기기
+    // 앱에서는 웹 푸터만 숨기기 (헤더는 유지)
     var style = document.createElement('style');
-    style.textContent = 'header { display: none !important; } footer { display: none !important; }';
+    style.textContent = 'footer { display: none !important; }';
     document.head.appendChild(style);
 
     // 보호자 전용 메뉴 숨기기
@@ -131,7 +131,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container}>
       <StatusBar style="dark" backgroundColor="#ffffff" />
       {loading && (
         <View style={styles.loading}>
