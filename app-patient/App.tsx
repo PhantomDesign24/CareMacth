@@ -253,12 +253,7 @@ export default function App() {
       localStorage.setItem = function(key, value) {
         origSetItem.apply(this, arguments);
         if (key === 'cm_access_token' && value) {
-          try {
-            var payload = JSON.parse(atob(value.split('.')[1]));
-            if (payload.id && window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: payload.id }));
-            }
-          } catch(e) {}
+          sendUserInfo(value);
         }
       };
       // 로그아웃 감지: localStorage에서 토큰이 제거되면 앱에 전달
@@ -270,14 +265,32 @@ export default function App() {
         }
       };
 
+      // 로그인 시 유저 정보도 가져오기
+      function sendUserInfo(token) {
+        try {
+          var p = JSON.parse(atob(token.split('.')[1]));
+          if (p.id && window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: p.id }));
+            // API로 이름 가져오기
+            fetch('/api/guardian', { headers: { 'Authorization': 'Bearer ' + token } })
+              .then(function(r) { return r.json(); })
+              .then(function(res) {
+                var user = (res.data && res.data.user) || {};
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'USER_INFO',
+                  name: user.name || p.email || '',
+                  email: p.email || '',
+                }));
+              }).catch(function() {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_INFO', name: p.email || '', email: p.email || '' }));
+              });
+          }
+        } catch(e) {}
+      }
       // 이미 로그인된 상태면 바로 전달
       var existing = localStorage.getItem('cm_access_token');
       if (existing && window.ReactNativeWebView) {
-        try {
-          var p = JSON.parse(atob(existing.split('.')[1]));
-          if (p.id) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: p.id }));
-          if (p.name || p.email) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_INFO', name: p.name || '', email: p.email || '' }));
-        } catch(e) {}
+        sendUserInfo(existing);
       }
     })();
 
@@ -375,8 +388,8 @@ export default function App() {
           <View style={styles.mypageSection}>
             <Text style={styles.mypageSectionTitle}>서비스</Text>
             <TouchableOpacity style={styles.mypageRow} onPress={() => {
-              setActiveTab('status');
               if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/dashboard/guardian'; true;");
+              setActiveTab('status');
             }}>
               <View style={styles.mypageRowLeft}>
                 <Ionicons name="heart-outline" size={20} color="#FF922E" />
@@ -385,8 +398,8 @@ export default function App() {
               <Ionicons name="chevron-forward" size={18} color="#ccc" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.mypageRow} onPress={() => {
-              setActiveTab('request');
               if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/care-request'; true;");
+              setActiveTab('request');
             }}>
               <View style={styles.mypageRowLeft}>
                 <Ionicons name="add-circle-outline" size={20} color="#FF922E" />
@@ -399,14 +412,20 @@ export default function App() {
           {/* 정보 */}
           <View style={styles.mypageSection}>
             <Text style={styles.mypageSectionTitle}>정보</Text>
-            <TouchableOpacity style={styles.mypageRow} onPress={() => Linking.openURL(`https://${DOMAIN}/terms`)}>
+            <TouchableOpacity style={styles.mypageRow} onPress={() => {
+              if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/terms'; true;");
+              setActiveTab('home');
+            }}>
               <View style={styles.mypageRowLeft}>
                 <Ionicons name="document-text-outline" size={20} color="#999" />
                 <Text style={styles.mypageRowText}>이용약관</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#ccc" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.mypageRow} onPress={() => Linking.openURL(`https://${DOMAIN}/privacy`)}>
+            <TouchableOpacity style={styles.mypageRow} onPress={() => {
+              if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/privacy'; true;");
+              setActiveTab('home');
+            }}>
               <View style={styles.mypageRowLeft}>
                 <Ionicons name="shield-checkmark-outline" size={20} color="#999" />
                 <Text style={styles.mypageRowText}>개인정보처리방침</Text>
