@@ -129,8 +129,49 @@ export default function App() {
       if(el.closest('nav')) el.style.display = 'none';
     });
 
+    // 로그인 감지: localStorage에 토큰이 저장되면 앱에 userId 전달
+    (function() {
+      var origSetItem = localStorage.setItem;
+      localStorage.setItem = function(key, value) {
+        origSetItem.apply(this, arguments);
+        if (key === 'cm_access_token' && value) {
+          try {
+            var payload = JSON.parse(atob(value.split('.')[1]));
+            if (payload.id && window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: payload.id }));
+            }
+          } catch(e) {}
+        }
+      };
+      var existing = localStorage.getItem('cm_access_token');
+      if (existing && window.ReactNativeWebView) {
+        try {
+          var p = JSON.parse(atob(existing.split('.')[1]));
+          if (p.id) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: p.id }));
+        } catch(e) {}
+      }
+    })();
+
     true;
   `;
+
+  // 웹 → 앱 메시지
+  const onMessage = async (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'USER_LOGIN' && data.userId) {
+        try {
+          const tokenData = await Notifications.getDevicePushTokenAsync();
+          await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: tokenData.data, platform: Platform.OS, userId: data.userId }),
+          });
+          console.log('Push: 유저 FCM 토큰 연결 완료', data.userId);
+        } catch (e) { console.log('Push: 유저 토큰 연결 실패', e); }
+      }
+    } catch {}
+  };
 
   return (
     <SafeAreaProvider>
@@ -148,6 +189,7 @@ export default function App() {
         style={styles.webview}
         onNavigationStateChange={(navState) => setCanGoBack(navState.canGoBack)}
         onLoadEnd={() => setLoading(false)}
+        onMessage={onMessage}
         injectedJavaScript={injectedJS}
         javaScriptEnabled={true}
         domStorageEnabled={true}

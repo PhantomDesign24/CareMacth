@@ -4,7 +4,7 @@ import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 
-// POST /device-token - 디바이스 토큰 등록 (비회원 포함)
+// POST /device-token - 디바이스 토큰 등록 (비회원 포함, 로그인 시 유저 연결)
 export const registerDeviceToken = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const errors = validationResult(req);
@@ -12,13 +12,27 @@ export const registerDeviceToken = async (req: Request, res: Response, next: Nex
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { token, platform = 'android' } = req.body;
+    const { token, platform = 'android', userId } = req.body;
 
+    // 디바이스 토큰 저장/갱신
     await prisma.deviceToken.upsert({
       where: { token },
-      update: { platform, updatedAt: new Date() },
-      create: { token, platform },
+      update: { platform, userId: userId || undefined, updatedAt: new Date() },
+      create: { token, platform, userId: userId || undefined },
     });
+
+    // userId가 있으면 User.fcmToken에도 저장 (기존 푸시 로직 호환)
+    if (userId) {
+      // 다른 유저에게 할당된 같은 토큰 제거
+      await prisma.user.updateMany({
+        where: { fcmToken: token, id: { not: userId } },
+        data: { fcmToken: null },
+      });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { fcmToken: token },
+      }).catch(() => {}); // 유저 없으면 무시
+    }
 
     res.json({ success: true, message: '디바이스 토큰이 등록되었습니다.' });
   } catch (error) {

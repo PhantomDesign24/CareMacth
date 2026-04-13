@@ -183,11 +183,23 @@ export default function App() {
   };
 
   // 웹 → 앱 메시지
-  const onMessage = (event: any) => {
+  const onMessage = async (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === 'CALL') {
         // 전화 걸기
+      }
+      // 로그인 시 FCM 토큰을 유저에 연결
+      if (data.type === 'USER_LOGIN' && data.userId) {
+        try {
+          const tokenData = await Notifications.getDevicePushTokenAsync();
+          await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: tokenData.data, platform: Platform.OS, userId: data.userId }),
+          });
+          console.log('Push: 유저 FCM 토큰 연결 완료', data.userId);
+        } catch (e) { console.log('Push: 유저 토큰 연결 실패', e); }
       }
     } catch {}
   };
@@ -209,6 +221,30 @@ export default function App() {
     document.querySelectorAll('[href*="find-work"], [href*="caregiver"]').forEach(function(el) {
       if(el.closest('nav')) el.style.display = 'none';
     });
+
+    // 로그인 감지: localStorage에 토큰이 저장되면 앱에 userId 전달
+    (function() {
+      var origSetItem = localStorage.setItem;
+      localStorage.setItem = function(key, value) {
+        origSetItem.apply(this, arguments);
+        if (key === 'cm_access_token' && value) {
+          try {
+            var payload = JSON.parse(atob(value.split('.')[1]));
+            if (payload.id && window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: payload.id }));
+            }
+          } catch(e) {}
+        }
+      };
+      // 이미 로그인된 상태면 바로 전달
+      var existing = localStorage.getItem('cm_access_token');
+      if (existing && window.ReactNativeWebView) {
+        try {
+          var p = JSON.parse(atob(existing.split('.')[1]));
+          if (p.id) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: p.id }));
+        } catch(e) {}
+      }
+    })();
 
     true;
   `;
