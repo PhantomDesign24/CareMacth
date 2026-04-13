@@ -15,31 +15,22 @@ import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 
-// Expo Go 호환: 네이티브 모듈 안전하게 로드
-// Expo Go 테스트용: 네이티브 모듈 비활성화
-// 프로덕션 빌드 시 아래 주석 해제
-// import * as Notifications from 'expo-notifications';
-// import * as LocalAuthentication from 'expo-local-authentication';
-// import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as Device from 'expo-device';
 // import { patientApi } from './src/services/api';
-const Notifications: any = null;
-const LocalAuthentication: any = null;
-const Device: any = null;
 const patientApi: any = null;
 
 const DOMAIN = 'cm.phantomdesign.kr';
 const WEB_URL = `https://${DOMAIN}`;
 
-// 푸시 알림 핸들러 (Expo Go에서는 건너뜀)
-try {
-  Notifications?.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
-} catch {}
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 type TabKey = 'home' | 'request' | 'status' | 'mypage';
 

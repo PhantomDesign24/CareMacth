@@ -13,24 +13,21 @@ import {
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
-// Expo Go 호환
-const Notifications: any = null;
-const Device: any = null;
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+// import { caregiverApi } from './src/services/api';
 const caregiverApi: any = null;
 
 const DOMAIN = 'cm.phantomdesign.kr';
 const WEB_URL = `https://${DOMAIN}/find-work`;
 
-// 포그라운드 알림 표시 설정 (Expo Go에서는 건너뜀)
-try {
-  Notifications?.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
-} catch {}
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 export default function App() {
   const webViewRef = useRef<WebView>(null);
@@ -44,27 +41,24 @@ export default function App() {
 
   // 알림 수신 리스너
   useEffect(() => {
-    if (!Notifications) return;
-    try {
-      const sub1 = Notifications.addNotificationReceivedListener((notification: any) => {
-        console.log('[Push] 알림 수신:', notification.request.content.title);
-      });
+    const sub1 = Notifications.addNotificationReceivedListener((notification: any) => {
+      console.log('[Push] 알림 수신:', notification.request.content.title);
+    });
 
-      const sub2 = Notifications.addNotificationResponseReceivedListener((response: any) => {
-        const data = response?.notification?.request?.content?.data;
-        if (data?.url && webViewRef.current) {
-          webViewRef.current.injectJavaScript(
-            `window.location.href = '${data.url}'; true;`
-          );
-        }
-      });
+    const sub2 = Notifications.addNotificationResponseReceivedListener((response: any) => {
+      const data = response?.notification?.request?.content?.data;
+      if (data?.url && webViewRef.current) {
+        webViewRef.current.injectJavaScript(
+          `window.location.href = '${data.url}'; true;`
+        );
+      }
+    });
 
-      return () => { sub1.remove(); sub2.remove(); };
-    } catch {}
+    return () => { sub1.remove(); sub2.remove(); };
   }, []);
 
   const registerPushNotifications = async () => {
-    if (!Notifications || !Device?.isDevice) return;
+    if (!Device.isDevice) return;
     try {
       const { status } = await Notifications.getPermissionsAsync();
       let finalStatus = status;
