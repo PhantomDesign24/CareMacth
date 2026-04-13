@@ -15,8 +15,6 @@ import { WebView } from 'react-native-webview';
 
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-// import { caregiverApi } from './src/services/api';
-const caregiverApi: any = null;
 
 const DOMAIN = 'cm.phantomdesign.kr';
 const WEB_URL = `https://${DOMAIN}/find-work`;
@@ -90,7 +88,7 @@ export default function App() {
         });
         console.log('Push: 디바이스 토큰 등록 완료');
       } catch (e) { console.log('Push: 디바이스 토큰 등록 실패', e); }
-      await caregiverApi?.registerFcmToken(fcmToken);
+      // 유저 연결은 WebView 로그인 시 onMessage에서 처리
     } catch (e) {
       console.log('Push setup error:', e);
     }

@@ -164,7 +164,7 @@ export default function App() {
         console.log('Push: 디바이스 토큰 등록 완료');
       } catch (e) { console.log('Push: 디바이스 토큰 등록 실패', e); }
       // 회원이면 유저에도 연결
-      await patientApi?.registerFcmToken(fcmToken);
+      // 유저 연결은 WebView 로그인 시 onMessage에서 처리
     } catch (e) { console.log('Push setup error:', e); }
   };
 
