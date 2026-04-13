@@ -91,7 +91,10 @@ export default function App() {
   }, []);
 
   const registerPushNotifications = async () => {
-    if (!Notifications || !Device?.isDevice) return;
+    if (!Device.isDevice) {
+      console.log('Push: 에뮬레이터에서는 지원하지 않습니다.');
+      return;
+    }
     try {
       const { status } = await Notifications.getPermissionsAsync();
       let finalStatus = status;
@@ -99,25 +102,32 @@ export default function App() {
         const { status: s } = await Notifications.requestPermissionsAsync();
         finalStatus = s;
       }
-      if (finalStatus !== 'granted') return;
+      if (finalStatus !== 'granted') {
+        console.log('Push: 알림 권한이 거부되었습니다.');
+        return;
+      }
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('carematch-default', {
           name: '케어매치 알림', importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250], sound: 'default',
         });
       }
-      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId: 'carematch-fc707' });
-      // 비회원도 디바이스 토큰 등록 (로그인 불필요)
+      // FCM 네이티브 토큰 사용 (Firebase 직접 발송용)
+      const tokenData = await Notifications.getDevicePushTokenAsync();
+      const fcmToken = tokenData.data;
+      console.log('FCM Token:', fcmToken);
+      // 비회원도 디바이스 토큰 등록
       try {
         await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: tokenData.data, platform: Platform.OS }),
+          body: JSON.stringify({ token: fcmToken, platform: Platform.OS }),
         });
-      } catch {}
+        console.log('Push: 디바이스 토큰 등록 완료');
+      } catch (e) { console.log('Push: 디바이스 토큰 등록 실패', e); }
       // 회원이면 유저에도 연결
-      await patientApi?.registerFcmToken(tokenData.data);
-    } catch (e) { console.log('Push setup skipped:', e); }
+      await patientApi?.registerFcmToken(fcmToken);
+    } catch (e) { console.log('Push setup error:', e); }
   };
 
   // 알림 수신 리스너

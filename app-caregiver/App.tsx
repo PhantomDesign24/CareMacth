@@ -77,21 +77,22 @@ export default function App() {
         });
       }
 
-      const tokenData = await Notifications.getExpoPushTokenAsync({
-        projectId: 'carematch-fc707',
-      });
-      console.log('Push token:', tokenData.data);
+      // FCM 네이티브 토큰 사용
+      const tokenData = await Notifications.getDevicePushTokenAsync();
+      const fcmToken = tokenData.data;
+      console.log('FCM Token:', fcmToken);
       // 비회원도 디바이스 토큰 등록
       try {
         await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: tokenData.data, platform: Platform.OS }),
+          body: JSON.stringify({ token: fcmToken, platform: Platform.OS }),
         });
-      } catch {}
-      await caregiverApi?.registerFcmToken(tokenData.data);
+        console.log('Push: 디바이스 토큰 등록 완료');
+      } catch (e) { console.log('Push: 디바이스 토큰 등록 실패', e); }
+      await caregiverApi?.registerFcmToken(fcmToken);
     } catch (e) {
-      console.log('Push setup skipped:', e);
+      console.log('Push setup error:', e);
     }
   };
 
