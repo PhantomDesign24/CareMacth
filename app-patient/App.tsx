@@ -12,22 +12,30 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import * as Notifications from 'expo-notifications';
-import * as LocalAuthentication from 'expo-local-authentication';
-import * as Device from 'expo-device';
 import { Ionicons } from '@expo/vector-icons';
-import { patientApi } from './src/services/api';
+
+// Expo Go 호환: 네이티브 모듈 안전하게 로드
+let Notifications: any = null;
+let LocalAuthentication: any = null;
+let Device: any = null;
+let patientApi: any = null;
+try { Notifications = require('expo-notifications'); } catch {}
+try { LocalAuthentication = require('expo-local-authentication'); } catch {}
+try { Device = require('expo-device'); } catch {}
+try { patientApi = require('./src/services/api').patientApi; } catch {}
 
 const WEB_URL = 'https://cm.phantomdesign.kr';
 
-// 푸시 알림 핸들러
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// 푸시 알림 핸들러 (Expo Go에서는 건너뜀)
+try {
+  Notifications?.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch {}
 
 type TabKey = 'home' | 'request' | 'status' | 'mypage';
 
@@ -60,38 +68,25 @@ export default function App() {
   }, []);
 
   const checkBiometric = async () => {
+    if (!LocalAuthentication) {
+      setAuthenticated(true);
+      setBiometricChecked(true);
+      return;
+    }
     try {
       const compatible = await LocalAuthentication.hasHardwareAsync();
-      if (!compatible) {
-        setAuthenticated(true);
-        setBiometricChecked(true);
-        return;
-      }
-
+      if (!compatible) { setAuthenticated(true); setBiometricChecked(true); return; }
       const enrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!enrolled) {
-        setAuthenticated(true);
-        setBiometricChecked(true);
-        return;
-      }
-
-      // Face ID / Touch ID 구분
+      if (!enrolled) { setAuthenticated(true); setBiometricChecked(true); return; }
       const biometricTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
-      const useFaceID = biometricTypes.includes(
-        LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION
-      );
-
+      const useFaceID = biometricTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: useFaceID
-          ? 'Face ID로 케어매치에 로그인합니다'
-          : '지문으로 케어매치에 로그인합니다',
+        promptMessage: useFaceID ? 'Face ID로 케어매치에 로그인합니다' : '지문으로 케어매치에 로그인합니다',
         fallbackLabel: '비밀번호로 로그인',
         disableDeviceFallback: false,
       });
       setAuthenticated(result.success);
-    } catch {
-      setAuthenticated(true);
-    }
+    } catch { setAuthenticated(true); }
     setBiometricChecked(true);
   };
 
@@ -101,60 +96,39 @@ export default function App() {
   }, []);
 
   const registerPushNotifications = async () => {
-    if (!Device.isDevice) return;
-
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') return;
-
-    // Android 알림 채널 설정
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('carematch-default', {
-        name: '케어매치 알림',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        sound: 'default',
-      });
-    }
-
+    if (!Notifications || !Device?.isDevice) return;
     try {
-      const tokenData = await Notifications.getExpoPushTokenAsync({
-        projectId: 'carematch-fc707',
-      });
-      console.log('Push token:', tokenData.data);
-      // 서버에 FCM 토큰 등록
-      await patientApi.registerFcmToken(tokenData.data);
-    } catch (e) {
-      console.log('Push token error:', e);
-    }
+      const { status } = await Notifications.getPermissionsAsync();
+      let finalStatus = status;
+      if (status !== 'granted') {
+        const { status: s } = await Notifications.requestPermissionsAsync();
+        finalStatus = s;
+      }
+      if (finalStatus !== 'granted') return;
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('carematch-default', {
+          name: '케어매치 알림', importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250], sound: 'default',
+        });
+      }
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId: 'carematch-fc707' });
+      await patientApi?.registerFcmToken(tokenData.data);
+    } catch (e) { console.log('Push setup skipped:', e); }
   };
 
   // 알림 수신 리스너
   useEffect(() => {
-    const sub1 = Notifications.addNotificationReceivedListener((notification) => {
-      console.log('알림 수신:', notification);
-    });
-
-    const sub2 = Notifications.addNotificationResponseReceivedListener((response) => {
-      // 알림 탭 시 해당 페이지로 이동
-      const data = response.notification.request.content.data;
-      if (data?.url && webViewRef.current) {
-        webViewRef.current.injectJavaScript(
-          `window.location.href = '${data.url}'; true;`
-        );
-      }
-    });
-
-    return () => {
-      sub1.remove();
-      sub2.remove();
-    };
+    if (!Notifications) return;
+    try {
+      const sub1 = Notifications.addNotificationReceivedListener(() => {});
+      const sub2 = Notifications.addNotificationResponseReceivedListener((response: any) => {
+        const data = response?.notification?.request?.content?.data;
+        if (data?.url && webViewRef.current) {
+          webViewRef.current.injectJavaScript(`window.location.href = '${data.url}'; true;`);
+        }
+      });
+      return () => { sub1.remove(); sub2.remove(); };
+    } catch {}
   }, []);
 
   // Android 뒤로가기
