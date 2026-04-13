@@ -1,7 +1,9 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { authService } from './auth';
 
-const BASE_URL = 'https://api.carematch.co.kr/api/v1';
+// 도메인 중앙 관리 (shared/constants/index.ts 와 동일)
+const DOMAIN = 'cm.phantomdesign.kr';
+const BASE_URL = `https://${DOMAIN}/api`;
 
 class ApiClient {
   private client: AxiosInstance;

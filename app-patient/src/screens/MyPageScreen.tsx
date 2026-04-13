@@ -92,7 +92,7 @@ export default function MyPageScreen({ navigation }: any) {
   const handleShareReferral = async () => {
     try {
       await Share.share({
-        message: `케어매치에서 간병 서비스를 이용해보세요!\n추천인 코드: ${userInfo.referralCode}\nhttps://carematch.co.kr/invite/${userInfo.referralCode}`,
+        message: `케어매치에서 간병 서비스를 이용해보세요!\n추천인 코드: ${userInfo.referralCode}\nhttps://cm.phantomdesign.kr/invite/${userInfo.referralCode}`,
       });
     } catch (error) {
       // handle error

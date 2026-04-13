@@ -1,7 +1,7 @@
+import { registerRootComponent } from 'expo';
 import React, { useRef, useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
-  SafeAreaView,
   StyleSheet,
   Platform,
   BackHandler,
@@ -10,21 +10,27 @@ import {
   View,
   Text,
 } from 'react-native';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-import { caregiverApi } from './src/services/api';
 
-const WEB_URL = 'https://cm.phantomdesign.kr';
+// Expo Go 호환
+const Notifications: any = null;
+const Device: any = null;
+const caregiverApi: any = null;
 
-// 포그라운드 알림 표시 설정
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+const DOMAIN = 'cm.phantomdesign.kr';
+const WEB_URL = `https://${DOMAIN}/find-work`;
+
+// 포그라운드 알림 표시 설정 (Expo Go에서는 건너뜀)
+try {
+  Notifications?.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch {}
 
 export default function App() {
   const webViewRef = useRef<WebView>(null);
@@ -34,57 +40,56 @@ export default function App() {
   // 푸시 알림 등록
   useEffect(() => {
     registerPushNotifications();
+  }, []);
 
-    const sub1 = Notifications.addNotificationReceivedListener((notification) => {
-      console.log('[Push] 알림 수신:', notification.request.content.title);
-    });
+  // 알림 수신 리스너
+  useEffect(() => {
+    if (!Notifications) return;
+    try {
+      const sub1 = Notifications.addNotificationReceivedListener((notification: any) => {
+        console.log('[Push] 알림 수신:', notification.request.content.title);
+      });
 
-    const sub2 = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data;
-      if (data?.url && webViewRef.current) {
-        webViewRef.current.injectJavaScript(
-          `window.location.href = '${data.url}'; true;`
-        );
-      }
-    });
+      const sub2 = Notifications.addNotificationResponseReceivedListener((response: any) => {
+        const data = response?.notification?.request?.content?.data;
+        if (data?.url && webViewRef.current) {
+          webViewRef.current.injectJavaScript(
+            `window.location.href = '${data.url}'; true;`
+          );
+        }
+      });
 
-    return () => {
-      sub1.remove();
-      sub2.remove();
-    };
+      return () => { sub1.remove(); sub2.remove(); };
+    } catch {}
   }, []);
 
   const registerPushNotifications = async () => {
-    if (!Device.isDevice) return;
-
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') return;
-
-    // Android 알림 채널 설정
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('carematch-default', {
-        name: '케어매치 간병인 알림',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        sound: 'default',
-      });
-    }
-
+    if (!Notifications || !Device?.isDevice) return;
     try {
+      const { status } = await Notifications.getPermissionsAsync();
+      let finalStatus = status;
+      if (status !== 'granted') {
+        const { status: s } = await Notifications.requestPermissionsAsync();
+        finalStatus = s;
+      }
+      if (finalStatus !== 'granted') return;
+
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('carematch-default', {
+          name: '케어매치 간병인 알림',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          sound: 'default',
+        });
+      }
+
       const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId: 'carematch-fc707',
       });
       console.log('Push token:', tokenData.data);
-      await caregiverApi.registerFcmToken(tokenData.data);
+      await caregiverApi?.registerFcmToken(tokenData.data);
     } catch (e) {
-      console.log('Push token error:', e);
+      console.log('Push setup skipped:', e);
     }
   };
 
@@ -110,11 +115,23 @@ export default function App() {
     window.IS_CAREMATCH_APP = true;
     window.APP_TYPE = 'CAREGIVER';
     window.APP_PLATFORM = '${Platform.OS}';
+
+    // 앱에서는 웹 헤더/푸터 숨기기
+    var style = document.createElement('style');
+    style.textContent = 'header { display: none !important; } footer { display: none !important; }';
+    document.head.appendChild(style);
+
+    // 보호자 전용 메뉴 숨기기
+    document.querySelectorAll('[href*="care-request"], [href*="guardian"]').forEach(function(el) {
+      if(el.closest('nav')) el.style.display = 'none';
+    });
+
     true;
   `;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaProvider>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" backgroundColor="#ffffff" />
       {loading && (
         <View style={styles.loading}>
@@ -139,6 +156,7 @@ export default function App() {
         userAgent={`CareMatch-Caregiver/${Platform.OS}`}
       />
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

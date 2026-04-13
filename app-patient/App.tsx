@@ -27,7 +27,8 @@ const LocalAuthentication: any = null;
 const Device: any = null;
 const patientApi: any = null;
 
-const WEB_URL = 'https://cm.phantomdesign.kr';
+const DOMAIN = 'cm.phantomdesign.kr';
+const WEB_URL = `https://${DOMAIN}`;
 
 // 푸시 알림 핸들러 (Expo Go에서는 건너뜀)
 try {
@@ -189,9 +190,15 @@ export default function App() {
     // 하단 탭바 높이만큼 웹 padding 추가
     document.body.style.paddingBottom = '70px';
 
-    // 웹 헤더 숨기기 (앱에서는 불필요)
-    // var header = document.querySelector('header');
-    // if(header) header.style.display = 'none';
+    // 앱에서는 웹 헤더/푸터 숨기기 (네이티브 탭바 사용)
+    var style = document.createElement('style');
+    style.textContent = 'header { display: none !important; } footer { display: none !important; }';
+    document.head.appendChild(style);
+
+    // 간병인 전용 메뉴 숨기기
+    document.querySelectorAll('[href*="find-work"], [href*="caregiver"]').forEach(function(el) {
+      if(el.closest('nav')) el.style.display = 'none';
+    });
 
     true;
   `;
@@ -229,7 +236,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" backgroundColor="#ffffff" />
 
       {/* 로딩 오버레이 */}
