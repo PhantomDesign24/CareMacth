@@ -15,14 +15,16 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 
 // Expo Go 호환: 네이티브 모듈 안전하게 로드
-let Notifications: any = null;
-let LocalAuthentication: any = null;
-let Device: any = null;
-let patientApi: any = null;
-try { Notifications = require('expo-notifications'); } catch {}
-try { LocalAuthentication = require('expo-local-authentication'); } catch {}
-try { Device = require('expo-device'); } catch {}
-try { patientApi = require('./src/services/api').patientApi; } catch {}
+// Expo Go 테스트용: 네이티브 모듈 비활성화
+// 프로덕션 빌드 시 아래 주석 해제
+// import * as Notifications from 'expo-notifications';
+// import * as LocalAuthentication from 'expo-local-authentication';
+// import * as Device from 'expo-device';
+// import { patientApi } from './src/services/api';
+const Notifications: any = null;
+const LocalAuthentication: any = null;
+const Device: any = null;
+const patientApi: any = null;
 
 const WEB_URL = 'https://cm.phantomdesign.kr';
 
