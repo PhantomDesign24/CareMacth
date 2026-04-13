@@ -1,0 +1,754 @@
+// CareMatch - 간병인 매칭 플랫폼 Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. 사용자 관련 모델
+// ==========================================
+
+enum UserRole {
+  GUARDIAN    // 보호자
+  CAREGIVER  // 간병인
+  HOSPITAL   // 병원
+  ADMIN      // 관리자
+}
+
+enum AuthProvider {
+  LOCAL
+  KAKAO
+  NAVER
+}
+
+enum CaregiverStatus {
+  PENDING     // 승인 대기
+  APPROVED    // 승인 완료
+  REJECTED    // 승인 거절
+  SUSPENDED   // 활동 정지
+  BLACKLISTED // 블랙리스트
+}
+
+enum CaregiverWorkStatus {
+  WORKING      // 근무중
+  AVAILABLE    // 근무 가능
+  IMMEDIATE    // 즉시 가능
+}
+
+model User {
+  id            String       @id @default(uuid())
+  email         String       @unique
+  phone         String       @unique
+  password      String?      // 간편가입 시 null
+  name          String
+  role          UserRole
+  authProvider  AuthProvider  @default(LOCAL)
+  socialId      String?      // 소셜 로그인 ID
+  profileImage  String?
+  fcmToken      String?      // Firebase Cloud Messaging 토큰
+  isActive      Boolean      @default(true)
+  referralCode  String       @unique // 추천인 코드
+  referredBy    String?      // 추천인 ID
+  points        Int          @default(0) // 포인트
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  guardian      Guardian?
+  caregiver     Caregiver?
+  hospital      Hospital?
+  notifications Notification[]
+  sentMessages  Message[]     @relation("SentMessages")
+  receivedMessages Message[]  @relation("ReceivedMessages")
+
+  @@index([role])
+  @@index([referralCode])
+}
+
+model Guardian {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+
+  patients        Patient[]
+  careRequests    CareRequest[]
+  contracts       Contract[]
+  payments        Payment[]
+  reviews         Review[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Caregiver {
+  id                String           @id @default(uuid())
+  userId            String           @unique
+  user              User             @relation(fields: [userId], references: [id])
+  status            CaregiverStatus  @default(PENDING)
+  workStatus        CaregiverWorkStatus @default(AVAILABLE)
+
+  // 신원 인증
+  identityVerified  Boolean @default(false)
+  idCardImage       String?
+
+  // 범죄 이력 조회
+  criminalCheckDone Boolean @default(false)
+  criminalCheckDate DateTime?
+  criminalCheckDoc  String?
+
+  // 자격증
+  certificates      Certificate[]
+
+  // 프로필 정보
+  gender            String?   // M, F
+  nationality       String?   // 국적
+  birthDate         DateTime?
+  address           String?
+  latitude          Float?
+  longitude         Float?
+  preferredRegions  String[]  // 희망 근무 지역
+
+  // 경력
+  experienceYears   Int       @default(0)
+  specialties       String[]  // 전문 분야
+
+  // 통계
+  totalMatches      Int       @default(0)
+  avgRating         Float     @default(0)
+  rehireRate        Float     @default(0) // 재고용률
+  cancellationRate  Float     @default(0) // 취소율
+  penaltyCount      Int       @default(0) // 패널티 누계
+  noShowCount       Int       @default(0) // 노쇼 횟수
+
+  // 우수 간병사 뱃지
+  hasBadge          Boolean   @default(false)
+  badgeGrantedAt    DateTime?
+
+  // 협회비
+  associationFee    Int       @default(0)
+  associationPaidAt DateTime?
+
+  // 교육
+  educationCompleted Boolean  @default(false)
+  educationProgress  Float    @default(0) // 교육 진행률
+
+  // 가상 계좌
+  virtualAccount    String?
+  bankName          String?
+  accountNumber     String?
+  accountHolder     String?
+
+  applications      CareApplication[]
+  contracts         Contract[]
+  careRecords       CareRecord[]
+  reviews           Review[]
+  penalties         Penalty[]
+  earnings          Earning[]
+  educations        EducationRecord[]
+  consultMemos      ConsultMemo[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([workStatus])
+  @@index([gender])
+  @@index([nationality])
+  @@index([latitude, longitude])
+}
+
+model Certificate {
+  id          String    @id @default(uuid())
+  caregiverId String
+  caregiver   Caregiver @relation(fields: [caregiverId], references: [id])
+  name        String    // 자격증 이름
+  issuer      String    // 발급 기관
+  issueDate   DateTime
+  imageUrl    String
+  verified    Boolean   @default(false)
+
+  createdAt   DateTime  @default(now())
+}
+
+// ==========================================
+// 2. 환자 관련 모델
+// ==========================================
+
+enum MobilityStatus {
+  INDEPENDENT  // 독립 가능
+  PARTIAL      // 부분 도움 필요
+  DEPENDENT    // 완전 의존
+}
+
+model Patient {
+  id              String         @id @default(uuid())
+  guardianId      String
+  guardian        Guardian       @relation(fields: [guardianId], references: [id])
+  name            String
+  birthDate       DateTime
+  gender          String         // M, F
+  mobilityStatus  MobilityStatus
+  hasDementia     Boolean        @default(false)
+  hasInfection    Boolean        @default(false)
+  infectionDetail String?
+  medicalNotes    String?        // 특이사항
+  weight          Float?
+  height          Float?
+  diagnosis       String?        // 진단명
+
+  careRequests    CareRequest[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ==========================================
+// 3. 간병 요청 관련 모델
+// ==========================================
+
+enum CareType {
+  INDIVIDUAL  // 개인 간병 (1:1)
+  FAMILY      // 가족 간병
+}
+
+enum CareScheduleType {
+  FULL_TIME   // 24시간
+  PART_TIME   // 시간제
+}
+
+enum CareLocation {
+  HOSPITAL    // 병원
+  HOME        // 자택
+}
+
+enum CareRequestStatus {
+  OPEN        // 공고 진행중
+  MATCHING    // 매칭 진행중
+  MATCHED     // 매칭 완료
+  IN_PROGRESS // 간병 진행중
+  COMPLETED   // 완료
+  CANCELLED   // 취소
+}
+
+model CareRequest {
+  id                  String            @id @default(uuid())
+  guardianId          String
+  guardian            Guardian          @relation(fields: [guardianId], references: [id])
+  patientId           String
+  patient             Patient           @relation(fields: [patientId], references: [id])
+
+  careType            CareType
+  scheduleType        CareScheduleType
+  location            CareLocation
+  hospitalName        String?
+  address             String
+  latitude            Float?
+  longitude           Float?
+
+  startDate           DateTime
+  endDate             DateTime?
+  durationDays        Int?
+
+  preferredGender     String?           // 선호 성별
+  preferredNationality String?          // 선호 국적
+  specialRequirements String?           // 특이사항
+
+  // 의료행위 금지 동의
+  medicalActAgreed    Boolean           @default(false)
+  medicalActAgreedAt  DateTime?
+
+  dailyRate           Int?              // 일당 (원)
+  hourlyRate          Int?              // 시급 (원)
+
+  status              CareRequestStatus @default(OPEN)
+
+  applications        CareApplication[]
+  contract            Contract?
+  matchScores         MatchScore[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([location])
+  @@index([careType])
+  @@index([startDate, endDate])
+  @@index([guardianId, status])
+}
+
+// ==========================================
+// 4. 매칭 관련 모델
+// ==========================================
+
+model MatchScore {
+  id              String      @id @default(uuid())
+  careRequestId   String
+  careRequest     CareRequest @relation(fields: [careRequestId], references: [id])
+  caregiverId     String
+  score           Float       // 최종 매칭 점수
+  distanceScore   Float       // 거리 점수
+  experienceScore Float       // 경력 적합도
+  reviewScore     Float       // 리뷰 점수
+  rehireScore     Float       // 재고용률
+  cancelPenalty   Float       // 취소율 감점
+  notified        Boolean     @default(false) // 알림 발송 여부
+  notifiedAt      DateTime?
+
+  createdAt       DateTime    @default(now())
+
+  @@unique([careRequestId, caregiverId])
+  @@index([score])
+}
+
+enum ApplicationStatus {
+  PENDING   // 지원 대기
+  ACCEPTED  // 수락됨
+  REJECTED  // 거절됨
+  CANCELLED // 취소됨
+}
+
+model CareApplication {
+  id              String            @id @default(uuid())
+  careRequestId   String
+  careRequest     CareRequest       @relation(fields: [careRequestId], references: [id])
+  caregiverId     String
+  caregiver       Caregiver         @relation(fields: [caregiverId], references: [id])
+  status          ApplicationStatus @default(PENDING)
+  message         String?           // 간병인 메시지
+  expectedEarning Int?              // 예상 수익
+
+  // 인드라이브 방식: 간병인 제안 금액
+  proposedRate    Int?              // 간병인이 제안한 일당 (null이면 보호자 제시 금액 수락)
+  isAccepted      Boolean @default(false) // 보호자 제시 금액 그대로 수락 여부
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([careRequestId, caregiverId])
+}
+
+// ==========================================
+// 5. 계약 관련 모델
+// ==========================================
+
+enum ContractStatus {
+  ACTIVE      // 진행중
+  COMPLETED   // 완료
+  CANCELLED   // 취소
+  EXTENDED    // 연장됨
+}
+
+model Contract {
+  id              String         @id @default(uuid())
+  careRequestId   String         @unique
+  careRequest     CareRequest    @relation(fields: [careRequestId], references: [id])
+  guardianId      String
+  guardian        Guardian       @relation(fields: [guardianId], references: [id])
+  caregiverId     String
+  caregiver       Caregiver      @relation(fields: [caregiverId], references: [id])
+
+  startDate       DateTime
+  endDate         DateTime
+  dailyRate       Int            // 일당
+  totalAmount     Int            // 총 금액
+  platformFee     Float          // 플랫폼 수수료 (%)
+  taxRate         Float          @default(3.3) // 세율 (%)
+
+  status          ContractStatus @default(ACTIVE)
+  contractDoc     String?        // 계약서 URL
+  medicalActClause Boolean       @default(true) // 의료행위 금지 조항 포함
+
+  // 취소 정책
+  cancellationPolicy String?
+  cancelledAt     DateTime?
+  cancelledBy     String?        // userId
+  cancellationReason String?
+
+  payments        Payment[]
+  careRecords     CareRecord[]
+  extensions      ContractExtension[]
+  additionalFees  AdditionalFee[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, endDate])
+  @@index([caregiverId])
+  @@index([guardianId])
+}
+
+model ContractExtension {
+  id          String   @id @default(uuid())
+  contractId  String
+  contract    Contract @relation(fields: [contractId], references: [id])
+  newEndDate  DateTime
+  additionalDays Int
+  additionalAmount Int
+  approvedByCaregiver Boolean @default(false)
+  isNewCaregiver Boolean @default(false) // 새 간병인 요청 여부
+
+  createdAt   DateTime @default(now())
+}
+
+// ==========================================
+// 6. 결제 관련 모델
+// ==========================================
+
+enum PaymentMethod {
+  BANK_TRANSFER  // 무통장입금
+  CARD           // 카드
+  DIRECT         // 직접결제
+}
+
+enum PaymentStatus {
+  PENDING     // 대기
+  ESCROW      // 에스크로 보관중
+  COMPLETED   // 완료
+  REFUNDED    // 환불
+  PARTIAL_REFUND // 부분 환불
+  FAILED      // 실패
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  contractId      String?
+  contract        Contract?     @relation(fields: [contractId], references: [id])
+  guardianId      String
+  guardian        Guardian      @relation(fields: [guardianId], references: [id])
+
+  amount          Int           // 결제 금액
+  vatAmount       Int           // VAT 금액
+  totalAmount     Int           // 총 결제 금액 (VAT 포함)
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+
+  // 토스페이먼츠 연동
+  tossPaymentKey  String?
+  tossOrderId     String?       @unique
+
+  // 포인트 사용
+  pointsUsed      Int           @default(0)
+
+  // 주 단위 결제 (장기 간병)
+  isRecurring     Boolean       @default(false)
+  recurringWeek   Int?          // 몇 주차 결제인지
+
+  paidAt          DateTime?
+  refundedAt      DateTime?
+  refundAmount    Int?
+  refundReason    String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([guardianId])
+  @@index([createdAt])
+  @@index([status, createdAt])
+}
+
+model AdditionalFee {
+  id          String   @id @default(uuid())
+  contractId  String
+  contract    Contract @relation(fields: [contractId], references: [id])
+  amount      Int      // 추가 금액
+  reason      String   // 사유
+  requestedBy String   // caregiverId
+  approvedByGuardian Boolean @default(false)
+  paid        Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Earning {
+  id              String    @id @default(uuid())
+  caregiverId     String
+  caregiver       Caregiver @relation(fields: [caregiverId], references: [id])
+  contractId      String?
+  amount          Int       // 정산 금액
+  platformFee     Int       // 플랫폼 수수료
+  taxAmount       Int       // 세액 (3.3%)
+  netAmount       Int       // 실수령액
+  paidAt          DateTime?
+  isPaid          Boolean   @default(false)
+
+  createdAt       DateTime @default(now())
+
+  @@index([caregiverId])
+  @@index([isPaid])
+}
+
+// ==========================================
+// 7. 간병 진행 관련 모델
+// ==========================================
+
+model CareRecord {
+  id          String    @id @default(uuid())
+  contractId  String
+  contract    Contract  @relation(fields: [contractId], references: [id])
+  caregiverId String
+  caregiver   Caregiver @relation(fields: [caregiverId], references: [id])
+  date        DateTime
+
+  // 출퇴근
+  checkInTime  DateTime?
+  checkOutTime DateTime?
+  checkInLat   Float?
+  checkInLng   Float?
+
+  // 간병 일지
+  bodyTemp     Float?     // 체온
+  bloodPressure String?   // 혈압
+  pulse        Int?       // 맥박
+  meals        String?    // 식사
+  medication   String?    // 투약
+  excretion    String?    // 배변/배뇨
+  sleep        String?    // 수면
+  mobility     String?    // 활동/이동
+  mentalState  String?    // 정서/정신상태
+  skinState    String?    // 피부 상태
+  notes        String?    // 특이사항
+
+  // 사진
+  photos       String[]   // 사진 URLs
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([contractId, date])
+}
+
+// ==========================================
+// 8. 평가 관련 모델
+// ==========================================
+
+model Review {
+  id          String    @id @default(uuid())
+  guardianId  String
+  guardian    Guardian  @relation(fields: [guardianId], references: [id])
+  caregiverId String
+  caregiver   Caregiver @relation(fields: [caregiverId], references: [id])
+  contractId  String
+  rating      Float     // 1-5
+  comment     String?
+  wouldRehire Boolean   @default(false) // 재고용 의사
+
+  createdAt   DateTime @default(now())
+
+  @@unique([guardianId, contractId])
+}
+
+// ==========================================
+// 9. 패널티 관련 모델
+// ==========================================
+
+enum PenaltyType {
+  NO_SHOW       // 노쇼
+  CANCELLATION  // 취소
+  COMPLAINT     // 민원
+  MANUAL        // 관리자 수동 부여
+}
+
+model Penalty {
+  id          String      @id @default(uuid())
+  caregiverId String
+  caregiver   Caregiver   @relation(fields: [caregiverId], references: [id])
+  type        PenaltyType
+  reason      String
+  isAutomatic Boolean     @default(true) // 자동/수동 부여
+  grantedBy   String?     // 수동 부여 시 관리자 ID
+
+  createdAt   DateTime @default(now())
+}
+
+// ==========================================
+// 10. 교육 관련 모델
+// ==========================================
+
+model Education {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  videoUrl    String?
+  duration    Int      // 분 단위
+  order       Int      // 순서
+  isActive    Boolean  @default(true)
+
+  records     EducationRecord[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model EducationRecord {
+  id           String    @id @default(uuid())
+  caregiverId  String
+  caregiver    Caregiver @relation(fields: [caregiverId], references: [id])
+  educationId  String
+  education    Education @relation(fields: [educationId], references: [id])
+  progress     Float     @default(0) // 0-100%
+  completed    Boolean   @default(false) // 80% 이상 수료
+  completedAt  DateTime?
+  certificateUrl String? // 수료증 URL
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([caregiverId, educationId])
+}
+
+// ==========================================
+// 11. 알림 모델
+// ==========================================
+
+enum NotificationType {
+  MATCHING         // 매칭 알림
+  APPLICATION      // 지원 알림
+  CONTRACT         // 계약 알림
+  PAYMENT          // 결제 알림
+  CARE_RECORD      // 간병 기록 알림
+  EXTENSION        // 연장 알림
+  PENALTY          // 패널티 알림
+  SYSTEM           // 시스템 알림
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?            // 추가 데이터
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+
+  // 푸시 발송 상태
+  pushSent    Boolean   @default(false)  // FCM 발송 시도 여부
+  pushSuccess Boolean?                    // 발송 성공/실패 (null=미발송)
+  pushError   String?                     // 실패 시 에러 메시지
+  pushSentAt  DateTime?                   // 발송 시각
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}
+
+// ==========================================
+// 12. 메시지 모델
+// ==========================================
+
+model Message {
+  id          String   @id @default(uuid())
+  senderId    String
+  sender      User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId  String
+  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  content     String
+  isRead      Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+
+  @@index([senderId, receiverId])
+}
+
+// ==========================================
+// 13. 병원 모델
+// ==========================================
+
+model Hospital {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  address   String
+  phone     String?
+  latitude  Float?
+  longitude Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// 14. 관리자 메모 / 상담 기록
+// ==========================================
+
+model ConsultMemo {
+  id          String    @id @default(uuid())
+  caregiverId String
+  caregiver   Caregiver @relation(fields: [caregiverId], references: [id])
+  adminId     String    // 관리자 userId
+  content     String
+  createdAt   DateTime  @default(now())
+}
+
+// ==========================================
+// 15. 플랫폼 설정
+// ==========================================
+
+model PlatformConfig {
+  id                    String @id @default("default")
+  individualFeePercent  Float  @default(10)   // 1:1 매칭 수수료 (%)
+  individualFeeFixed    Int    @default(0)     // 1:1 매칭 수수료 (원)
+  familyFeePercent      Float  @default(15)    // 가족 간병 수수료 (%)
+  familyFeeFixed        Int    @default(0)     // 가족 간병 수수료 (원)
+  taxRate               Float  @default(3.3)   // 세율 (%)
+  referralPoints        Int    @default(10000) // 추천인 포인트
+  noShowPenaltyThreshold Int   @default(3)     // 노쇼 패널티 임계값
+  badgeThreshold        Int    @default(10)    // 우수 간병사 뱃지 매칭 횟수
+
+  updatedAt             DateTime @updatedAt
+}
+
+// ==========================================
+// 16. 간병보험 서류 신청
+// ==========================================
+
+enum InsuranceDocStatus {
+  REQUESTED   // 신청
+  PROCESSING  // 처리중
+  COMPLETED   // 완료
+  REJECTED    // 거절
+}
+
+model InsuranceDocRequest {
+  id              String             @id @default(uuid())
+  patientName     String
+  birthDate       String
+  carePeriod      String
+  insuranceCompany String
+  documentType    String             // 간병확인서, 영수증 등
+  status          InsuranceDocStatus @default(REQUESTED)
+  documentUrl     String?            // 발급된 서류 URL
+  requestedBy     String             // userId 또는 카카오톡 ID
+  processedBy     String?            // 처리 관리자 ID
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ==========================================
+// 17. 월별 통계
+// ==========================================
+
+model MonthlyStats {
+  id                String   @id @default(uuid())
+  year              Int
+  month             Int
+  totalRequests     Int      @default(0)
+  totalMatches      Int      @default(0)
+  totalRevenue      Int      @default(0)
+  totalPlatformFee  Int      @default(0)
+  activeCaregivers  Int      @default(0)
+  activeGuardians   Int      @default(0)
+  avgRating         Float    @default(0)
+
+  createdAt         DateTime @default(now())
+
+  @@unique([year, month])
+}

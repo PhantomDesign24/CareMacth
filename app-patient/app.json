@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "케어매치",
+    "slug": "carematch-patient",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FF922E"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "kr.carematch.patient",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "생체 인증으로 빠르게 로그인합니다.",
+        "NSLocationWhenInUseUsageDescription": "간병 위치 확인을 위해 위치 정보가 필요합니다.",
+        "UIBackgroundModes": ["remote-notification"]
+      },
+      "entitlements": {
+        "aps-environment": "production"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FF922E"
+      },
+      "package": "kr.carematch.patient",
+      "permissions": [
+        "INTERNET",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "USE_BIOMETRIC",
+        "POST_NOTIFICATIONS",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#FF922E"
+        }
+      ],
+      "expo-local-authentication"
+    ],
+    "scheme": "carematch",
+    "extra": {
+      "eas": {
+        "projectId": "carematch-patient"
+      }
+    }
+  }
+}

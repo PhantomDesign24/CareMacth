@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "케어매치 간병인",
+    "slug": "carematch-caregiver",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#2ECC71"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "kr.carematch.caregiver",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "출퇴근 체크를 위해 위치 정보가 필요합니다.",
+        "NSCameraUsageDescription": "간병 일지 사진 업로드를 위해 카메라 접근이 필요합니다.",
+        "NSPhotoLibraryUsageDescription": "간병 일지 사진 조회를 위해 사진 접근이 필요합니다.",
+        "NSPhotoLibraryAddOnlyUsageDescription": "간병 일지 사진 저장을 위해 권한이 필요합니다.",
+        "UIBackgroundModes": ["remote-notification"]
+      },
+      "entitlements": {
+        "aps-environment": "production"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2ECC71"
+      },
+      "package": "kr.carematch.caregiver",
+      "permissions": [
+        "INTERNET",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "POST_NOTIFICATIONS",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-location",
+      "expo-image-picker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#2ECC71"
+        }
+      ]
+    ],
+    "scheme": "carematch-caregiver",
+    "extra": {
+      "eas": {
+        "projectId": "carematch-caregiver"
+      }
+    }
+  }
+}

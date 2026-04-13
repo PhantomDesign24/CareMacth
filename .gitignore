@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+.next/
+out/
+build/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Coverage
+coverage/
+
+# Firebase
+firebase-service-account.json
+*-service-account.json
+
+# 빌드 산출물
+*.tar.gz
+*.apk
+*.ipa
+*.aab
+
+# Misc
+*.tsbuildinfo

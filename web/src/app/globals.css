@@ -1,0 +1,162 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-white text-gray-900 font-sans;
+  }
+
+  ::selection {
+    @apply bg-primary-200 text-primary-900;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-6 py-3 bg-primary-500 text-white font-semibold rounded-xl
+           hover:bg-primary-600 active:bg-primary-700 transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-primary-300 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30;
+  }
+
+  .btn-secondary-mint {
+    @apply inline-flex items-center justify-center px-6 py-3 bg-secondary-500 text-white font-semibold rounded-xl
+           hover:bg-secondary-600 active:bg-secondary-700 transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-secondary-300 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-lg shadow-secondary-500/25 hover:shadow-xl hover:shadow-secondary-500/30;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center px-6 py-3 bg-white text-primary-600 font-semibold rounded-xl
+           border-2 border-primary-500 hover:bg-primary-50 active:bg-primary-100
+           transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:ring-offset-2;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-6 py-3 bg-white text-primary-600 font-semibold rounded-xl
+           border-2 border-primary-500 hover:bg-primary-50 active:bg-primary-100
+           transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:ring-offset-2;
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center px-6 py-3 bg-accent-500 text-white font-semibold rounded-xl
+           hover:bg-accent-600 active:bg-accent-700 transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-accent-300 focus:ring-offset-2;
+  }
+
+  .btn-dark {
+    @apply inline-flex items-center justify-center gap-3 px-6 py-3 bg-gray-900 text-white rounded-xl
+           hover:bg-gray-800 transition-all duration-200 shadow-lg;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900
+           placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-300
+           focus:border-primary-500 transition-all duration-200;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-md border border-gray-100 p-6
+           hover:shadow-xl transition-all duration-300;
+  }
+
+  .card-premium {
+    @apply bg-white rounded-2xl p-8 border border-gray-100
+           shadow-[0_4px_30px_rgba(0,0,0,0.06)]
+           hover:shadow-[0_8px_40px_rgba(0,0,0,0.1)]
+           transition-all duration-300;
+  }
+
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold text-gray-900 text-center;
+  }
+
+  .section-subtitle {
+    @apply text-lg text-gray-500 text-center mt-3 max-w-2xl mx-auto;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium;
+  }
+
+  .badge-primary {
+    @apply badge bg-primary-100 text-primary-700;
+  }
+
+  .badge-success {
+    @apply badge bg-green-100 text-green-700;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-100 text-amber-700;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-100 text-red-700;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-500 to-accent-500;
+  }
+
+  .text-gradient-mint {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-secondary-500 to-secondary-600;
+  }
+
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Counter animation */
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

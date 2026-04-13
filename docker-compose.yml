@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 데이터베이스
+  db:
+    image: postgres:16-alpine
+    container_name: carematch-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: carematch
+      POSTGRES_USER: carematch_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-carematch_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - carematch-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U carematch_user -d carematch"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (세션, 캐시)
+  redis:
+    image: redis:7-alpine
+    container_name: carematch-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - carematch-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: carematch-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://carematch_user:${DB_PASSWORD:-carematch_password}@db:5432/carematch?schema=public
+      NODE_ENV: production
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads
+    networks:
+      - carematch-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Web Frontend
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: carematch-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: https://cm.phantomdesign.kr/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - carematch-network
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 192M
+
+  # Admin Panel
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    container_name: carematch-admin
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: https://cm.phantomdesign.kr/api
+    ports:
+      - "3001:3000"
+    depends_on:
+      - backend
+    networks:
+      - carematch-network
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 192M
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: carematch-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - web
+      - admin
+      - backend
+    networks:
+      - carematch-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  carematch-network:
+    driver: bridge
