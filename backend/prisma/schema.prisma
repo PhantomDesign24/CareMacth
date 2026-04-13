@@ -61,6 +61,7 @@ model User {
   caregiver     Caregiver?
   hospital      Hospital?
   notifications Notification[]
+  deviceTokens  DeviceToken[]
   sentMessages  Message[]     @relation("SentMessages")
   receivedMessages Message[]  @relation("ReceivedMessages")
 
@@ -751,4 +752,21 @@ model MonthlyStats {
   createdAt         DateTime @default(now())
 
   @@unique([year, month])
+}
+
+// ==========================================
+// 18. 디바이스 토큰 (비회원 포함)
+// ==========================================
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  token     String   @unique          // Expo Push Token 또는 FCM 토큰
+  platform  String   @default("android") // android / ios
+  userId    String?                    // 로그인 시 연결 (비회원이면 null)
+  user      User?    @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

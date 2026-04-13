@@ -81,6 +81,14 @@ export default function App() {
         projectId: 'carematch-fc707',
       });
       console.log('Push token:', tokenData.data);
+      // 비회원도 디바이스 토큰 등록
+      try {
+        await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: tokenData.data, platform: Platform.OS }),
+        });
+      } catch {}
       await caregiverApi?.registerFcmToken(tokenData.data);
     } catch (e) {
       console.log('Push setup skipped:', e);

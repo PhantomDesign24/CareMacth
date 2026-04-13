@@ -1,8 +1,30 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+
+// POST /device-token - 디바이스 토큰 등록 (비회원 포함)
+export const registerDeviceToken = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { token, platform = 'android' } = req.body;
+
+    await prisma.deviceToken.upsert({
+      where: { token },
+      update: { platform, updatedAt: new Date() },
+      create: { token, platform },
+    });
+
+    res.json({ success: true, message: '디바이스 토큰이 등록되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // GET / - 알림 목록
 export const getNotifications = async (req: AuthRequest, res: Response, next: NextFunction) => {

@@ -1735,8 +1735,58 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
         success: true,
         message: `${user.name}님에게 알림이 발송되었습니다.`,
       });
+    } else if (target === 'all_devices') {
+      // 전체 디바이스 발송 (비회원 포함)
+      const admin = await import('../config/firebase');
+      const firebase = admin.default;
+
+      const deviceTokens = await prisma.deviceToken.findMany({
+        select: { token: true },
+      });
+
+      if (deviceTokens.length === 0) {
+        throw new AppError('등록된 디바이스가 없습니다.', 400);
+      }
+
+      // 회원에게는 DB 알림도 저장
+      const users = await prisma.user.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      });
+
+      if (users.length > 0) {
+        await prisma.notification.createMany({
+          data: users.map((u) => ({
+            userId: u.id,
+            type: notificationType,
+            title,
+            body,
+          })),
+        });
+      }
+
+      // 모든 디바이스에 FCM 푸시 발송
+      let successCount = 0;
+      if (firebase.apps.length) {
+        const tokens = deviceTokens.map(d => d.token);
+        try {
+          const result = await firebase.messaging().sendEachForMulticast({
+            tokens,
+            notification: { title, body },
+            android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default' } },
+          });
+          successCount = result.successCount;
+        } catch (e) {
+          console.error('[FCM] 전체 발송 오류:', e);
+        }
+      }
+
+      res.status(201).json({
+        success: true,
+        message: `디바이스 ${deviceTokens.length}대 중 ${successCount}대 푸시 발송, 회원 ${users.length}명 알림 저장`,
+      });
     } else {
-      // 전체 발송
+      // 전체 회원 발송
       const users = await prisma.user.findMany({
         where: { isActive: true },
         select: { id: true },

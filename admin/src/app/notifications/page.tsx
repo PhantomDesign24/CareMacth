@@ -66,7 +66,7 @@ const NOTIFICATION_TYPES = [
 
 export default function NotificationsPage() {
   // Send form state
-  const [target, setTarget] = useState<"all" | "individual">("all");
+  const [target, setTarget] = useState<"all" | "individual" | "all_devices">("all");
   const [userId, setUserId] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -116,7 +116,8 @@ export default function NotificationsPage() {
       alert("개별 발송 시 사용자 ID를 입력해주세요.");
       return;
     }
-    if (!confirm(target === "all" ? "전체 사용자에게 알림을 발송하시겠습니까?" : "해당 사용자에게 알림을 발송하시겠습니까?")) {
+    const confirmMsg = target === "all_devices" ? "비회원 포함 전체 디바이스에 푸시를 발송하시겠습니까?" : target === "all" ? "전체 회원에게 알림을 발송하시겠습니까?" : "해당 사용자에게 알림을 발송하시겠습니까?";
+    if (!confirm(confirmMsg)) {
       return;
     }
 
@@ -168,7 +169,18 @@ export default function NotificationsPage() {
                   onChange={() => setTarget("all")}
                   className="h-4 w-4 text-primary-600 focus:ring-primary-500"
                 />
-                <span className="text-sm text-gray-700">전체</span>
+                <span className="text-sm text-gray-700">전체 회원</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="target"
+                  value="all_devices"
+                  checked={target === "all_devices"}
+                  onChange={() => setTarget("all_devices")}
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">전체 디바이스 (비회원 포함)</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input

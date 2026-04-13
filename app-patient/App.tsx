@@ -107,6 +107,15 @@ export default function App() {
         });
       }
       const tokenData = await Notifications.getExpoPushTokenAsync({ projectId: 'carematch-fc707' });
+      // 비회원도 디바이스 토큰 등록 (로그인 불필요)
+      try {
+        await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: tokenData.data, platform: Platform.OS }),
+        });
+      } catch {}
+      // 회원이면 유저에도 연결
       await patientApi?.registerFcmToken(tokenData.data);
     } catch (e) { console.log('Push setup skipped:', e); }
   };

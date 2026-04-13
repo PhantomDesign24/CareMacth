@@ -5,7 +5,13 @@ import * as notificationController from '../controllers/notificationController';
 
 const router = Router();
 
-// 모든 알림 라우트에 인증 필요
+// 비회원도 가능: 디바이스 토큰 등록
+router.post('/device-token', [
+  body('token').notEmpty().withMessage('푸시 토큰이 필요합니다.'),
+  body('platform').optional().isIn(['android', 'ios']),
+], notificationController.registerDeviceToken);
+
+// 이하 인증 필요
 router.use(authenticate);
 
 // GET / - 알림 목록
