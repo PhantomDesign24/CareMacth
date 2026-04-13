@@ -28,4 +28,10 @@ router.post('/fcm-token', [
 // DELETE /fcm-token - FCM 토큰 삭제 (로그아웃 시)
 router.delete('/fcm-token', notificationController.removeFcmToken);
 
+// PUT /push-setting - 푸시 알림 on/off
+router.put('/push-setting', notificationController.updatePushSetting);
+
+// GET /push-setting - 푸시 설정 조회
+router.get('/push-setting', notificationController.getPushSetting);
+
 export default router;

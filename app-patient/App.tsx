@@ -13,6 +13,7 @@ import {
   ScrollView,
   Switch,
   Linking,
+  Modal,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -57,39 +58,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [canGoBack, setCanGoBack] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [biometricChecked, setBiometricChecked] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(true);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
-
-  // 생체 인증
-  useEffect(() => {
-    checkBiometric();
-  }, []);
-
-  const checkBiometric = async () => {
-    if (!LocalAuthentication) {
-      setAuthenticated(true);
-      setBiometricChecked(true);
-      return;
-    }
-    try {
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      if (!compatible) { setAuthenticated(true); setBiometricChecked(true); return; }
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!enrolled) { setAuthenticated(true); setBiometricChecked(true); return; }
-      const biometricTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
-      const useFaceID = biometricTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: useFaceID ? 'Face ID로 케어매치에 로그인합니다' : '지문으로 케어매치에 로그인합니다',
-        fallbackLabel: '비밀번호로 로그인',
-        disableDeviceFallback: false,
-      });
-      setAuthenticated(result.success);
-    } catch { setAuthenticated(true); }
-    setBiometricChecked(true);
-  };
+  const [showExitModal, setShowExitModal] = useState(false);
 
   // 푸시 알림 등록
   useEffect(() => {
@@ -297,37 +270,6 @@ export default function App() {
     true;
   `;
 
-  // 생체인증 대기 화면
-  if (!biometricChecked) {
-    return (
-      <View style={styles.authScreen}>
-        <StatusBar style="dark" />
-        <ActivityIndicator size="large" color="#FF922E" />
-      </View>
-    );
-  }
-
-  // 생체인증 실패 화면
-  if (!authenticated) {
-    return (
-      <View style={styles.authScreen}>
-        <StatusBar style="dark" />
-        <Ionicons name="finger-print" size={64} color="#FF922E" />
-        <Text style={styles.authTitle}>인증이 필요합니다</Text>
-        <Text style={styles.authDesc}>생체 인증으로 안전하게 로그인하세요</Text>
-        <TouchableOpacity style={styles.authButton} onPress={checkBiometric}>
-          <Text style={styles.authButtonText}>다시 시도</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.authSkip}
-          onPress={() => setAuthenticated(true)}
-        >
-          <Text style={styles.authSkipText}>비밀번호로 로그인</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <SafeAreaProvider>
     <SafeAreaView style={styles.container}>
@@ -359,9 +301,9 @@ export default function App() {
             </View>
           </View>
 
-          {/* 알림 설정 */}
+          {/* 설정 */}
           <View style={styles.mypageSection}>
-            <Text style={styles.mypageSectionTitle}>알림 설정</Text>
+            <Text style={styles.mypageSectionTitle}>설정</Text>
             <View style={styles.mypageRow}>
               <View style={styles.mypageRowLeft}>
                 <Ionicons name="notifications-outline" size={20} color="#FF922E" />
@@ -371,15 +313,34 @@ export default function App() {
                 value={pushEnabled}
                 onValueChange={(val) => {
                   setPushEnabled(val);
-                  if (!val) {
-                    Alert.alert('알림 끄기', '앱 설정에서 알림을 비활성화할 수 있습니다.', [
-                      { text: '취소', onPress: () => setPushEnabled(true) },
-                      { text: '설정으로 이동', onPress: () => Linking.openSettings() },
-                    ]);
+                  if (webViewRef.current) {
+                    webViewRef.current.injectJavaScript(`
+                      fetch('/api/notifications/push-setting', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('cm_access_token') },
+                        body: JSON.stringify({ enabled: ${val} })
+                      }).catch(function(){}); true;
+                    `);
                   }
                 }}
                 trackColor={{ false: '#ddd', true: '#FFD4A8' }}
                 thumbColor={pushEnabled ? '#FF922E' : '#f4f3f4'}
+              />
+            </View>
+            <View style={styles.mypageRow}>
+              <View style={styles.mypageRowLeft}>
+                <Ionicons name="finger-print" size={20} color="#FF922E" />
+                <Text style={styles.mypageRowText}>생체인증 로그인</Text>
+              </View>
+              <Switch
+                value={biometricEnabled}
+                onValueChange={(val) => {
+                  setBiometricEnabled(val);
+                  // TODO: AsyncStorage에 저장 → 로그인 페이지에서 확인
+                  Alert.alert(val ? '생체인증 활성화' : '생체인증 비활성화', val ? '다음 로그인 시 생체인증을 사용합니다.' : '생체인증이 비활성화되었습니다.');
+                }}
+                trackColor={{ false: '#ddd', true: '#FFD4A8' }}
+                thumbColor={biometricEnabled ? '#FF922E' : '#f4f3f4'}
               />
             </View>
           </View>
@@ -388,8 +349,10 @@ export default function App() {
           <View style={styles.mypageSection}>
             <Text style={styles.mypageSectionTitle}>서비스</Text>
             <TouchableOpacity style={styles.mypageRow} onPress={() => {
-              if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/dashboard/guardian'; true;");
               setActiveTab('status');
+              setTimeout(() => {
+                if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/dashboard/guardian'; true;");
+              }, 100);
             }}>
               <View style={styles.mypageRowLeft}>
                 <Ionicons name="heart-outline" size={20} color="#FF922E" />
@@ -398,8 +361,10 @@ export default function App() {
               <Ionicons name="chevron-forward" size={18} color="#ccc" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.mypageRow} onPress={() => {
-              if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/care-request'; true;");
               setActiveTab('request');
+              setTimeout(() => {
+                if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/care-request'; true;");
+              }, 100);
             }}>
               <View style={styles.mypageRowLeft}>
                 <Ionicons name="add-circle-outline" size={20} color="#FF922E" />
@@ -413,8 +378,10 @@ export default function App() {
           <View style={styles.mypageSection}>
             <Text style={styles.mypageSectionTitle}>정보</Text>
             <TouchableOpacity style={styles.mypageRow} onPress={() => {
-              if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/terms'; true;");
               setActiveTab('home');
+              setTimeout(() => {
+                if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/terms'; true;");
+              }, 100);
             }}>
               <View style={styles.mypageRowLeft}>
                 <Ionicons name="document-text-outline" size={20} color="#999" />
@@ -423,8 +390,10 @@ export default function App() {
               <Ionicons name="chevron-forward" size={18} color="#ccc" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.mypageRow} onPress={() => {
-              if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/privacy'; true;");
               setActiveTab('home');
+              setTimeout(() => {
+                if (webViewRef.current) webViewRef.current.injectJavaScript("window.location.href = '/privacy'; true;");
+              }, 100);
             }}>
               <View style={styles.mypageRowLeft}>
                 <Ionicons name="shield-checkmark-outline" size={20} color="#999" />

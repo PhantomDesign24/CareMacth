@@ -86,10 +86,10 @@ export async function sendNotification(params: SendNotificationParams) {
   // 2. FCM 푸시 알림 발송 + 결과 기록
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { fcmToken: true },
+    select: { fcmToken: true, pushEnabled: true },
   });
 
-  if (user?.fcmToken) {
+  if (user?.fcmToken && user?.pushEnabled !== false) {
     const success = await sendPushNotification(user.fcmToken, title, body, {
       type,
       notificationId: notification.id,

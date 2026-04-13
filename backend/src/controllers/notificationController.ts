@@ -210,3 +210,43 @@ export const removeFcmToken = async (req: AuthRequest, res: Response, next: Next
     next(error);
   }
 };
+
+// PUT /push-setting - 푸시 알림 on/off
+export const updatePushSetting = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'enabled 값이 필요합니다.' });
+    }
+
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { pushEnabled: enabled },
+    });
+
+    res.json({
+      success: true,
+      data: { pushEnabled: enabled },
+      message: enabled ? '푸시 알림이 활성화되었습니다.' : '푸시 알림이 비활성화되었습니다.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /push-setting - 푸시 설정 조회
+export const getPushSetting = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { pushEnabled: true },
+    });
+
+    res.json({
+      success: true,
+      data: { pushEnabled: user?.pushEnabled ?? true },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
