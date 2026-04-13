@@ -52,9 +52,13 @@ interface PatientDisplay {
   age: number;
   gender: string;
   weight: string;
-  consciousness: string;
+  height: string;
+  diagnosis: string;
   mobility: string;
   dementia: string;
+  infection: string;
+  infectionDetail: string;
+  medicalNotes: string;
   raw: PatientRaw;
 }
 
@@ -155,9 +159,13 @@ export default function GuardianDashboard() {
           age: p.birthDate ? new Date().getFullYear() - new Date(p.birthDate).getFullYear() : 0,
           gender: p.gender === 'F' ? '여' : '남',
           weight: p.weight ? `${p.weight}kg` : '-',
-          consciousness: '-',
+          height: p.height ? `${p.height}cm` : '-',
+          diagnosis: p.diagnosis || '-',
           mobility: formatMobility(p.mobilityStatus || ''),
           dementia: p.hasDementia ? '있음' : '없음',
+          infection: p.hasInfection ? '있음' : '없음',
+          infectionDetail: p.infectionDetail || '',
+          medicalNotes: p.medicalNotes || '',
           raw: {
             id: p.id,
             name: p.name,
@@ -618,6 +626,8 @@ export default function GuardianDashboard() {
                           수정
                         </button>
                       </div>
+
+                      {/* 기본 정보 */}
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                         <div>
                           <span className="text-gray-500">나이</span>
@@ -628,22 +638,43 @@ export default function GuardianDashboard() {
                           <p className="font-medium text-gray-900">{patient.gender}</p>
                         </div>
                         <div>
+                          <span className="text-gray-500">키</span>
+                          <p className="font-medium text-gray-900">{patient.height}</p>
+                        </div>
+                        <div>
                           <span className="text-gray-500">체중</span>
                           <p className="font-medium text-gray-900">{patient.weight}</p>
                         </div>
                         <div>
-                          <span className="text-gray-500">의식상태</span>
-                          <p className="font-medium text-gray-900">{patient.consciousness}</p>
+                          <span className="text-gray-500">진단명</span>
+                          <p className="font-medium text-gray-900">{patient.diagnosis}</p>
                         </div>
                         <div>
-                          <span className="text-gray-500">거동</span>
+                          <span className="text-gray-500">거동상태</span>
                           <p className="font-medium text-gray-900">{patient.mobility}</p>
                         </div>
                         <div>
                           <span className="text-gray-500">치매</span>
                           <p className="font-medium text-gray-900">{patient.dementia}</p>
                         </div>
+                        <div>
+                          <span className="text-gray-500">감염병</span>
+                          <p className="font-medium text-gray-900">
+                            {patient.infection}
+                            {patient.infection === '있음' && patient.infectionDetail && (
+                              <span className="text-gray-500 ml-1">({patient.infectionDetail})</span>
+                            )}
+                          </p>
+                        </div>
                       </div>
+
+                      {/* 의료 특이사항 */}
+                      {patient.medicalNotes && (
+                        <div className="mt-4 pt-3 border-t border-gray-200 text-sm">
+                          <span className="text-gray-500">의료 특이사항</span>
+                          <p className="font-medium text-gray-900 mt-1 whitespace-pre-wrap">{patient.medicalNotes}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -756,166 +787,193 @@ export default function GuardianDashboard() {
               </div>
             </div>
 
-            <form onSubmit={handlePatientFormSubmit} className="p-6 space-y-4">
+            <form onSubmit={handlePatientFormSubmit} className="p-6 space-y-5">
               {patientFormError && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
                   {patientFormError}
                 </div>
               )}
 
-              {/* 이름 */}
+              {/* 기본 정보 섹션 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  이름 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={patientForm.name}
-                  onChange={(e) => handlePatientFormChange('name', e.target.value)}
-                  placeholder="환자 이름"
-                  className="input-field"
-                />
-              </div>
-
-              {/* 생년월일 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  생년월일 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={patientForm.birthDate}
-                  onChange={(e) => handlePatientFormChange('birthDate', e.target.value)}
-                  className="input-field"
-                />
-              </div>
-
-              {/* 성별 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  성별 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  required
-                  value={patientForm.gender}
-                  onChange={(e) => handlePatientFormChange('gender', e.target.value)}
-                  className="input-field"
-                >
-                  <option value="M">남성</option>
-                  <option value="F">여성</option>
-                </select>
-              </div>
-
-              {/* 이동상태 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">이동상태</label>
-                <select
-                  value={patientForm.mobilityStatus}
-                  onChange={(e) => handlePatientFormChange('mobilityStatus', e.target.value)}
-                  className="input-field"
-                >
-                  <option value="INDEPENDENT">독립 보행</option>
-                  <option value="PARTIAL">부분 도움</option>
-                  <option value="DEPENDENT">완전 의존</option>
-                </select>
-              </div>
-
-              {/* 체중 / 키 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">체중 (kg)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="300"
-                    value={patientForm.weight}
-                    onChange={(e) => handlePatientFormChange('weight', e.target.value)}
-                    placeholder="예: 65"
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">키 (cm)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="300"
-                    value={patientForm.height}
-                    onChange={(e) => handlePatientFormChange('height', e.target.value)}
-                    placeholder="예: 170"
-                    className="input-field"
-                  />
-                </div>
-              </div>
-
-              {/* 치매 여부 */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="hasDementia"
-                  checked={patientForm.hasDementia}
-                  onChange={(e) => handlePatientFormChange('hasDementia', e.target.checked)}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <label htmlFor="hasDementia" className="text-sm font-medium text-gray-700">
-                  치매 여부
-                </label>
-              </div>
-
-              {/* 감염 여부 */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="hasInfection"
-                    checked={patientForm.hasInfection}
-                    onChange={(e) => handlePatientFormChange('hasInfection', e.target.checked)}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <label htmlFor="hasInfection" className="text-sm font-medium text-gray-700">
-                    감염 여부
-                  </label>
-                </div>
-                {patientForm.hasInfection && (
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 pb-2 border-b border-gray-200">기본 정보</h3>
+                <div className="space-y-4">
+                  {/* 이름 */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">감염 상세</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      이름 <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="text"
-                      value={patientForm.infectionDetail}
-                      onChange={(e) => handlePatientFormChange('infectionDetail', e.target.value)}
-                      placeholder="감염 관련 상세 정보"
+                      required
+                      value={patientForm.name}
+                      onChange={(e) => handlePatientFormChange('name', e.target.value)}
+                      placeholder="환자 이름"
                       className="input-field"
                     />
                   </div>
-                )}
+
+                  {/* 생년월일 + 성별 */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        생년월일 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={patientForm.birthDate}
+                        onChange={(e) => handlePatientFormChange('birthDate', e.target.value)}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        성별 <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={patientForm.gender}
+                        onChange={(e) => handlePatientFormChange('gender', e.target.value)}
+                        className="input-field"
+                      >
+                        <option value="M">남성</option>
+                        <option value="F">여성</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 키 / 체중 */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">키 (cm)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="300"
+                        value={patientForm.height}
+                        onChange={(e) => handlePatientFormChange('height', e.target.value)}
+                        placeholder="예: 170"
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">몸무게 (kg)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="300"
+                        value={patientForm.weight}
+                        onChange={(e) => handlePatientFormChange('weight', e.target.value)}
+                        placeholder="예: 65"
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* 진단명 */}
+              {/* 건강 상태 섹션 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">진단명</label>
-                <input
-                  type="text"
-                  value={patientForm.diagnosis}
-                  onChange={(e) => handlePatientFormChange('diagnosis', e.target.value)}
-                  placeholder="진단명 입력"
-                  className="input-field"
-                />
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 pb-2 border-b border-gray-200">건강 상태</h3>
+                <div className="space-y-4">
+                  {/* 진단명 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">진단명</label>
+                    <input
+                      type="text"
+                      value={patientForm.diagnosis}
+                      onChange={(e) => handlePatientFormChange('diagnosis', e.target.value)}
+                      placeholder="예: 뇌졸중, 치매, 골절 등"
+                      className="input-field"
+                    />
+                  </div>
+
+                  {/* 거동상태 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      거동상태 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={patientForm.mobilityStatus}
+                      onChange={(e) => handlePatientFormChange('mobilityStatus', e.target.value)}
+                      className="input-field"
+                    >
+                      <option value="INDEPENDENT">독립 보행</option>
+                      <option value="PARTIAL">부분 도움</option>
+                      <option value="DEPENDENT">완전 의존</option>
+                    </select>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {patientForm.mobilityStatus === 'INDEPENDENT' && '스스로 보행 및 일상생활이 가능한 상태'}
+                      {patientForm.mobilityStatus === 'PARTIAL' && '이동 시 부분적인 도움이 필요한 상태'}
+                      {patientForm.mobilityStatus === 'DEPENDENT' && '이동 및 일상생활 전반에 도움이 필요한 상태'}
+                    </p>
+                  </div>
+
+                  {/* 치매 여부 */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="hasDementia"
+                      checked={patientForm.hasDementia}
+                      onChange={(e) => handlePatientFormChange('hasDementia', e.target.checked)}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <label htmlFor="hasDementia" className="text-sm font-medium text-gray-700">
+                      치매 여부
+                    </label>
+                  </div>
+
+                  {/* 감염병 여부 */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="hasInfection"
+                        checked={patientForm.hasInfection}
+                        onChange={(e) => handlePatientFormChange('hasInfection', e.target.checked)}
+                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                      <label htmlFor="hasInfection" className="text-sm font-medium text-gray-700">
+                        감염병 여부
+                      </label>
+                    </div>
+                    {patientForm.hasInfection && (
+                      <div className="ml-6">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">감염병 상세</label>
+                        <input
+                          type="text"
+                          value={patientForm.infectionDetail}
+                          onChange={(e) => handlePatientFormChange('infectionDetail', e.target.value)}
+                          placeholder="예: MRSA, 결핵, 코로나19 등"
+                          className="input-field"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* 특이사항 */}
+              {/* 의료 특이사항 섹션 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">특이사항</label>
-                <textarea
-                  value={patientForm.medicalNotes}
-                  onChange={(e) => handlePatientFormChange('medicalNotes', e.target.value)}
-                  placeholder="특이사항이나 주의사항을 입력해주세요"
-                  rows={3}
-                  className="input-field resize-none"
-                />
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 pb-2 border-b border-gray-200">추가 정보</h3>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">의료 특이사항</label>
+                  <textarea
+                    value={patientForm.medicalNotes}
+                    onChange={(e) => handlePatientFormChange('medicalNotes', e.target.value)}
+                    placeholder="투약 중인 약물, 알레르기, 주의사항 등을 입력해주세요"
+                    rows={3}
+                    className="input-field resize-none"
+                    maxLength={1000}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    {patientForm.medicalNotes.length}/1000자
+                  </p>
+                </div>
               </div>
 
               {/* Buttons */}
