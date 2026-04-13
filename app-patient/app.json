@@ -26,6 +26,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FF922E"
       },
+      "googleServicesFile": "./google-services.json",
       "package": "kr.carematch.patient",
       "permissions": [
         "INTERNET",
