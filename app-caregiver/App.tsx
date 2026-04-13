@@ -216,6 +216,7 @@ export default function App() {
         domStorageEnabled={true}
         allowsBackForwardNavigationGestures={true}
         allowsInlineMediaPlayback={true}
+        mediaPlaybackRequiresUserAction={false}
         sharedCookiesEnabled={true}
         pullToRefreshEnabled={true}
         geolocationEnabled={true}

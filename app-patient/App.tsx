@@ -477,6 +477,7 @@ export default function App() {
           domStorageEnabled
           allowsBackForwardNavigationGestures
           allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
           sharedCookiesEnabled
           pullToRefreshEnabled
           geolocationEnabled
@@ -542,7 +543,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
-    paddingBottom: 8,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     paddingTop: 8,
   },
   tabItem: {
