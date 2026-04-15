@@ -122,7 +122,7 @@ export default function CaregiverDashboard() {
       const penaltyData = penaltiesRes.data?.data || penaltiesRes.data || {};
       const penaltyList = penaltyData.penalties || [];
       setPenalties(penaltyList.map((p: any) => ({
-        id: p.id, date: p.createdAt, reason: p.type, points: 0, description: p.reason,
+        id: p.id, date: formatDate(p.createdAt), reason: p.type, points: 0, description: p.reason,
       })));
 
       const reqData = requestsRes.data?.data || requestsRes.data || {};
@@ -133,7 +133,7 @@ export default function CaregiverDashboard() {
         patientGender: r.patient?.gender === 'F' ? '여' : '남',
         careType: r.careType === 'INDIVIDUAL' ? '1:1' : '가족',
         location: r.location === 'HOSPITAL' ? '병원' : '자택',
-        startDate: r.startDate,
+        startDate: formatDate(r.startDate),
         duration: r.durationDays ? `${r.durationDays}일` : '-',
         estimatedEarnings: (r.dailyRate || 0) * (r.durationDays || 30),
         urgency: '일반',

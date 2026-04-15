@@ -51,8 +51,8 @@ export default function ReviewPage() {
         patientName: found.careRequest?.patient?.name || "-",
         careType: found.careRequest?.careType || "",
         location: found.careRequest?.location || "",
-        startDate: found.startDate || "",
-        endDate: found.endDate || "",
+        startDate: found.startDate ? new Date(found.startDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : "",
+        endDate: found.endDate ? new Date(found.endDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : "",
       });
     } catch (err: unknown) {
       const message =
