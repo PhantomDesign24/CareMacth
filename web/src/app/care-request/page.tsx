@@ -42,15 +42,15 @@ export default function CareRequestPage() {
       }
 
       // 2. 간병 요청 생성
-      const careTypeMap: Record<string, string> = { '1:1 간병': 'INDIVIDUAL', '가족 간병': 'FAMILY' };
-      const scheduleMap: Record<string, string> = { '24시간': 'FULL_TIME', '시간제': 'PART_TIME' };
-      const locationMap: Record<string, string> = { '병원': 'HOSPITAL', '자택': 'HOME' };
+      const careTypeMap: Record<string, string> = { hospital: 'INDIVIDUAL', home: 'FAMILY' };
+      const scheduleMap: Record<string, string> = { '24h': 'FULL_TIME', parttime: 'PART_TIME' };
+      const locationMap: Record<string, string> = { hospital: 'HOSPITAL', home: 'HOME' };
 
       const requestPayload: Record<string, unknown> = {
         patientId,
-        careType: careTypeMap[data.careType] || data.careType || 'INDIVIDUAL',
-        scheduleType: scheduleMap[data.careSchedule] || data.careSchedule || 'FULL_TIME',
-        location: locationMap[data.locationType] || data.locationType || 'HOSPITAL',
+        careType: careTypeMap[data.careType] || 'INDIVIDUAL',
+        scheduleType: scheduleMap[data.careSchedule] || 'FULL_TIME',
+        location: locationMap[data.locationType] || 'HOSPITAL',
         hospitalName: data.locationName || undefined,
         address: data.locationAddress || '주소 미입력',
         region: data.region || undefined,
