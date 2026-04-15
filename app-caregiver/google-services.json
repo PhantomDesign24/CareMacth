@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "219102178663",
+    "project_id": "carematch-fc707",
+    "storage_bucket": "carematch-fc707.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:219102178663:android:f8320677e1b8896bb993c2",
+        "android_client_info": {
+          "package_name": "kr.carematch.caregiver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbts5iGcuASgWD6_WUyC7Q3mDRbt2Ux-Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:219102178663:android:2a0bc59a4998082fb993c2",
+        "android_client_info": {
+          "package_name": "kr.carematch.patient"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbts5iGcuASgWD6_WUyC7Q3mDRbt2Ux-Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

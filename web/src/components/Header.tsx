@@ -35,9 +35,9 @@ export default function Header() {
   useEffect(() => {
     try {
       const stored = localStorage.getItem("user");
-      if (stored) setUser(JSON.parse(stored));
-    } catch {}
-  }, []);
+      setUser(stored ? JSON.parse(stored) : null);
+    } catch { setUser(null); }
+  }, [pathname]);
 
   const handleLogout = () => {
     localStorage.removeItem("cm_access_token");
