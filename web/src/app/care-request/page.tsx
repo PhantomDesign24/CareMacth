@@ -26,7 +26,7 @@ export default function CareRequestPage() {
         birthDate: data.patientAge ? `${new Date().getFullYear() - parseInt(data.patientAge)}-01-01` : undefined,
         gender: data.patientGender === '남성' ? 'M' : data.patientGender === '여성' ? 'F' : (data.patientGender || 'M').substring(0, 1).toUpperCase(),
         weight: data.patientWeight ? parseFloat(data.patientWeight) : undefined,
-        mobilityStatus: (data.mobility || 'INDEPENDENT').toUpperCase(),
+        mobilityStatus: ({ independent: 'INDEPENDENT', partial: 'PARTIAL', bedridden: 'DEPENDENT', dependent: 'DEPENDENT' } as Record<string, string>)[data.mobility] || 'INDEPENDENT',
         hasDementia: data.hasDementia || false,
         hasInfection: data.hasInfection || false,
         infectionDetail: data.infectionDetails || undefined,
