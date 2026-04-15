@@ -17,7 +17,7 @@ router.post('/', [
   body('address').notEmpty().withMessage('주소를 입력해주세요.'),
   body('startDate').notEmpty().isISO8601().withMessage('유효한 시작일을 입력해주세요.'),
   body('endDate').optional({ nullable: true }).isISO8601().withMessage('유효한 종료일을 입력해주세요.'),
-  body('medicalActAgreed').equals('true').withMessage('의료행위 금지에 대한 동의가 필요합니다.'),
+  body('medicalActAgreed').optional(),
   body('dailyRate').optional({ nullable: true }).isInt({ min: 0 }).withMessage('일당은 0 이상의 숫자여야 합니다.'),
   body('hourlyRate').optional({ nullable: true }).isInt({ min: 0 }).withMessage('시급은 0 이상의 숫자여야 합니다.'),
 ], careRequestController.createCareRequest);
