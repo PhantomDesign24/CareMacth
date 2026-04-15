@@ -6,12 +6,18 @@ import { careRequestAPI, caregiverAPI } from "@/lib/api";
 import { formatDate, formatMoney, formatCareType, formatLocation } from "@/lib/format";
 import { FiArrowRight, FiCheck, FiPhone, FiX, FiDollarSign } from "react-icons/fi";
 
+const REGION_OPTIONS = [
+  "서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산", "세종",
+  "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
+];
+
 interface CareRequest {
   id: string;
   careType: string;
   scheduleType: string;
   location: string;
   address: string;
+  region: string | null;
   hospitalName: string | null;
   startDate: string;
   endDate: string | null;
@@ -44,6 +50,7 @@ export default function FindWorkPage() {
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [regionFilter, setRegionFilter] = useState("");
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -69,7 +76,11 @@ export default function FindWorkPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await careRequestAPI.list({ status: "OPEN", page, limit: 20 });
+      const params: Record<string, unknown> = { status: "OPEN", page, limit: 20 };
+      if (regionFilter) {
+        params.region = regionFilter;
+      }
+      const res = await careRequestAPI.list(params);
       const data = res.data?.data || res.data;
       setCareRequests(data.careRequests || []);
       setTotalPages(data.pagination?.totalPages || 1);
@@ -78,7 +89,7 @@ export default function FindWorkPage() {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, regionFilter]);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -323,6 +334,20 @@ export default function FindWorkPage() {
           <p className="mt-1 text-sm text-gray-500">
             원하는 간병 요청에 가격을 수락하거나 역제안하세요.
           </p>
+          {/* Region filter */}
+          <div className="mt-4 flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-700 shrink-0">지역 필터</label>
+            <select
+              className="input-field max-w-[200px] text-sm"
+              value={regionFilter}
+              onChange={(e) => { setRegionFilter(e.target.value); setPage(1); }}
+            >
+              <option value="">전체 지역</option>
+              {REGION_OPTIONS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -399,6 +424,10 @@ export default function FindWorkPage() {
                         <div>
                           <span className="text-gray-400 text-xs">장소</span>
                           <p className="text-gray-700 font-medium">{formatLocation(req.location)}{req.hospitalName ? ` (${req.hospitalName})` : ''}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 text-xs">지역</span>
+                          <p className="text-gray-700 font-medium">{req.region || '-'}</p>
                         </div>
                         <div>
                           <span className="text-gray-400 text-xs">주소</span>

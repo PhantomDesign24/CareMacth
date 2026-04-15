@@ -30,6 +30,7 @@ interface CareRequestFormData {
   locationType: string;
   locationName: string;
   locationAddress: string;
+  region: string;
 
   // Schedule
   startDate: string;
@@ -64,6 +65,7 @@ const initialFormData: CareRequestFormData = {
   locationType: "",
   locationName: "",
   locationAddress: "",
+  region: "",
   startDate: "",
   duration: "",
   durationUnit: "days",
@@ -133,6 +135,14 @@ const DIAGNOSIS_CATEGORIES = [
       "기타(직접입력)",
     ],
   },
+];
+
+/* ------------------------------------------------------------------ */
+/*  Region Options                                                     */
+/* ------------------------------------------------------------------ */
+const REGION_OPTIONS = [
+  "서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산", "세종",
+  "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
 ];
 
 /* ------------------------------------------------------------------ */
@@ -220,6 +230,7 @@ export default function CareRequestForm({ onSubmit }: Props) {
         return (
           form.locationType &&
           form.locationName &&
+          form.region &&
           form.startDate &&
           form.duration
         );
@@ -733,6 +744,22 @@ export default function CareRequestForm({ onSubmit }: Props) {
               value={form.locationAddress}
               onChange={(e) => update("locationAddress", e.target.value)}
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              지역 <span className="text-red-500">*</span>
+            </label>
+            <select
+              className="input-field"
+              value={form.region}
+              onChange={(e) => update("region", e.target.value)}
+            >
+              <option value="">지역을 선택하세요</option>
+              {REGION_OPTIONS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

@@ -96,6 +96,7 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
         address,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
+        region: req.body.region || null,
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         durationDays: durationDays ? parseInt(durationDays) : null,
@@ -145,6 +146,20 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
       }
     } else if (req.user!.role === 'CAREGIVER') {
       whereClause.status = status || 'OPEN';
+
+      // Filter by caregiver's preferred regions if set
+      const caregiver = await prisma.caregiver.findUnique({
+        where: { userId: req.user!.id },
+        select: { preferredRegions: true },
+      });
+      if (caregiver && caregiver.preferredRegions.length > 0) {
+        whereClause.region = { in: caregiver.preferredRegions };
+      }
+
+      // Also allow filtering by region query param
+      if (req.query.region) {
+        whereClause.region = req.query.region as string;
+      }
     } else if (req.user!.role === 'ADMIN') {
       if (status) {
         whereClause.status = status;
@@ -339,6 +354,7 @@ export const updateCareRequest = async (req: AuthRequest, res: Response, next: N
         ...(location !== undefined && { location }),
         ...(hospitalName !== undefined && { hospitalName }),
         ...(address !== undefined && { address }),
+        ...(req.body.region !== undefined && { region: req.body.region }),
         ...(latitude !== undefined && { latitude: parseFloat(latitude) }),
         ...(longitude !== undefined && { longitude: parseFloat(longitude) }),
         ...(startDate !== undefined && { startDate: new Date(startDate) }),

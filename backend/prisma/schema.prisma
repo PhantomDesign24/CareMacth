@@ -247,6 +247,7 @@ model CareRequest {
   location            CareLocation
   hospitalName        String?
   address             String
+  region              String?   // 지역 (서울, 경기, 인천 등)
   latitude            Float?
   longitude           Float?
 
