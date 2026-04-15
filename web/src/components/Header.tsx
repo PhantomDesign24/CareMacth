@@ -49,7 +49,7 @@ export default function Header() {
   const getDashboardLink = () => {
     if (!user) return "/auth/login";
     switch (user.role) {
-      case "ADMIN": return "/admin";
+      case "ADMIN": return "/dashboard/guardian";
       case "GUARDIAN": return "/dashboard/guardian";
       case "CAREGIVER": return "/dashboard/caregiver";
       default: return "/";
