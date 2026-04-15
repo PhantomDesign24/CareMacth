@@ -40,14 +40,6 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
       hourlyRate,
     } = req.body;
 
-    // 의료행위 금지 동의 필수 체크
-    if (!medicalActAgreed) {
-      throw new AppError(
-        '의료행위 금지에 대한 동의가 필요합니다. 간병인은 의료행위를 수행할 수 없으며, 이에 동의하셔야 간병 요청을 생성할 수 있습니다.',
-        400
-      );
-    }
-
     // 환자가 본인 소유인지 확인
     const patient = await prisma.patient.findFirst({
       where: { id: patientId, guardianId: guardian.id },
