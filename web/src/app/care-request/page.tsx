@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import CareRequestForm from "@/components/CareRequestForm";
 import { FiInfo, FiSearch } from "react-icons/fi";
-import { careRequestAPI } from "@/lib/api";
+import { careRequestAPI, guardianAPI } from "@/lib/api";
 import { AxiosError } from "axios";
 
 export default function CareRequestPage() {
@@ -20,7 +20,49 @@ export default function CareRequestPage() {
     setSubmitSuccess(false);
 
     try {
-      await careRequestAPI.create(data);
+      // 1. 환자 먼저 등록 (또는 기존 환자 사용)
+      const patientPayload: Record<string, unknown> = {
+        name: data.patientName,
+        birthDate: data.patientAge ? `${new Date().getFullYear() - parseInt(data.patientAge)}-01-01` : undefined,
+        gender: data.patientGender === '남성' ? 'M' : data.patientGender === '여성' ? 'F' : data.patientGender || 'M',
+        weight: data.patientWeight ? parseFloat(data.patientWeight) : undefined,
+        mobilityStatus: data.mobility || 'INDEPENDENT',
+        hasDementia: data.hasDementia || false,
+        hasInfection: data.hasInfection || false,
+        infectionDetail: data.infectionDetails || undefined,
+        diagnosis: Array.isArray(data.diagnosis) ? data.diagnosis.join(', ') : data.diagnosis || undefined,
+        medicalNotes: data.specialNotes || undefined,
+      };
+
+      const patientRes = await guardianAPI.createPatient(patientPayload);
+      const patientId = patientRes.data?.data?.id || patientRes.data?.id;
+
+      if (!patientId) {
+        throw new Error("환자 등록에 실패했습니다.");
+      }
+
+      // 2. 간병 요청 생성
+      const careTypeMap: Record<string, string> = { '1:1 간병': 'INDIVIDUAL', '가족 간병': 'FAMILY' };
+      const scheduleMap: Record<string, string> = { '24시간': 'FULL_TIME', '시간제': 'PART_TIME' };
+      const locationMap: Record<string, string> = { '병원': 'HOSPITAL', '자택': 'HOME' };
+
+      const requestPayload: Record<string, unknown> = {
+        patientId,
+        careType: careTypeMap[data.careType] || data.careType || 'INDIVIDUAL',
+        scheduleType: scheduleMap[data.careSchedule] || data.careSchedule || 'FULL_TIME',
+        location: locationMap[data.locationType] || data.locationType || 'HOSPITAL',
+        hospitalName: data.locationName || undefined,
+        address: data.locationAddress || '주소 미입력',
+        region: data.region || undefined,
+        startDate: data.startDate || new Date().toISOString(),
+        endDate: data.duration ? undefined : undefined,
+        durationDays: data.duration ? parseInt(data.duration) * (data.durationUnit === '개월' ? 30 : data.durationUnit === '주' ? 7 : 1) : undefined,
+        dailyRate: data.dailyRate ? parseInt(data.dailyRate) : 150000,
+        preferredGender: data.preferredGender || undefined,
+        specialRequirements: data.specialNotes || undefined,
+      };
+
+      await careRequestAPI.create(requestPayload);
       setSubmitSuccess(true);
       // Redirect to dashboard after brief delay so user sees success message
       setTimeout(() => {
