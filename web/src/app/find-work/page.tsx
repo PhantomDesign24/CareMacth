@@ -111,10 +111,10 @@ export default function FindWorkPage() {
       fetchRequests();
     } catch (err: unknown) {
       const raw = (err as any)?.response?.data?.message || "";
-      let message = "지원 중 오류가 발생했습니다. 다시 시도해주세요.";
-      if (raw.includes("이미 지원")) message = "이미 지원한 간병 요청입니다. 보호자의 응답을 기다려주세요.";
-      else if (raw.includes("승인된")) message = "아직 관리자 승인이 완료되지 않았습니다.";
-      else if (raw.includes("진행 중")) message = "현재 다른 간병을 진행 중이라 지원할 수 없습니다.";
+      let message = "지원 중 오류가 발생했습니다.";
+      if (raw.includes("이미 지원")) message = "이미 지원한 요청입니다.";
+      else if (raw.includes("승인된")) message = "관리자 승인 대기 중입니다.";
+      else if (raw.includes("진행 중")) message = "진행 중인 간병이 있습니다.";
       setApplyError(message);
     } finally {
       setAcceptingId(null);
@@ -151,8 +151,8 @@ export default function FindWorkPage() {
       fetchRequests();
     } catch (err: unknown) {
       const raw = (err as any)?.response?.data?.message || "";
-      let message = "제안 중 오류가 발생했습니다. 다시 시도해주세요.";
-      if (raw.includes("이미 지원")) message = "이미 지원한 간병 요청입니다. 보호자의 응답을 기다려주세요.";
+      let message = "제안 중 오류가 발생했습니다.";
+      if (raw.includes("이미 지원")) message = "이미 지원한 요청입니다.";
       setApplyError(message);
     } finally {
       setApplying(false);
