@@ -71,10 +71,14 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
       accountHolder,
     } = req.body;
 
+    // Normalize gender: frontend may send "male"/"female", Prisma expects "M"/"F"
+    const genderMap: Record<string, string> = { male: 'M', female: 'F', m: 'M', f: 'F', '남성': 'M', '여성': 'F' };
+    const resolvedGender = gender !== undefined ? (genderMap[gender?.toLowerCase()] || gender?.toUpperCase()?.charAt(0) || gender) : undefined;
+
     const updated = await prisma.caregiver.update({
       where: { id: caregiver.id },
       data: {
-        ...(gender !== undefined && { gender }),
+        ...(resolvedGender !== undefined && { gender: resolvedGender }),
         ...(nationality !== undefined && { nationality }),
         ...(birthDate !== undefined && { birthDate: new Date(birthDate) }),
         ...(address !== undefined && { address }),
@@ -184,7 +188,13 @@ export const updateWorkStatus = async (req: AuthRequest, res: Response, next: Ne
       throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
     }
 
-    const { workStatus } = req.body;
+    let { workStatus } = req.body;
+
+    // Normalize workStatus: frontend may send lowercase or alternate names
+    const workStatusMap: Record<string, string> = {
+      working: 'WORKING', available: 'AVAILABLE', immediate: 'IMMEDIATE', immediately: 'IMMEDIATE',
+    };
+    workStatus = workStatusMap[workStatus?.toLowerCase()] || workStatus?.toUpperCase() || workStatus;
 
     if (!workStatus || !['WORKING', 'AVAILABLE', 'IMMEDIATE'].includes(workStatus)) {
       throw new AppError('유효한 근무 상태를 입력해주세요. (WORKING, AVAILABLE, IMMEDIATE)', 400);

@@ -51,19 +51,27 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
+      // Map frontend role to Prisma UserRole enum (GUARDIAN/CAREGIVER/HOSPITAL)
+      const roleMap: Record<string, string> = { guardian: 'GUARDIAN', caregiver: 'CAREGIVER', hospital: 'HOSPITAL' };
+      const resolvedRole = roleMap[role] || role.toUpperCase();
+
+      // Map frontend gender to Prisma format (M/F)
+      const genderMap: Record<string, string> = { male: 'M', female: 'F', '남성': 'M', '여성': 'F' };
+      const resolvedGender = genderMap[gender?.toLowerCase()] || gender;
+
       const payload: Record<string, unknown> = {
         name,
         email,
         phone,
         password,
         password_confirmation: passwordConfirm,
-        role,
+        role: resolvedRole,
         referral_code: referralCode || undefined,
       };
 
       if (role === "caregiver") {
         payload.birth_date = birthDate;
-        payload.gender = gender;
+        payload.gender = resolvedGender;
         payload.experience = experience;
         payload.nationality = nationality;
         payload.certifications = certifications;

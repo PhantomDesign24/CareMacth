@@ -21,12 +21,27 @@ export default function CareRequestPage() {
 
     try {
       // 1. 환자 먼저 등록 (또는 기존 환자 사용)
+      // Gender mapping: form sends "male"/"female", Prisma expects "M"/"F"
+      const genderMap: Record<string, string> = { male: 'M', female: 'F', '남성': 'M', '여성': 'F', m: 'M', f: 'F' };
+      const resolvedGender = genderMap[data.patientGender?.toLowerCase()] || 'M';
+
+      // Mobility mapping: form sends "independent"/"assisted"/"wheelchair"/"bedridden"/"partial", Prisma expects "INDEPENDENT"/"PARTIAL"/"DEPENDENT"
+      const mobilityMap: Record<string, string> = {
+        independent: 'INDEPENDENT',
+        partial: 'PARTIAL',
+        assisted: 'PARTIAL',
+        wheelchair: 'DEPENDENT',
+        bedridden: 'DEPENDENT',
+        dependent: 'DEPENDENT',
+      };
+      const resolvedMobility = mobilityMap[data.mobility?.toLowerCase()] || 'INDEPENDENT';
+
       const patientPayload: Record<string, unknown> = {
         name: data.patientName,
         birthDate: data.patientAge ? `${new Date().getFullYear() - parseInt(data.patientAge)}-01-01` : undefined,
-        gender: data.patientGender === '남성' ? 'M' : data.patientGender === '여성' ? 'F' : (data.patientGender || 'M').substring(0, 1).toUpperCase(),
+        gender: resolvedGender,
         weight: data.patientWeight ? parseFloat(data.patientWeight) : undefined,
-        mobilityStatus: ({ independent: 'INDEPENDENT', partial: 'PARTIAL', bedridden: 'DEPENDENT', dependent: 'DEPENDENT' } as Record<string, string>)[data.mobility] || 'INDEPENDENT',
+        mobilityStatus: resolvedMobility,
         hasDementia: data.hasDementia || false,
         hasInfection: data.hasInfection || false,
         infectionDetail: data.infectionDetails || undefined,
@@ -42,9 +57,14 @@ export default function CareRequestPage() {
       }
 
       // 2. 간병 요청 생성
-      const careTypeMap: Record<string, string> = { hospital: 'INDIVIDUAL', home: 'FAMILY' };
-      const scheduleMap: Record<string, string> = { '24h': 'FULL_TIME', parttime: 'PART_TIME' };
+      // CareType mapping: form sends "hospital"/"home"/"visit"/"daily", Prisma expects "INDIVIDUAL"/"FAMILY"
+      const careTypeMap: Record<string, string> = { hospital: 'INDIVIDUAL', home: 'FAMILY', visit: 'INDIVIDUAL', daily: 'INDIVIDUAL' };
+      // Schedule mapping: form sends "24h"/"hourly", Prisma expects "FULL_TIME"/"PART_TIME"
+      const scheduleMap: Record<string, string> = { '24h': 'FULL_TIME', hourly: 'PART_TIME', parttime: 'PART_TIME' };
+      // Location mapping: form sends "hospital"/"home", Prisma expects "HOSPITAL"/"HOME"
       const locationMap: Record<string, string> = { hospital: 'HOSPITAL', home: 'HOME' };
+      // PreferredGender mapping: form sends "male"/"female"/"", Prisma expects "M"/"F"/undefined
+      const preferredGenderMap: Record<string, string> = { male: 'M', female: 'F', '남성': 'M', '여성': 'F' };
 
       const requestPayload: Record<string, unknown> = {
         patientId,
@@ -56,9 +76,9 @@ export default function CareRequestPage() {
         region: data.region || undefined,
         startDate: data.startDate || new Date().toISOString(),
         endDate: data.duration ? undefined : undefined,
-        durationDays: data.duration ? parseInt(data.duration) * (data.durationUnit === '개월' ? 30 : data.durationUnit === '주' ? 7 : 1) : undefined,
+        durationDays: data.duration ? parseInt(data.duration) * (data.durationUnit === 'months' || data.durationUnit === '개월' ? 30 : data.durationUnit === 'weeks' || data.durationUnit === '주' ? 7 : 1) : undefined,
         dailyRate: data.dailyRate ? parseInt(data.dailyRate) : 150000,
-        preferredGender: data.preferredGender || undefined,
+        preferredGender: data.preferredGender ? (preferredGenderMap[data.preferredGender.toLowerCase()] || undefined) : undefined,
         specialRequirements: data.specialNotes || undefined,
       };
 

@@ -78,13 +78,23 @@ export const registerPatient = async (req: AuthRequest, res: Response, next: Nex
       throw new AppError('필수 항목을 입력해주세요. (이름, 생년월일, 성별, 거동 상태)', 400);
     }
 
+    // Normalize enum values: gender (M/F), mobilityStatus (INDEPENDENT/PARTIAL/DEPENDENT)
+    const genderMap: Record<string, string> = { male: 'M', female: 'F', m: 'M', f: 'F', '남성': 'M', '여성': 'F' };
+    const resolvedGender = genderMap[gender?.toLowerCase()] || gender?.toUpperCase()?.charAt(0) || 'M';
+
+    const mobilityMap: Record<string, string> = {
+      independent: 'INDEPENDENT', partial: 'PARTIAL', assisted: 'PARTIAL',
+      wheelchair: 'DEPENDENT', bedridden: 'DEPENDENT', dependent: 'DEPENDENT',
+    };
+    const resolvedMobility = mobilityMap[mobilityStatus?.toLowerCase()] || mobilityStatus?.toUpperCase() || 'INDEPENDENT';
+
     const patient = await prisma.patient.create({
       data: {
         guardianId: guardian.id,
         name,
         birthDate: new Date(birthDate),
-        gender,
-        mobilityStatus,
+        gender: resolvedGender,
+        mobilityStatus: resolvedMobility as any,
         hasDementia: hasDementia ?? false,
         hasInfection: hasInfection ?? false,
         infectionDetail,
@@ -182,13 +192,22 @@ export const updatePatient = async (req: AuthRequest, res: Response, next: NextF
       diagnosis,
     } = req.body;
 
+    // Normalize enum values for updates
+    const genderMap: Record<string, string> = { male: 'M', female: 'F', m: 'M', f: 'F', '남성': 'M', '여성': 'F' };
+    const mobilityMap: Record<string, string> = {
+      independent: 'INDEPENDENT', partial: 'PARTIAL', assisted: 'PARTIAL',
+      wheelchair: 'DEPENDENT', bedridden: 'DEPENDENT', dependent: 'DEPENDENT',
+    };
+    const resolvedGender = gender !== undefined ? (genderMap[gender?.toLowerCase()] || gender?.toUpperCase()?.charAt(0) || gender) : undefined;
+    const resolvedMobility = mobilityStatus !== undefined ? (mobilityMap[mobilityStatus?.toLowerCase()] || mobilityStatus?.toUpperCase() || mobilityStatus) : undefined;
+
     const updated = await prisma.patient.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
         ...(birthDate !== undefined && { birthDate: new Date(birthDate) }),
-        ...(gender !== undefined && { gender }),
-        ...(mobilityStatus !== undefined && { mobilityStatus }),
+        ...(resolvedGender !== undefined && { gender: resolvedGender }),
+        ...(resolvedMobility !== undefined && { mobilityStatus: resolvedMobility as any }),
         ...(hasDementia !== undefined && { hasDementia }),
         ...(hasInfection !== undefined && { hasInfection }),
         ...(infectionDetail !== undefined && { infectionDetail }),

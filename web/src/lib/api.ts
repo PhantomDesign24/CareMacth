@@ -124,8 +124,14 @@ export const caregiverAPI = {
     api.get("/caregiver/profile", { params }),
   get: (id: string) =>
     api.get(`/caregiver/profile`),
-  updateStatus: (status: string) =>
-    api.put("/caregiver/work-status", { workStatus: status }),
+  updateStatus: (status: string) => {
+    // Map frontend status values to Prisma CaregiverWorkStatus enum
+    const statusMap: Record<string, string> = {
+      working: 'WORKING', available: 'AVAILABLE', immediately: 'IMMEDIATE',
+      WORKING: 'WORKING', AVAILABLE: 'AVAILABLE', IMMEDIATE: 'IMMEDIATE',
+    };
+    return api.put("/caregiver/work-status", { workStatus: statusMap[status] || status.toUpperCase() });
+  },
   apply: (requestId: string) =>
     api.post(`/care-requests/${requestId}/apply`),
   applyWithProposal: (requestId: string, data: { proposedRate?: number | null; isAccepted: boolean; message?: string }) =>

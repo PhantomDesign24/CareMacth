@@ -53,6 +53,25 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
       throw new AppError('필수 항목을 입력해주세요.', 400);
     }
 
+    // Normalize enum values
+    const careTypeMap: Record<string, string> = {
+      hospital: 'INDIVIDUAL', home: 'FAMILY', visit: 'INDIVIDUAL', daily: 'INDIVIDUAL',
+      individual: 'INDIVIDUAL', family: 'FAMILY',
+    };
+    const scheduleTypeMap: Record<string, string> = {
+      '24h': 'FULL_TIME', hourly: 'PART_TIME', parttime: 'PART_TIME',
+      full_time: 'FULL_TIME', part_time: 'PART_TIME',
+    };
+    const locationMap: Record<string, string> = {
+      hospital: 'HOSPITAL', home: 'HOME',
+    };
+    const genderMap: Record<string, string> = { male: 'M', female: 'F', m: 'M', f: 'F', '남성': 'M', '여성': 'F' };
+
+    const resolvedCareType = careTypeMap[careType?.toLowerCase()] || careType?.toUpperCase() || 'INDIVIDUAL';
+    const resolvedScheduleType = scheduleTypeMap[scheduleType?.toLowerCase()] || scheduleType?.toUpperCase() || 'FULL_TIME';
+    const resolvedLocation = locationMap[location?.toLowerCase()] || location?.toUpperCase() || 'HOSPITAL';
+    const resolvedPreferredGender = preferredGender ? (genderMap[preferredGender?.toLowerCase()] || preferredGender) : null;
+
     // 시작일은 오늘 이후여야 함
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -81,9 +100,9 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
       data: {
         guardianId: guardian.id,
         patientId,
-        careType,
-        scheduleType,
-        location,
+        careType: resolvedCareType as any,
+        scheduleType: resolvedScheduleType as any,
+        location: resolvedLocation as any,
         hospitalName,
         address,
         latitude: latitude ? parseFloat(latitude) : null,
@@ -92,7 +111,7 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         durationDays: durationDays ? parseInt(durationDays) : null,
-        preferredGender,
+        preferredGender: resolvedPreferredGender,
         preferredNationality,
         specialRequirements,
         medicalActAgreed: true,
@@ -338,12 +357,31 @@ export const updateCareRequest = async (req: AuthRequest, res: Response, next: N
       }
     }
 
+    // Normalize enum values for updates
+    const careTypeMap: Record<string, string> = {
+      hospital: 'INDIVIDUAL', home: 'FAMILY', visit: 'INDIVIDUAL', daily: 'INDIVIDUAL',
+      individual: 'INDIVIDUAL', family: 'FAMILY',
+    };
+    const scheduleTypeMap: Record<string, string> = {
+      '24h': 'FULL_TIME', hourly: 'PART_TIME', parttime: 'PART_TIME',
+      full_time: 'FULL_TIME', part_time: 'PART_TIME',
+    };
+    const locationMap: Record<string, string> = {
+      hospital: 'HOSPITAL', home: 'HOME',
+    };
+    const genderMap: Record<string, string> = { male: 'M', female: 'F', m: 'M', f: 'F', '남성': 'M', '여성': 'F' };
+
+    const resolvedCareType = careType !== undefined ? (careTypeMap[careType?.toLowerCase()] || careType?.toUpperCase()) : undefined;
+    const resolvedScheduleType = scheduleType !== undefined ? (scheduleTypeMap[scheduleType?.toLowerCase()] || scheduleType?.toUpperCase()) : undefined;
+    const resolvedLocation = location !== undefined ? (locationMap[location?.toLowerCase()] || location?.toUpperCase()) : undefined;
+    const resolvedPreferredGender = preferredGender !== undefined ? (preferredGender ? (genderMap[preferredGender?.toLowerCase()] || preferredGender) : preferredGender) : undefined;
+
     const updated = await prisma.careRequest.update({
       where: { id },
       data: {
-        ...(careType !== undefined && { careType }),
-        ...(scheduleType !== undefined && { scheduleType }),
-        ...(location !== undefined && { location }),
+        ...(resolvedCareType !== undefined && { careType: resolvedCareType as any }),
+        ...(resolvedScheduleType !== undefined && { scheduleType: resolvedScheduleType as any }),
+        ...(resolvedLocation !== undefined && { location: resolvedLocation as any }),
         ...(hospitalName !== undefined && { hospitalName }),
         ...(address !== undefined && { address }),
         ...(req.body.region !== undefined && { region: req.body.region }),
@@ -352,7 +390,7 @@ export const updateCareRequest = async (req: AuthRequest, res: Response, next: N
         ...(startDate !== undefined && { startDate: new Date(startDate) }),
         ...(endDate !== undefined && { endDate: new Date(endDate) }),
         ...(durationDays !== undefined && { durationDays: parseInt(durationDays) }),
-        ...(preferredGender !== undefined && { preferredGender }),
+        ...(resolvedPreferredGender !== undefined && { preferredGender: resolvedPreferredGender }),
         ...(preferredNationality !== undefined && { preferredNationality }),
         ...(specialRequirements !== undefined && { specialRequirements }),
         ...(dailyRate !== undefined && { dailyRate: parseInt(dailyRate) }),

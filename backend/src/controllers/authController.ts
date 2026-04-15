@@ -25,7 +25,11 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { email, password, name, phone, role, referredBy, careType } = req.body;
+    const { email, password, name, phone, role: rawRole, referredBy, careType } = req.body;
+
+    // Normalize role: frontend may send lowercase "guardian"/"caregiver"/"hospital"
+    const roleMap: Record<string, string> = { guardian: 'GUARDIAN', caregiver: 'CAREGIVER', hospital: 'HOSPITAL' };
+    const role = roleMap[rawRole?.toLowerCase()] || rawRole?.toUpperCase() || rawRole;
 
     const existingUser = await prisma.user.findFirst({
       where: { OR: [{ email }, { phone }] },
