@@ -33,11 +33,11 @@ export default function LoginPage() {
       if (role === "ADMIN") {
         window.location.href = "/admin/";
       } else if (role === "GUARDIAN") {
-        router.push("/dashboard/guardian");
+        window.location.href = "/dashboard/guardian";
       } else if (role === "CAREGIVER") {
-        router.push("/dashboard/caregiver");
+        window.location.href = "/dashboard/caregiver";
       } else {
-        router.push("/");
+        window.location.href = "/";
       }
     } catch {
       setError("서버 연결에 실패했습니다.");
