@@ -31,7 +31,7 @@ export default function LoginPage() {
       localStorage.setItem("user", JSON.stringify(data.data.user));
       const role = data.data.user.role;
       if (role === "ADMIN") {
-        window.location.href = "/admin/";
+        window.location.href = "/dashboard/guardian";
       } else if (role === "GUARDIAN") {
         window.location.href = "/dashboard/guardian";
       } else if (role === "CAREGIVER") {

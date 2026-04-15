@@ -179,9 +179,17 @@ export default function Header() {
                       <FiUser className="w-4 h-4" /> 마이페이지
                     </Link>
                     {user.role === "ADMIN" && (
-                      <Link href="/admin" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                        <FiMenu className="w-4 h-4" /> 관리자 패널
-                      </Link>
+                      <>
+                        <a href="/admin/" className="flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 font-medium">
+                          <FiMenu className="w-4 h-4" /> 관리자 패널
+                        </a>
+                        <Link href="/dashboard/guardian" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                          <FiUser className="w-4 h-4" /> 보호자 대시보드
+                        </Link>
+                        <Link href="/dashboard/caregiver" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                          <FiUser className="w-4 h-4" /> 간병인 대시보드
+                        </Link>
+                      </>
                     )}
                     <hr className="my-1 border-gray-100" />
                     <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 w-full text-left">
@@ -262,6 +270,19 @@ export default function Header() {
               <Link href={getDashboardLink()} className="block py-3 rounded-xl text-sm font-medium text-center border border-gray-200 hover:bg-gray-50">
                 마이페이지
               </Link>
+              {user.role === "ADMIN" && (
+                <>
+                  <a href="/admin/" className="block py-3 rounded-xl text-sm font-medium text-center text-red-600 border border-red-200 hover:bg-red-50">
+                    관리자 패널
+                  </a>
+                  <Link href="/dashboard/guardian" className="block py-3 rounded-xl text-sm font-medium text-center border border-gray-200 hover:bg-gray-50">
+                    보호자 대시보드
+                  </Link>
+                  <Link href="/dashboard/caregiver" className="block py-3 rounded-xl text-sm font-medium text-center border border-gray-200 hover:bg-gray-50">
+                    간병인 대시보드
+                  </Link>
+                </>
+              )}
               <button onClick={handleLogout} className="w-full py-3 rounded-xl text-sm font-medium text-red-600 text-center border border-red-200 hover:bg-red-50">
                 로그아웃
               </button>

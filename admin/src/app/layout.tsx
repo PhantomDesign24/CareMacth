@@ -178,7 +178,15 @@ export default function RootLayout({
 
   useEffect(() => {
     const token = getToken();
-    setAuthenticated(!!token);
+    if (token) {
+      // 웹 토큰이면 admin 토큰으로도 저장
+      if (!localStorage.getItem('token') && localStorage.getItem('cm_access_token')) {
+        setToken(token);
+      }
+      setAuthenticated(true);
+    } else {
+      setAuthenticated(false);
+    }
   }, []);
 
   const handleLogin = useCallback((token: string) => {

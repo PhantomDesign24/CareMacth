@@ -4,7 +4,8 @@ const TOKEN_KEY = "token"; // 홈페이지와 동일한 키 사용
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  // admin 토큰 먼저, 없으면 웹 토큰 사용 (관리자가 웹에서 로그인한 경우)
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem("cm_access_token");
 }
 
 export function setToken(token: string): void {
