@@ -127,7 +127,7 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
-    const status = req.query.status as string | undefined;
+    const status = req.query.status ? (req.query.status as string).toUpperCase() : undefined;
 
     // 보호자인 경우 본인 요청만, 간병인인 경우 OPEN 상태 요청 목록
     let whereClause: any = {};

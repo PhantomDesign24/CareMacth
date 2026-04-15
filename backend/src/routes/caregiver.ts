@@ -8,7 +8,7 @@ const router = Router();
 
 // 모든 간병인 라우트에 인증 필요
 router.use(authenticate);
-router.use(authorize('CAREGIVER'));
+router.use(authorize('CAREGIVER', 'ADMIN'));
 
 // GET /profile - 프로필 조회
 router.get('/profile', caregiverController.getProfile);
