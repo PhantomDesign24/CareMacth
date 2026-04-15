@@ -130,12 +130,9 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2.5">
               <li>
-                <Link
-                  href="/about"
-                  className="text-sm text-gray-400 hover:text-primary-400 transition-colors"
-                >
+                <span className="text-sm text-gray-400 cursor-default">
                   회사소개
-                </Link>
+                </span>
               </li>
               <li>
                 <Link

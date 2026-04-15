@@ -24,9 +24,9 @@ export default function CareRequestPage() {
       const patientPayload: Record<string, unknown> = {
         name: data.patientName,
         birthDate: data.patientAge ? `${new Date().getFullYear() - parseInt(data.patientAge)}-01-01` : undefined,
-        gender: data.patientGender === '남성' ? 'M' : data.patientGender === '여성' ? 'F' : data.patientGender || 'M',
+        gender: data.patientGender === '남성' ? 'M' : data.patientGender === '여성' ? 'F' : (data.patientGender || 'M').substring(0, 1).toUpperCase(),
         weight: data.patientWeight ? parseFloat(data.patientWeight) : undefined,
-        mobilityStatus: data.mobility || 'INDEPENDENT',
+        mobilityStatus: (data.mobility || 'INDEPENDENT').toUpperCase(),
         hasDementia: data.hasDementia || false,
         hasInfection: data.hasInfection || false,
         infectionDetail: data.infectionDetails || undefined,
