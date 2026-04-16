@@ -13,6 +13,7 @@ import {
   Switch,
   Linking,
   Modal,
+  AppState,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -198,7 +199,10 @@ export default function App() {
           message: '케어매치를 종료하시겠습니까?',
           buttons: [
             { text: '취소', style: 'cancel', onPress: hideModal },
-            { text: '종료', style: 'danger', onPress: () => BackHandler.exitApp() },
+            { text: '종료', style: 'danger', onPress: () => {
+              hideModal();
+              BackHandler.exitApp();
+            }},
           ],
         });
         return true;
@@ -206,6 +210,17 @@ export default function App() {
       return () => handler.remove();
     }
   }, [canGoBack]);
+
+  // 앱이 백그라운드 → 포그라운드 복귀 시 떠있던 모달 닫기
+  // (종료 모달이 exitApp 후에도 메모리에 남아 재진입 시 보이는 문제 방지)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        setModal((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // 탭 클릭 → 웹뷰 URL 변경 (마이페이지는 네이티브)
   const handleTabPress = useCallback((tab: Tab) => {
