@@ -75,9 +75,12 @@ export default function App() {
   const addLog = useCallback((tag: string, msg: string) => {
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    const line = `${time} [${tag}] ${msg}`;
+    // logcat에도 출력 (adb logcat -s ReactNativeJS:V로 확인 가능)
+    console.log(`[DBG ${tag}]`, msg);
     setDebugLogs((prev) => {
-      const next = [...prev, `${time} [${tag}] ${msg}`];
-      return next.length > 100 ? next.slice(-100) : next;
+      const next = [...prev, line];
+      return next.length > 200 ? next.slice(-200) : next;
     });
   }, []);
 
