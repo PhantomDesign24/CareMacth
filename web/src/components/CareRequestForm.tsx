@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { guardianAPI } from "@/lib/api";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -201,12 +202,91 @@ interface Props {
   onSubmit?: (data: CareRequestFormData) => void;
 }
 
+interface SavedPatient {
+  id: string;
+  name: string;
+  birthDate?: string;
+  gender?: string;
+  weight?: number | null;
+  height?: number | null;
+  consciousness?: string | null;
+  hasDementia?: boolean;
+  dementiaLevel?: string | null;
+  hasInfection?: boolean;
+  infectionDetail?: string | null;
+  mobilityStatus?: string | null;
+  medicalNotes?: string | null;
+  diagnosis?: string | null;
+}
+
 export default function CareRequestForm({ onSubmit }: Props) {
   const [form, setForm] = useState<CareRequestFormData>(initialFormData);
   const [step, setStep] = useState(1);
   const [diagSearch, setDiagSearch] = useState("");
+  const [savedPatients, setSavedPatients] = useState<SavedPatient[]>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string>("");
 
   const totalSteps = 4;
+
+  // 등록된 환자 목록 불러오기
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await guardianAPI.getPatients();
+        const list = res.data?.data || res.data || [];
+        if (Array.isArray(list)) setSavedPatients(list);
+      } catch {
+        // 로그인 안 된 상태 등은 조용히 무시
+      }
+    })();
+  }, []);
+
+  // 기존 환자 선택 시 폼 자동 채움
+  const applyPatient = (patientId: string) => {
+    setSelectedPatientId(patientId);
+    if (!patientId) return;
+    const p = savedPatients.find((x) => x.id === patientId);
+    if (!p) return;
+    // 나이 계산 (birthDate → 만 나이)
+    let age = "";
+    if (p.birthDate) {
+      const b = new Date(p.birthDate);
+      const now = new Date();
+      let a = now.getFullYear() - b.getFullYear();
+      const m = now.getMonth() - b.getMonth();
+      if (m < 0 || (m === 0 && now.getDate() < b.getDate())) a--;
+      age = String(a);
+    }
+    // gender: M/F → male/female
+    const genderMap: Record<string, string> = { M: "male", F: "female", male: "male", female: "female" };
+    // mobilityStatus: INDEPENDENT / PARTIAL / DEPENDENT → independent/partial/bedridden
+    const mobilityMap: Record<string, string> = {
+      INDEPENDENT: "independent",
+      PARTIAL: "partial",
+      DEPENDENT: "bedridden",
+    };
+    // 진단명 문자열 → 배열
+    const diagnosisList = p.diagnosis
+      ? p.diagnosis.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+
+    setForm((prev) => ({
+      ...prev,
+      patientName: p.name || "",
+      patientAge: age,
+      patientGender: genderMap[p.gender || ""] || "",
+      patientWeight: p.weight ? String(p.weight) : "",
+      patientHeight: p.height ? String(p.height) : "",
+      consciousness: p.consciousness || "",
+      hasDementia: !!p.hasDementia,
+      dementiaLevel: p.dementiaLevel || "",
+      hasInfection: !!p.hasInfection,
+      infectionDetails: p.infectionDetail || "",
+      mobility: mobilityMap[p.mobilityStatus || ""] || "",
+      specialNotes: p.medicalNotes || "",
+      diagnosis: diagnosisList,
+    }));
+  };
 
   const update = (
     field: keyof CareRequestFormData,
@@ -351,6 +431,48 @@ export default function CareRequestForm({ onSubmit }: Props) {
       {step === 1 && (
         <div className="space-y-6">
           <h3 className="text-xl font-bold text-gray-900">환자 정보</h3>
+
+          {/* 기존 환자 선택 */}
+          {savedPatients.length > 0 && (
+            <div className="rounded-xl border-2 border-primary-100 bg-primary-50/40 p-4">
+              <label className="block text-sm font-semibold text-primary-800 mb-2">
+                ⚡ 기존 등록 환자에서 불러오기
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <select
+                  className="input-field flex-1"
+                  value={selectedPatientId}
+                  onChange={(e) => applyPatient(e.target.value)}
+                >
+                  <option value="">-- 신규로 직접 입력 --</option>
+                  {savedPatients.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {p.birthDate
+                        ? ` (${new Date(p.birthDate).toLocaleDateString("ko-KR")})`
+                        : ""}
+                      {p.diagnosis ? ` · ${p.diagnosis.split(",")[0]}` : ""}
+                    </option>
+                  ))}
+                </select>
+                {selectedPatientId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPatientId("");
+                      setForm(initialFormData);
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    초기화
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                환자를 선택하면 기본 정보가 자동으로 입력됩니다. 아래 필드에서 수정 가능합니다.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>

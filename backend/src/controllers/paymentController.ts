@@ -23,7 +23,7 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       throw new AppError('보호자 정보를 찾을 수 없습니다.', 404);
     }
 
-    const { contractId, method, pointsUsed, useAllPoints, isRecurring, recurringWeek } = req.body;
+    const { contractId, method, pointsUsed, useAllPoints, isRecurring, recurringWeek, testMode } = req.body;
 
     if (!contractId || !method) {
       throw new AppError('계약 ID와 결제 방법은 필수입니다.', 400);
@@ -48,6 +48,11 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
     // 주 단위 결제인 경우
     if (isRecurring && recurringWeek) {
       paymentAmount = contract.dailyRate * 7;
+    }
+
+    // 테스트 모드: 토스 최소 결제액(카드 100원)으로 강제 (개발/테스트 용도)
+    if (testMode === true) {
+      paymentAmount = 100;
     }
 
     // 포인트 사용 (자동 전액 사용 또는 수동 입력)

@@ -144,7 +144,7 @@ export default function PaymentPage() {
     setPointsUsed(maxUsable);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, testMode = false) => {
     e.preventDefault();
 
     if (!contract) return;
@@ -154,7 +154,8 @@ export default function PaymentPage() {
       const res = await paymentAPI.create({
         contractId: contract.id,
         method,
-        pointsUsed: clampedPoints,
+        pointsUsed: testMode ? 0 : clampedPoints,
+        testMode,
       });
 
       const data = res.data?.data || res.data || {};
@@ -474,6 +475,21 @@ export default function PaymentPage() {
               ) : (
                 "결제하기"
               )}
+            </button>
+          </div>
+
+          {/* 테스트 결제 버튼 (개발/검수용) */}
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-xs text-yellow-800 mb-2">
+              ⚠ 개발/검수용: 실제 금액과 무관하게 <b>100원</b>으로 결제됩니다.
+            </p>
+            <button
+              type="button"
+              onClick={(e) => handleSubmit(e as any, true)}
+              disabled={submitting}
+              className="w-full py-2 text-sm font-medium text-yellow-800 bg-yellow-100 hover:bg-yellow-200 rounded-lg transition-colors disabled:opacity-50"
+            >
+              🧪 테스트 결제 (100원)
             </button>
           </div>
         </form>
