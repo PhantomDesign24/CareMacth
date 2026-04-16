@@ -18,7 +18,7 @@ interface Caregiver {
     name: string;
     profileImage: string | null;
   };
-  certificates: string[];
+  certificates: Array<{ id: string; name: string; issuer: string; verified: boolean; imageUrl?: string }>;
   experienceYears: number;
   avgRating: number;
   totalMatches: number;
@@ -30,6 +30,7 @@ interface Caregiver {
 
 interface Application {
   id: string;
+  status: string;
   message: string;
   createdAt: string;
   proposedRate: number | null;
@@ -92,6 +93,7 @@ export default function ApplicantsPage() {
         status: data.status || "",
         applications: (data.applications || []).map((app: any) => ({
           id: app.id,
+          status: app.status || "PENDING",
           message: app.message || "",
           createdAt: app.createdAt || "",
           proposedRate: app.proposedRate ?? null,
@@ -131,14 +133,20 @@ export default function ApplicantsPage() {
   const handleSelect = async (caregiverId: string) => {
     setSelecting(caregiverId);
     try {
-      await applicantAPI.selectCaregiver(careRequestId, caregiverId);
-      alert("간병인이 선택되었습니다. 결제 페이지로 이동합니다.");
-      router.push("/dashboard/guardian");
+      const res = await applicantAPI.selectCaregiver(careRequestId, caregiverId);
+      const contractId = (res.data?.data?.id) || (res.data?.id);
+      alert("매칭이 완료되었습니다. 결제 페이지로 이동합니다.");
+      if (contractId) {
+        router.push(`/dashboard/guardian/payment/${contractId}`);
+      } else {
+        router.push("/dashboard/guardian");
+      }
     } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } }; message?: string };
       const message =
-        err instanceof Error
-          ? err.message
-          : "간병인 선택 중 오류가 발생했습니다.";
+        axiosErr.response?.data?.message ||
+        axiosErr.message ||
+        "간병인 선택 중 오류가 발생했습니다.";
       alert(message);
     } finally {
       setSelecting(null);
@@ -494,12 +502,14 @@ export default function ApplicantsPage() {
                           <span className="text-sm text-gray-500">자격증</span>
                           <div className="flex flex-wrap gap-1.5 mt-1">
                             {cg.certificates.map(
-                              (cert: string, idx: number) => (
+                              (cert, idx: number) => (
                                 <span
-                                  key={idx}
-                                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary-700"
+                                  key={cert.id || idx}
+                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${cert.verified ? "bg-green-50 text-green-700" : "bg-primary-50 text-primary-700"}`}
+                                  title={`발급: ${cert.issuer}`}
                                 >
-                                  {cert}
+                                  {cert.verified && <span>✓</span>}
+                                  {cert.name}
                                 </span>
                               )
                             )}
@@ -529,6 +539,28 @@ export default function ApplicantsPage() {
 
                     {/* Message + Action section */}
                     <div className="md:w-1/3 flex flex-col justify-between">
+                      {/* 제안 금액 강조 표시 */}
+                      <div className="mb-3 rounded-xl p-4 border-2 border-primary-200 bg-primary-50">
+                        <div className="text-xs text-gray-500 mb-1">
+                          {app.isAccepted ? "보호자 제시 금액 수락" : app.proposedRate ? "간병인 제안 금액" : "금액 미제시"}
+                        </div>
+                        <div className="text-2xl font-extrabold text-primary-600">
+                          {app.proposedRate != null
+                            ? `${app.proposedRate.toLocaleString()}원`
+                            : app.isAccepted && careRequest?.dailyRate
+                              ? `${careRequest.dailyRate.toLocaleString()}원`
+                              : "협의"}
+                          <span className="ml-1 text-xs font-medium text-gray-400">/ 일</span>
+                        </div>
+                        {app.proposedRate != null && careRequest?.dailyRate && (
+                          <div className="mt-1 text-xs text-gray-500">
+                            원래 제시: {careRequest.dailyRate.toLocaleString()}원
+                            {app.proposedRate > careRequest.dailyRate && <span className="ml-1 text-orange-600">(+{(app.proposedRate - careRequest.dailyRate).toLocaleString()})</span>}
+                            {app.proposedRate < careRequest.dailyRate && <span className="ml-1 text-green-600">(-{(careRequest.dailyRate - app.proposedRate).toLocaleString()})</span>}
+                          </div>
+                        )}
+                      </div>
+
                       {app.message && (
                         <div className="bg-gray-50 rounded-xl p-4 mb-4">
                           <span className="text-xs text-gray-500 block mb-1">
@@ -539,49 +571,82 @@ export default function ApplicantsPage() {
                           </p>
                         </div>
                       )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setConfirmTarget({
-                            caregiverId: cg.id,
-                            caregiverName: cg.user.name,
-                            proposedRate: app.proposedRate,
-                            isAccepted: app.isAccepted,
-                          })
-                        }
-                        disabled={selecting !== null}
-                        className="btn-primary w-full text-sm"
-                      >
-                        {selecting === cg.id ? (
-                          <svg
-                            className="animate-spin h-5 w-5"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                              fill="none"
-                            />
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                            />
-                          </svg>
+
+                      {/* 상태별 액션 버튼 */}
+                      {careRequest?.status === "CANCELLED" ? (
+                        app.status === "ACCEPTED" ? (
+                          <div className="w-full py-2.5 text-sm font-semibold text-gray-500 bg-gray-100 rounded-xl text-center border border-gray-200">
+                            취소된 요청
+                          </div>
                         ) : (
-                          "선택하기"
-                        )}
-                      </button>
+                          <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-xl text-center">
+                            취소된 요청
+                          </div>
+                        )
+                      ) : careRequest?.status === "MATCHED" || careRequest?.status === "IN_PROGRESS" || careRequest?.status === "COMPLETED" ? (
+                        app.status === "ACCEPTED" ? (
+                          <div className="w-full py-2.5 text-sm font-semibold text-green-700 bg-green-50 rounded-xl text-center border border-green-200">
+                            ✓ 이 간병인과 매칭 완료
+                          </div>
+                        ) : (
+                          <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-xl text-center">
+                            매칭 종료됨
+                          </div>
+                        )
+                      ) : app.status === "REJECTED" || app.status === "CANCELLED" ? (
+                        <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-xl text-center">
+                          {app.status === "REJECTED" ? "거절됨" : "취소됨"}
+                        </div>
+                      ) : !['OPEN', 'MATCHING'].includes(careRequest?.status || '') ? (
+                        <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-xl text-center">
+                          선택 불가
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfirmTarget({
+                              caregiverId: cg.id,
+                              caregiverName: cg.user.name,
+                              proposedRate: app.proposedRate,
+                              isAccepted: app.isAccepted,
+                            })
+                          }
+                          disabled={selecting !== null}
+                          className="btn-primary w-full text-sm"
+                        >
+                          {selecting === cg.id ? (
+                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          ) : (
+                            "이 간병인 선택"
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
               );
             })}
           </div>
+        )}
+
+        {/* 취소된 요청 안내 */}
+        {careRequest?.status === "CANCELLED" && (
+          <div className="mt-6 rounded-2xl p-6 border-2 bg-gray-50 border-gray-200">
+            <div className="text-xs font-semibold mb-1 text-gray-500">ℹ 취소된 요청</div>
+            <div className="text-lg font-bold text-gray-900">이 간병 요청은 취소되었습니다</div>
+            <p className="text-sm text-gray-600 mt-1">
+              새로 매칭하시려면 <Link href="/care-request" className="text-primary-600 font-semibold hover:underline">새 간병 요청</Link>을 등록해주세요.
+            </p>
+          </div>
+        )}
+
+        {/* 이미 매칭 완료된 경우 결제 안내 */}
+        {careRequest && (careRequest.status === "MATCHED" || careRequest.status === "IN_PROGRESS") && (
+          <PaymentStatusBanner careRequestId={careRequestId} />
         )}
 
         {/* 금액 인상 모달 */}
@@ -710,6 +775,88 @@ export default function ApplicantsPage() {
               </div>
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 매칭 완료 후 결제 상태 안내 배너
+function PaymentStatusBanner({ careRequestId }: { careRequestId: string }) {
+  const [contractId, setContractId] = useState<string>("");
+  const [paymentStatus, setPaymentStatus] = useState<"NONE" | "ESCROW" | "COMPLETED">("NONE");
+  const [paidAmount, setPaidAmount] = useState<number>(0);
+  const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await applicantAPI.getApplicants(careRequestId);
+        const data = res.data?.data || res.data;
+        const contract = data?.contract;
+        if (contract) {
+          setContractId(contract.id);
+          setTotalAmount(contract.totalAmount || 0);
+          // 결제 내역 조회
+          const payRes = await fetch(`/api/payments/history?contractId=${contract.id}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem("cm_access_token")}` },
+          }).then((r) => r.json());
+          const payments = payRes?.data?.payments || [];
+          const completed = payments.find((p: any) => p.status === "COMPLETED");
+          const escrow = payments.find((p: any) => p.status === "ESCROW");
+          if (completed) {
+            setPaymentStatus("COMPLETED");
+            setPaidAmount(completed.totalAmount);
+          } else if (escrow) {
+            setPaymentStatus("ESCROW");
+            setPaidAmount(escrow.totalAmount);
+          }
+        }
+      } catch {}
+      finally { setLoading(false); }
+    })();
+  }, [careRequestId]);
+
+  if (loading || !contractId) return null;
+
+  const isPaid = paymentStatus === "COMPLETED";
+  const isEscrow = paymentStatus === "ESCROW";
+
+  const bgClass = isPaid
+    ? "bg-green-50 border-green-200"
+    : isEscrow
+    ? "bg-blue-50 border-blue-200"
+    : "bg-orange-50 border-orange-300";
+
+  const badgeColor = isPaid ? "text-green-600" : isEscrow ? "text-blue-600" : "text-orange-600";
+  const badgeText = isPaid ? "✓ 결제 완료" : isEscrow ? "🔒 에스크로 보관 중" : "⚠ 결제 대기 중";
+  const mainText = isPaid
+    ? `${paidAmount.toLocaleString()}원 결제됨`
+    : isEscrow
+    ? `${paidAmount.toLocaleString()}원 보관 중`
+    : `${totalAmount.toLocaleString()}원 결제가 필요합니다`;
+
+  return (
+    <div className={`mt-6 rounded-2xl p-6 border-2 ${bgClass}`}>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <div className={`text-xs font-semibold mb-1 ${badgeColor}`}>{badgeText}</div>
+          <div className="text-lg font-bold text-gray-900">{mainText}</div>
+          {!isPaid && !isEscrow && (
+            <p className="text-sm text-gray-600 mt-1">결제를 완료해야 간병 서비스가 정식 시작됩니다.</p>
+          )}
+          {isEscrow && (
+            <p className="text-sm text-gray-600 mt-1">간병 완료 후 간병인에게 정산됩니다.</p>
+          )}
+        </div>
+        {!isPaid && !isEscrow && (
+          <Link
+            href={`/dashboard/guardian/payment/${contractId}`}
+            className="inline-flex items-center gap-1 px-6 py-3 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 transition-colors whitespace-nowrap"
+          >
+            결제하기 →
+          </Link>
         )}
       </div>
     </div>

@@ -24,6 +24,9 @@ interface CareHistory {
   applicantCount: number;
   contractStatus: string;
   hasReview: boolean;
+  isVirtual: boolean; // 계약 없는 케어리퀘스트 (매칭 전)
+  requestStatus: string; // CareRequest.status (OPEN/MATCHING/MATCHED/CANCELLED/COMPLETED)
+  isPaid: boolean; // 결제 완료 여부
 }
 
 interface Payment {
@@ -156,6 +159,12 @@ function GuardianDashboard() {
   const [extendLoading, setExtendLoading] = useState(false);
   const [extendError, setExtendError] = useState("");
 
+  // History filter
+  const [historyFilter, setHistoryFilter] = useState<string>("all");
+
+  // Payment filter
+  const [paymentFilter, setPaymentFilter] = useState<string>("all");
+
   // Delete account modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
@@ -259,24 +268,50 @@ function GuardianDashboard() {
         })),
       });
 
-      setCareHistory(contracts.map((c: any) => ({
-        id: c.id,
-        patientName: c.careRequest?.patient?.name || '-',
-        caregiverName: c.caregiver?.user?.name || '-',
-        startDate: formatDate(c.startDate),
-        endDate: formatDate(c.endDate),
-        startDateRaw: c.startDate,
-        endDateRaw: c.endDate,
-        status: formatContractStatus(c.status),
-        careType: formatCareType(c.careRequest?.careType || ''),
-        location: formatLocation(c.careRequest?.location || ''),
-        amount: c.totalAmount || 0,
-        dailyRate: c.dailyRate || 0,
-        careRequestId: c.careRequest?.id || c.careRequestId || '',
-        applicantCount: c.careRequest?._count?.applications ?? c.careRequest?.applications?.length ?? 0,
-        contractStatus: c.status || '',
-        hasReview: !!c.review,
-      })));
+      setCareHistory(contracts.map((c: any) => {
+        const isVirtual = !!c.virtualContract;
+        const crStatus = c.careRequest?.status || c.status || '';
+        // 결제 상태 판정
+        // - COMPLETED: 최종 결제 완료
+        // - ESCROW: 에스크로 보관 중 (결제는 됨, 서비스 정산 전)
+        // - PENDING/FAILED/REFUNDED: 미결제
+        const payments = Array.isArray(c.payments) ? c.payments : [];
+        const isPaid = !isVirtual && payments.some((p: any) => p.status === 'COMPLETED');
+        const isEscrow = !isVirtual && !isPaid && payments.some((p: any) => p.status === 'ESCROW');
+
+        // 상태 라벨
+        let statusLabel: string;
+        if (isVirtual) {
+          statusLabel = formatCareStatus(crStatus);
+        } else if ((c.status === 'ACTIVE' || c.status === 'EXTENDED') && !isPaid && !isEscrow) {
+          statusLabel = '결제 대기';
+        } else if ((c.status === 'ACTIVE' || c.status === 'EXTENDED') && isEscrow) {
+          statusLabel = '에스크로 보관중';
+        } else {
+          statusLabel = formatContractStatus(c.status);
+        }
+        return {
+          id: c.id,
+          patientName: c.careRequest?.patient?.name || '-',
+          caregiverName: isVirtual ? '-' : (c.caregiver?.user?.name || '대기 중'),
+          startDate: formatDate(c.startDate),
+          endDate: formatDate(c.endDate),
+          startDateRaw: c.startDate,
+          endDateRaw: c.endDate,
+          status: statusLabel,
+          careType: formatCareType(c.careRequest?.careType || ''),
+          location: formatLocation(c.careRequest?.location || ''),
+          amount: c.totalAmount || 0,
+          dailyRate: c.dailyRate || 0,
+          careRequestId: c.careRequest?.id || c.careRequestId || '',
+          applicantCount: c.careRequest?._count?.applications ?? c.careRequest?.applications?.length ?? 0,
+          contractStatus: c.status || '',
+          hasReview: !!c.review,
+          isVirtual,
+          requestStatus: crStatus,
+          isPaid,
+        };
+      }));
 
       setPayments(paymentList.map((p: any) => ({
         id: p.id,
@@ -490,6 +525,8 @@ function GuardianDashboard() {
   const statusBadge = (status: string) => {
     const s = (status || "").toLowerCase();
     switch (s) {
+      case "결제 대기":
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">결제 대기</span>;
       case "active":
       case "진행 중":
         return <span className="badge-success">진행 중</span>;
@@ -578,33 +615,37 @@ function GuardianDashboard() {
         </div>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">진행 중 간병</div>
-            <div className="text-2xl font-bold text-primary-600">{activeCareCount}건</div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-6 sm:mb-8">
+          <div className="card p-3 sm:p-5">
+            <div className="text-xs sm:text-sm text-gray-500 mb-1">진행 중</div>
+            <div className="text-lg sm:text-2xl font-bold text-primary-600 whitespace-nowrap">{activeCareCount}건</div>
           </div>
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">완료 간병</div>
-            <div className="text-2xl font-bold text-gray-900">{completedCareCount}건</div>
+          <div className="card p-3 sm:p-5">
+            <div className="text-xs sm:text-sm text-gray-500 mb-1">완료</div>
+            <div className="text-lg sm:text-2xl font-bold text-gray-900 whitespace-nowrap">{completedCareCount}건</div>
           </div>
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">이번 달 비용</div>
-            <div className="text-2xl font-bold text-gray-900">
-              {monthlyExpense >= 10000
-                ? `${(monthlyExpense / 10000).toFixed(0)}만원`
+          <div className="card p-3 sm:p-5">
+            <div className="text-xs sm:text-sm text-gray-500 mb-1">이번 달 비용</div>
+            <div className="text-lg sm:text-2xl font-bold text-gray-900 whitespace-nowrap">
+              {monthlyExpense >= 100000000
+                ? `${(monthlyExpense / 100000000).toFixed(1)}억`
+                : monthlyExpense >= 10000
+                ? `${Math.round(monthlyExpense / 10000).toLocaleString()}만원`
                 : `${monthlyExpense.toLocaleString()}원`}
             </div>
           </div>
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">추천 적립금</div>
-            <div className="text-2xl font-bold text-accent-500">
-              {referralCredits.toLocaleString()}원
+          <div className="card p-3 sm:p-5">
+            <div className="text-xs sm:text-sm text-gray-500 mb-1">추천 적립금</div>
+            <div className="text-lg sm:text-2xl font-bold text-accent-500 whitespace-nowrap">
+              {referralCredits >= 10000
+                ? `${Math.round(referralCredits / 10000).toLocaleString()}만원`
+                : `${referralCredits.toLocaleString()}원`}
             </div>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-100 mb-6 overflow-x-auto">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-1 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-100 mb-6">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -625,14 +666,55 @@ function GuardianDashboard() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
           {/* Care history */}
           {activeTab === "history" && (
-            <div className="divide-y divide-gray-100">
-              {careHistory.map((care) => (
+            <div>
+              {/* 상단 툴바: 필터 + 새 요청 버튼 */}
+              <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: "all", label: `전체 (${careHistory.length})` },
+                    { value: "OPEN", label: `매칭대기 (${careHistory.filter(c => c.requestStatus === 'OPEN').length})` },
+                    { value: "MATCHING", label: `매칭중 (${careHistory.filter(c => c.requestStatus === 'MATCHING').length})` },
+                    { value: "ACTIVE", label: `진행중 (${careHistory.filter(c => c.contractStatus === 'ACTIVE' || c.contractStatus === 'EXTENDED').length})` },
+                    { value: "COMPLETED", label: `완료 (${careHistory.filter(c => c.contractStatus === 'COMPLETED').length})` },
+                    { value: "CANCELLED", label: `취소 (${careHistory.filter(c => c.requestStatus === 'CANCELLED' || c.contractStatus === 'CANCELLED').length})` },
+                  ].map((f) => (
+                    <button
+                      key={f.value}
+                      type="button"
+                      onClick={() => setHistoryFilter(f.value)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        historyFilter === f.value
+                          ? "bg-primary-500 text-white"
+                          : "bg-white border border-gray-200 text-gray-600 hover:border-primary-300"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <Link
+                  href="/care-request"
+                  className="inline-flex items-center gap-1 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-semibold hover:bg-primary-600"
+                >
+                  + 새 간병 요청
+                </Link>
+              </div>
+              <div className="divide-y divide-gray-100">
+              {careHistory.filter((care) => {
+                if (historyFilter === "all") return true;
+                if (historyFilter === "OPEN") return care.requestStatus === 'OPEN';
+                if (historyFilter === "MATCHING") return care.requestStatus === 'MATCHING';
+                if (historyFilter === "ACTIVE") return care.contractStatus === 'ACTIVE' || care.contractStatus === 'EXTENDED';
+                if (historyFilter === "COMPLETED") return care.contractStatus === 'COMPLETED';
+                if (historyFilter === "CANCELLED") return care.requestStatus === 'CANCELLED' || care.contractStatus === 'CANCELLED';
+                return true;
+              }).map((care) => (
                 <div key={care.id} className="p-6">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                     <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-xs text-gray-400">{care.id}</span>
+                      <div className="flex items-center gap-2">
                         {statusBadge(care.status)}
+                        <span className="text-xs text-gray-400">요청일: {care.startDate}</span>
                       </div>
                       <h3 className="font-semibold text-gray-900">
                         {care.patientName} - {care.careType}
@@ -652,6 +734,15 @@ function GuardianDashboard() {
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
+                        {/* 결제 대기 중이면 결제 버튼 최우선 표시 */}
+                        {!care.isVirtual && (care.contractStatus === 'ACTIVE' || care.contractStatus === 'EXTENDED') && !care.isPaid && (
+                          <Link
+                            href={`/dashboard/guardian/payment/${care.id}`}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors"
+                          >
+                            💳 결제하기
+                          </Link>
+                        )}
                         {care.careRequestId && care.applicantCount > 0 && (
                           <Link
                             href={`/dashboard/guardian/applicants/${care.careRequestId}`}
@@ -703,49 +794,110 @@ function GuardianDashboard() {
                   간병 이력이 없습니다.
                 </div>
               )}
+              </div>
             </div>
           )}
 
           {/* Payment history */}
-          {activeTab === "payments" && (
-            <div className="divide-y divide-gray-100">
-              <div className="p-6">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        <th className="text-left py-3 px-2 font-semibold text-gray-600">결제일</th>
-                        <th className="text-left py-3 px-2 font-semibold text-gray-600">내용</th>
-                        <th className="text-left py-3 px-2 font-semibold text-gray-600">결제수단</th>
-                        <th className="text-right py-3 px-2 font-semibold text-gray-600">금액</th>
-                        <th className="text-center py-3 px-2 font-semibold text-gray-600">상태</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {payments.map((pay) => (
-                        <tr key={pay.id} className="border-b border-gray-50 last:border-0">
-                          <td className="py-3 px-2 text-gray-700">{pay.date}</td>
-                          <td className="py-3 px-2 text-gray-700">{pay.description}</td>
-                          <td className="py-3 px-2 text-gray-500">{pay.method}</td>
-                          <td className="py-3 px-2 text-right font-semibold text-gray-900">
-                            {pay.amount.toLocaleString()}원
-                          </td>
-                          <td className="py-3 px-2 text-center">
-                            {statusBadge(pay.status)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {payments.length === 0 && (
-                    <div className="p-12 text-center text-gray-400">
-                      결제 내역이 없습니다.
-                    </div>
-                  )}
+          {activeTab === "payments" && (() => {
+            const paymentFilters = [
+              { value: "all", label: "전체", count: payments.length },
+              { value: "pending", label: "대기", count: payments.filter(p => /대기|PENDING|결제 대기/i.test(p.status)).length },
+              { value: "completed", label: "완료", count: payments.filter(p => /완료|COMPLETED|결제 완료/i.test(p.status)).length },
+              { value: "escrow", label: "보관중", count: payments.filter(p => /ESCROW|에스크로/i.test(p.status)).length },
+              { value: "refunded", label: "환불", count: payments.filter(p => /환불|REFUNDED/i.test(p.status)).length },
+              { value: "failed", label: "실패", count: payments.filter(p => /실패|FAILED/i.test(p.status)).length },
+            ];
+            const filteredPayments = payments.filter((p) => {
+              if (paymentFilter === "all") return true;
+              if (paymentFilter === "pending") return /대기|PENDING|결제 대기/i.test(p.status);
+              if (paymentFilter === "completed") return /완료|COMPLETED|결제 완료/i.test(p.status);
+              if (paymentFilter === "escrow") return /ESCROW|에스크로/i.test(p.status);
+              if (paymentFilter === "refunded") return /환불|REFUNDED/i.test(p.status);
+              if (paymentFilter === "failed") return /실패|FAILED/i.test(p.status);
+              return true;
+            });
+            return (
+              <div>
+                {/* 필터 */}
+                <div className="px-4 sm:px-6 py-3 bg-gray-50 border-b border-gray-100 flex flex-wrap gap-1.5">
+                  {paymentFilters.map((f) => (
+                    <button
+                      key={f.value}
+                      type="button"
+                      onClick={() => setPaymentFilter(f.value)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        paymentFilter === f.value
+                          ? "bg-primary-500 text-white"
+                          : "bg-white border border-gray-200 text-gray-600 hover:border-primary-300"
+                      }`}
+                    >
+                      {f.label} ({f.count})
+                    </button>
+                  ))}
                 </div>
+
+                {filteredPayments.length === 0 ? (
+                  <div className="p-12 text-center text-gray-400">
+                    {paymentFilter === "all" ? "결제 내역이 없습니다." : "해당 조건의 결제 내역이 없습니다."}
+                  </div>
+                ) : (
+                  <>
+                    {/* 데스크톱: 테이블 */}
+                    <div className="hidden md:block p-6">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100">
+                            <th className="text-left py-3 px-2 font-semibold text-gray-600">결제일</th>
+                            <th className="text-left py-3 px-2 font-semibold text-gray-600">내용</th>
+                            <th className="text-left py-3 px-2 font-semibold text-gray-600">결제수단</th>
+                            <th className="text-right py-3 px-2 font-semibold text-gray-600">금액</th>
+                            <th className="text-center py-3 px-2 font-semibold text-gray-600">상태</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredPayments.map((pay) => (
+                            <tr key={pay.id} className="border-b border-gray-50 last:border-0">
+                              <td className="py-3 px-2 text-gray-700">{pay.date}</td>
+                              <td className="py-3 px-2 text-gray-700">{pay.description}</td>
+                              <td className="py-3 px-2 text-gray-500">{pay.method}</td>
+                              <td className="py-3 px-2 text-right font-semibold text-gray-900">
+                                {pay.amount.toLocaleString()}원
+                              </td>
+                              <td className="py-3 px-2 text-center">
+                                {statusBadge(pay.status)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 모바일: 컴팩트 카드 */}
+                    <div className="md:hidden divide-y divide-gray-100">
+                      {filteredPayments.map((pay) => (
+                        <div key={pay.id} className="px-4 py-3">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-xs text-gray-400 shrink-0">{pay.date}</span>
+                              {statusBadge(pay.status)}
+                            </div>
+                            <div className="font-bold text-gray-900 text-sm whitespace-nowrap">
+                              {pay.amount.toLocaleString()}원
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <span className="truncate">{pay.description}</span>
+                            <span className="shrink-0 ml-2">{pay.method}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Patient info */}
           {activeTab === "patients" && (

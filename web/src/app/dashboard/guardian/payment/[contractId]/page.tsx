@@ -3,7 +3,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { loadTossPayments } from "@tosspayments/payment-sdk";
 import { contractAPI, guardianAPI, paymentAPI } from "@/lib/api";
+
+const TOSS_CLIENT_KEY = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq";
 import {
   formatDate,
   formatMoney,
@@ -157,7 +160,28 @@ export default function PaymentPage() {
       const data = res.data?.data || res.data || {};
 
       if (method === "CARD") {
-        alert("카드 결제 페이지로 이동합니다");
+        // 토스페이먼츠 결제창 호출
+        try {
+          const tossPayments = await loadTossPayments(TOSS_CLIENT_KEY);
+          const userName = (typeof window !== "undefined" ? JSON.parse(localStorage.getItem("cm_user") || "{}")?.name : "") || "고객";
+          await tossPayments.requestPayment("카드", {
+            amount: data.totalAmount || data.amount || 0,
+            orderId: data.orderId,
+            orderName: `${contract.patientName} 환자 간병 서비스`,
+            customerName: userName,
+            successUrl: `${window.location.origin}/payment/success`,
+            failUrl: `${window.location.origin}/payment/fail`,
+          });
+          return; // 결제창에서 리디렉트됨
+        } catch (tossErr: any) {
+          if (tossErr?.code === "USER_CANCEL") {
+            alert("결제가 취소되었습니다.");
+          } else {
+            alert(tossErr?.message || "결제창을 열 수 없습니다.");
+          }
+          setSubmitting(false);
+          return;
+        }
       } else if (method === "BANK_TRANSFER") {
         const accountInfo = data.virtualAccount
           ? `입금 계좌: ${data.virtualAccount.bankName} ${data.virtualAccount.accountNumber}\n입금액: ${formatMoney(data.amount)}\n입금 기한: ${data.virtualAccount.dueDate || "24시간 이내"}`
@@ -448,7 +472,7 @@ export default function PaymentPage() {
                   />
                 </svg>
               ) : (
-                `${formatMoney(finalAmount)} 결제하기`
+                "결제하기"
               )}
             </button>
           </div>

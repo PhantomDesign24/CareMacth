@@ -249,34 +249,76 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
+    const statusFilter = req.query.status as string | undefined;
 
-    const [contracts, total] = await Promise.all([
-      prisma.contract.findMany({
-        where: { guardianId: guardian.id },
+    // CareRequest 기반 조회 (매칭 전/진행중/완료/취소 모두 포함)
+    const whereClause: any = { guardianId: guardian.id };
+    if (statusFilter) {
+      whereClause.status = statusFilter.toUpperCase();
+    }
+
+    const [careRequests, total] = await Promise.all([
+      prisma.careRequest.findMany({
+        where: whereClause,
         include: {
-          careRequest: {
+          patient: { select: { name: true, diagnosis: true } },
+          applications: {
+            where: { status: { in: ['PENDING', 'ACCEPTED'] } },
+            select: { id: true, status: true },
+          },
+          contract: {
             include: {
-              patient: {
-                select: { name: true, diagnosis: true },
+              caregiver: {
+                include: { user: { select: { name: true, phone: true } } },
+              },
+              payments: {
+                select: { id: true, status: true, totalAmount: true },
               },
             },
           },
-          caregiver: {
-            include: {
-              user: {
-                select: { name: true, phone: true },
-              },
-            },
-          },
+          _count: { select: { applications: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
-      prisma.contract.count({
-        where: { guardianId: guardian.id },
-      }),
+      prisma.careRequest.count({ where: whereClause }),
     ]);
+
+    // 기존 contract 기반 응답 형식에 맞춰 매핑 (프론트 호환)
+    const contracts = careRequests.map((cr: any) => {
+      if (cr.contract) {
+        // 계약 있는 경우 — 기존 contract 형식 + careRequest 정보
+        return {
+          ...cr.contract,
+          careRequest: {
+            ...cr,
+            contract: undefined,
+            applications: undefined,
+            _count: cr._count,
+          },
+        };
+      }
+      // 계약 없는 경우 (매칭 전) — 가상 contract 형식
+      return {
+        id: cr.id, // careRequest id를 contract id 자리에 (프론트가 careHistory의 id로 contract 조회할 수 있음)
+        virtualContract: true, // 플래그: 실제 contract 없음
+        careRequestId: cr.id,
+        startDate: cr.startDate,
+        endDate: cr.endDate,
+        dailyRate: cr.dailyRate || 0,
+        totalAmount: (cr.dailyRate || 0) * (cr.durationDays || 1),
+        status: cr.status, // CareRequest 상태 그대로 (OPEN/MATCHING/MATCHED/CANCELLED)
+        review: null,
+        careRequest: {
+          ...cr,
+          contract: undefined,
+          applications: undefined,
+          _count: cr._count,
+        },
+        caregiver: null,
+      };
+    });
 
     res.json({
       success: true,

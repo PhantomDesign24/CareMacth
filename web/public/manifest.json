@@ -1,0 +1,21 @@
+{
+  "name": "케어매치 - AI 간병 매칭 플랫폼",
+  "short_name": "케어매치",
+  "description": "검증된 간병인과 보호자를 AI가 실시간 매칭",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FF922E",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    }
+  ]
+}
