@@ -23,6 +23,7 @@ import * as Notifications from 'expo-notifications';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Device from 'expo-device';
 import * as SecureStore from 'expo-secure-store';
+import RNExitApp from 'react-native-exit-app';
 import { APP_CONFIG } from './src/config';
 
 const DOMAIN = APP_CONFIG.domain;
@@ -201,7 +202,12 @@ export default function App() {
             { text: '취소', style: 'cancel', onPress: hideModal },
             { text: '종료', style: 'danger', onPress: () => {
               hideModal();
-              BackHandler.exitApp();
+              // JS 런타임까지 완전 종료 (프로세스 kill)
+              try {
+                RNExitApp.exitApp();
+              } catch {
+                BackHandler.exitApp();
+              }
             }},
           ],
         });
@@ -719,14 +725,23 @@ export default function App() {
           geolocationEnabled
           thirdPartyCookiesEnabled
           javaScriptCanOpenWindowsAutomatically
-          setSupportMultipleWindows={false}
+          setSupportMultipleWindows={true}
           mixedContentMode="always"
           originWhitelist={['*']}
           onOpenWindow={(event) => {
-            // window.open 등 팝업 요청은 현재 WebView에서 처리
-            const { targetUrl } = event.nativeEvent;
-            if (targetUrl && webViewRef.current) {
-              webViewRef.current.injectJavaScript(`window.location.href='${targetUrl}'; true;`);
+            // 카카오페이/네이버페이 등은 window.open으로 팝업을 열려고 함
+            // 팝업 URL을 현재 WebView에서 이동시켜 처리 (결제 완료 후 원 페이지로 복귀)
+            const { targetUrl } = event.nativeEvent || {};
+            if (!targetUrl) return;
+            // 앱 스킴이면 외부 앱으로 위임
+            if (!targetUrl.startsWith('http')) {
+              Linking.openURL(targetUrl).catch(() => {});
+              return;
+            }
+            if (webViewRef.current) {
+              webViewRef.current.injectJavaScript(
+                `window.location.href='${targetUrl.replace(/'/g, "\\'")}'; true;`
+              );
             }
           }}
           userAgent={
