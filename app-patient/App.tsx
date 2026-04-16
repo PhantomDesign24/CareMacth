@@ -65,6 +65,7 @@ export default function App() {
   const [biometricReady, setBiometricReady] = useState(false);
   const [showBiometricLogin, setShowBiometricLogin] = useState(false);
   const [pendingTokenInjection, setPendingTokenInjection] = useState<string | null>(null);
+  const [paymentActive, setPaymentActive] = useState(false);
 
   // 커스텀 모달 상태
   const [modal, setModal] = useState<{
@@ -228,6 +229,19 @@ export default function App() {
   const onNavigationChange = (navState: any) => {
     setCanGoBack(navState.canGoBack);
     const url = navState.url || '';
+    // 토스·카카오페이 등 결제 도메인일 때는 탭바 숨김 (이탈 방지)
+    const paymentHosts = [
+      'pay.toss.im', 'checkout.tosspayments.com', 'm.tosspayments.com',
+      'event.tosspayments.com', 'pg.tosspayments.com', 'kpg.tosspayments.com',
+      'tosspayments.com', 'toss.im',
+      'qr.kakaopay.com', 'app.kakaopay.com', 'mobile-pay.kakaopay.com', 'kakaopay.com',
+      'mobile.pay.naver.com', 'pay.naver.com',
+      'nicepay.co.kr', 'payapp.kr', 'kcp.co.kr',
+    ];
+    const isPayment = paymentHosts.some((h) => url.includes(h));
+    setPaymentActive(isPayment);
+
+    if (isPayment) return; // 결제 중에는 탭 상태 업데이트 안 함
     if (url.includes('/care-request')) setActiveTab('request');
     else if (url.includes('/dashboard')) setActiveTab('status');
     else if (url.endsWith('/') || url.endsWith('.kr')) setActiveTab('home');
@@ -708,7 +722,46 @@ export default function App() {
         />
       )}
 
-      {/* 네이티브 하단 탭바 */}
+      {/* 결제 진행 중 안내 배너 */}
+      {paymentActive && (
+        <View style={styles.paymentBanner}>
+          <Ionicons name="lock-closed" size={14} color="#FF922E" />
+          <Text style={styles.paymentBannerText}>결제 진행 중</Text>
+          <TouchableOpacity
+            onPress={() => {
+              showModal({
+                icon: 'alert-circle-outline',
+                iconColor: '#E74C3C',
+                title: '결제를 취소하시겠어요?',
+                message: '결제를 중단하고 대시보드로 이동합니다.',
+                buttons: [
+                  { text: '계속 결제', style: 'cancel', onPress: hideModal },
+                  {
+                    text: '결제 취소',
+                    style: 'danger',
+                    onPress: () => {
+                      hideModal();
+                      setPaymentActive(false);
+                      if (webViewRef.current) {
+                        webViewRef.current.injectJavaScript(`
+                          window.location.href = '/dashboard/guardian?tab=history';
+                          true;
+                        `);
+                      }
+                    },
+                  },
+                ],
+              });
+            }}
+            style={styles.paymentBannerCancel}
+          >
+            <Text style={styles.paymentBannerCancelText}>취소</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* 네이티브 하단 탭바 (결제 중 숨김) */}
+      {!paymentActive && (
       <View style={styles.tabBar}>
         {TABS.map((tab) => {
           const focused = activeTab === tab.key;
@@ -731,6 +784,7 @@ export default function App() {
           );
         })}
       </View>
+      )}
 
       {/* 커스텀 모달 */}
       <Modal visible={modal.visible} transparent animationType="fade" onRequestClose={hideModal}>
@@ -796,6 +850,38 @@ const styles = StyleSheet.create({
   },
   loadingTitle: { fontSize: 24, fontWeight: 'bold', color: '#FF922E' },
   loadingDesc: { fontSize: 14, color: '#999', marginTop: 4 },
+
+  // 결제 진행 중 배너
+  paymentBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF7ED',
+    borderTopWidth: 1,
+    borderTopColor: '#FED7AA',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+    gap: 6,
+  },
+  paymentBannerText: {
+    fontSize: 13,
+    color: '#C2410C',
+    fontWeight: '600',
+    flex: 1,
+    marginLeft: 4,
+  },
+  paymentBannerCancel: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+  },
+  paymentBannerCancelText: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '600',
+  },
 
   // 탭바
   tabBar: {
