@@ -42,6 +42,27 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       throw new AppError('유효한 계약을 찾을 수 없습니다.', 404);
     }
 
+    // 중복 결제 시도 방지: 10초 이내 PENDING 결제가 있으면 기존 것 반환
+    const recentPending = await prisma.payment.findFirst({
+      where: {
+        contractId,
+        status: 'PENDING',
+        createdAt: { gte: new Date(Date.now() - 10 * 1000) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (recentPending) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          payment: recentPending,
+          orderId: recentPending.tossOrderId,
+          amount: recentPending.totalAmount,
+        },
+        duplicate: true,
+      });
+    }
+
     // 금액 계산
     let paymentAmount = contract.totalAmount;
 

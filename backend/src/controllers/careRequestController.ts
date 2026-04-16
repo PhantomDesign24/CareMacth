@@ -53,6 +53,32 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
       throw new AppError('필수 항목을 입력해주세요.', 400);
     }
 
+    // 중복 방지: 같은 환자로 OPEN 상태인 간병 요청이 이미 있으면 차단
+    const existingOpenRequest = await prisma.careRequest.findFirst({
+      where: {
+        guardianId: guardian.id,
+        patientId,
+        status: { in: ['OPEN', 'MATCHED'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existingOpenRequest) {
+      // 최근 10초 이내면 중복 클릭으로 간주 → 기존 요청 반환
+      const diff = Date.now() - new Date(existingOpenRequest.createdAt).getTime();
+      if (diff < 10 * 1000) {
+        return res.status(200).json({
+          success: true,
+          data: existingOpenRequest,
+          duplicate: true,
+        });
+      }
+      // 그 외(같은 환자로 이미 진행 중인 요청이 있는 경우) → 거부
+      throw new AppError(
+        '해당 환자의 간병 요청이 이미 진행 중입니다. 기존 요청을 확인해주세요.',
+        409,
+      );
+    }
+
     // Normalize enum values
     const careTypeMap: Record<string, string> = {
       hospital: 'INDIVIDUAL', home: 'FAMILY', visit: 'INDIVIDUAL', daily: 'INDIVIDUAL',

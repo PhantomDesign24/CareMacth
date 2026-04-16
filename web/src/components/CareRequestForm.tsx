@@ -200,6 +200,7 @@ const CARE_TYPES = [
 /* ------------------------------------------------------------------ */
 interface Props {
   onSubmit?: (data: CareRequestFormData) => void;
+  submitting?: boolean;
 }
 
 interface SavedPatient {
@@ -219,7 +220,7 @@ interface SavedPatient {
   diagnosis?: string | null;
 }
 
-export default function CareRequestForm({ onSubmit }: Props) {
+export default function CareRequestForm({ onSubmit, submitting = false }: Props) {
   const [form, setForm] = useState<CareRequestFormData>(initialFormData);
   const [step, setStep] = useState(1);
   const [diagSearch, setDiagSearch] = useState("");
@@ -335,6 +336,8 @@ export default function CareRequestForm({ onSubmit }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // 중복 제출 방지: 이미 제출 중이면 무시
+    if (submitting) return;
     const err = validateAll();
     if (err) {
       alert(err);

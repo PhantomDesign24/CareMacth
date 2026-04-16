@@ -170,7 +170,7 @@ export default function CareRequestPage() {
               간병 요청을 접수하고 있습니다...
             </div>
           )}
-          <CareRequestForm onSubmit={handleSubmit} />
+          <CareRequestForm onSubmit={handleSubmit} submitting={submitting} />
         </div>
 
         {/* Info notice */}

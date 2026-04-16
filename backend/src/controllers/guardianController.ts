@@ -90,6 +90,23 @@ export const registerPatient = async (req: AuthRequest, res: Response, next: Nex
     };
     const resolvedMobility = mobilityMap[mobilityStatus?.toLowerCase()] || mobilityStatus?.toUpperCase() || 'INDEPENDENT';
 
+    // 중복 방지: 같은 보호자 아래 동일한 이름+생년월일 환자가 이미 있으면 기존 환자 반환
+    // (같은 환자를 실수로 두 번 등록하는 것을 막기 위함)
+    const existingPatient = await prisma.patient.findFirst({
+      where: {
+        guardianId: guardian.id,
+        name,
+        birthDate: new Date(birthDate),
+      },
+    });
+    if (existingPatient) {
+      return res.status(200).json({
+        success: true,
+        data: existingPatient,
+        duplicate: true,
+      });
+    }
+
     const patient = await prisma.patient.create({
       data: {
         guardianId: guardian.id,
