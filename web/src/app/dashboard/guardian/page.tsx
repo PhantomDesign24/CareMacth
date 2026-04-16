@@ -227,7 +227,17 @@ function GuardianDashboard() {
       // 결제 내역
       const payData = payRes.data?.data || payRes.data || {};
       const paymentList = payData.payments || [];
-      const monthlyTotal = paymentList.reduce((s: number, p: any) => s + (p.totalAmount || 0), 0);
+      // 이번 달 비용: 이번 달에 결제 완료(COMPLETED)된 금액만 합산 (PENDING 제외)
+      const now = new Date();
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      const monthlyTotal = paymentList
+        .filter((p: any) => {
+          if (p.status !== 'COMPLETED' && p.status !== 'ESCROW') return false;
+          const paidAt = p.paidAt || p.createdAt;
+          if (!paidAt) return false;
+          return new Date(paidAt).getTime() >= thisMonthStart;
+        })
+        .reduce((s: number, p: any) => s + (p.totalAmount || 0), 0);
 
       setSummary({
         userName: user.name || '',

@@ -192,6 +192,25 @@ export function setupCronJobs() {
     }
   });
 
+  // 매 10분: 15분 이상 PENDING 상태인 결제 자동 실패 처리 (토스 세션 만료 후처리)
+  cron.schedule('*/10 * * * *', async () => {
+    try {
+      const cutoff = new Date(Date.now() - 15 * 60 * 1000);
+      const result = await prisma.payment.updateMany({
+        where: {
+          status: 'PENDING',
+          createdAt: { lt: cutoff },
+        },
+        data: { status: 'FAILED' },
+      });
+      if (result.count > 0) {
+        console.log(`[CRON] PENDING 결제 만료 처리: ${result.count}건`);
+      }
+    } catch (error) {
+      console.error('[CRON] PENDING 결제 만료 오류:', error);
+    }
+  });
+
   // 노쇼 3회 이상 자동 패널티
   cron.schedule('0 2 * * *', async () => {
     console.log('[CRON] 노쇼 패널티 체크...');

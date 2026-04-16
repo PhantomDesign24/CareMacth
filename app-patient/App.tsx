@@ -13,6 +13,7 @@ import {
   Switch,
   Linking,
   Modal,
+  AppState,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -65,6 +66,7 @@ export default function App() {
   const [biometricReady, setBiometricReady] = useState(false);
   const [showBiometricLogin, setShowBiometricLogin] = useState(false);
   const [pendingTokenInjection, setPendingTokenInjection] = useState<string | null>(null);
+  const paymentInProgressRef = useRef(false);
 
   // 커스텀 모달 상태
   const [modal, setModal] = useState<{
@@ -166,6 +168,23 @@ export default function App() {
       // 유저 연결은 WebView 로그인 시 onMessage에서 처리
     } catch (e) { console.log('Push setup error:', e); }
   };
+
+  // 앱 포그라운드 복귀 시 결제 진행 중이었으면 대시보드로 이동
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && paymentInProgressRef.current) {
+        paymentInProgressRef.current = false;
+        if (webViewRef.current) {
+          // 결제내역 탭으로 이동 + reload하여 최신 상태 반영
+          webViewRef.current.injectJavaScript(`
+            window.location.href = '/dashboard/guardian?tab=history';
+            true;
+          `);
+        }
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // 알림 수신 리스너
   useEffect(() => {
@@ -622,6 +641,46 @@ export default function App() {
           ref={webViewRef}
           source={{ uri: WEB_URL }}
           style={styles.webview}
+          onShouldStartLoadWithRequest={(req) => {
+            const url = req.url || '';
+            // 토스·카카오페이 등 결제 도메인은 외부 브라우저로 분리
+            const externalHosts = [
+              'pay.toss.im',
+              'checkout.tosspayments.com',
+              'm.tosspayments.com',
+              'event.tosspayments.com',
+              'pg.tosspayments.com',
+              'kpg.tosspayments.com',
+              'toss.im',
+              'tosspayments.com',
+              'qr.kakaopay.com',
+              'app.kakaopay.com',
+              'mobile-pay.kakaopay.com',
+            ];
+            // intent://, market://, tmap://, iamporttoss:// 등 앱 스킴도 외부로
+            if (url.startsWith('intent://') || url.startsWith('market://') || url.startsWith('tmap://') ||
+                url.startsWith('iamporttoss://') || url.startsWith('supertoss://') || url.startsWith('kftc-bankpay://') ||
+                url.startsWith('ispmobile://') || url.startsWith('mpocket.online.ansimclick://') ||
+                url.startsWith('kb-acp://') || url.startsWith('mpocket.online.ansimclick.kftcbankpay://') ||
+                url.startsWith('hdcardappcardansimclick://') || url.startsWith('smshinhanansimclick://') ||
+                url.startsWith('shinhan-sr-ansimclick://') || url.startsWith('smshinhan://') ||
+                url.startsWith('smlotteapp://') || url.startsWith('lottesmartpay://') ||
+                url.startsWith('lotteappcard://') || url.startsWith('cloudpay://') ||
+                url.startsWith('nhappcardansimclick://') || url.startsWith('nhappvardansimclick://') ||
+                url.startsWith('citispay://') || url.startsWith('citicardappkr://') ||
+                url.startsWith('citimobileapp://') || url.startsWith('payco://') ||
+                url.startsWith('kakaotalk://') || url.startsWith('kakaopay://')) {
+              paymentInProgressRef.current = true;
+              Linking.openURL(url).catch(() => {});
+              return false;
+            }
+            if (externalHosts.some((h) => url.includes(h))) {
+              paymentInProgressRef.current = true;
+              Linking.openURL(url).catch(() => {});
+              return false;
+            }
+            return true;
+          }}
           onNavigationStateChange={onNavigationChange}
           onLoadEnd={() => {
             setLoading(false);
