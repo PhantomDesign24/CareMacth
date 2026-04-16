@@ -1,4 +1,3 @@
-import { registerRootComponent } from 'expo';
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -847,4 +846,3 @@ const styles = StyleSheet.create({
   mypageVersion: { textAlign: 'center', fontSize: 12, color: '#ccc', marginTop: 12, marginBottom: 32 },
 });
 
-registerRootComponent(App);
