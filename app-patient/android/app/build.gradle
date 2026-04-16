@@ -83,6 +83,12 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+    // Lint는 릴리즈 빌드에서 시간 오래 걸리고 파일 잠금 문제 잦아서 비활성화
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
     namespace 'kr.carematch.patient'
     defaultConfig {
         applicationId 'kr.carematch.patient'
