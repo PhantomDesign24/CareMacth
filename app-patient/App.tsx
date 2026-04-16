@@ -688,7 +688,23 @@ export default function App() {
           sharedCookiesEnabled
           pullToRefreshEnabled
           geolocationEnabled
-          userAgent={`CareMatch-Patient/${Platform.OS}`}
+          thirdPartyCookiesEnabled
+          javaScriptCanOpenWindowsAutomatically
+          setSupportMultipleWindows={false}
+          mixedContentMode="always"
+          originWhitelist={['*']}
+          onOpenWindow={(event) => {
+            // window.open 등 팝업 요청은 현재 WebView에서 처리
+            const { targetUrl } = event.nativeEvent;
+            if (targetUrl && webViewRef.current) {
+              webViewRef.current.injectJavaScript(`window.location.href='${targetUrl}'; true;`);
+            }
+          }}
+          userAgent={
+            Platform.OS === 'android'
+              ? 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 CareMatch-Patient/android'
+              : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1 CareMatch-Patient/ios'
+          }
         />
       )}
 

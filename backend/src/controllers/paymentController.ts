@@ -76,7 +76,8 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
     }
 
     // VAT 별도 계산 (공급가액 기준 10%) - paymentService와 동일 방식
-    const vatAmount = Math.round(amount / 11);
+    // 테스트 모드는 VAT 제외하고 정확히 100원으로 결제
+    const vatAmount = testMode === true ? 0 : Math.round(amount / 11);
     const totalAmount = amount + vatAmount;
 
     if (totalAmount <= 0 && amount > 0) {
