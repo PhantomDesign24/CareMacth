@@ -255,6 +255,34 @@ export default function App() {
       }
       // 로그인 시 FCM 토큰을 유저에 연결
       if (data.type === 'USER_LOGIN' && data.userId) {
+        // 역할 체크: 보호자 앱은 GUARDIAN만 허용
+        if (data.role && data.role !== 'GUARDIAN') {
+          if (webViewRef.current) {
+            webViewRef.current.injectJavaScript(`
+              localStorage.removeItem('cm_access_token');
+              localStorage.removeItem('cm_refresh_token');
+              true;
+            `);
+          }
+          setUserName('');
+          setUserEmail('');
+          setUserToken('');
+          await SecureStore.deleteItemAsync('saved_token').catch(() => {});
+          await SecureStore.deleteItemAsync('biometric_enabled').catch(() => {});
+          showModal({
+            icon: 'alert-circle-outline',
+            iconColor: '#E74C3C',
+            title: '보호자 전용 앱',
+            message: '이 앱은 보호자만 이용할 수 있습니다.\n간병인은 별도의 케어매치 간병인 앱을 설치해주세요.',
+            buttons: [{ text: '확인', style: 'primary', onPress: () => {
+              hideModal();
+              if (webViewRef.current) {
+                webViewRef.current.injectJavaScript(`window.location.href = '/auth/login'; true;`);
+              }
+            }}],
+          });
+          return;
+        }
         try {
           const tokenData = await Notifications.getDevicePushTokenAsync();
           await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
@@ -323,7 +351,9 @@ export default function App() {
         try {
           var p = JSON.parse(atob(token.split('.')[1]));
           if (p.id && window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: p.id }));
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: p.id, role: p.role }));
+            // 역할이 GUARDIAN이 아니면 guardian API 호출하지 않음 (403 방지)
+            if (p.role !== 'GUARDIAN') return;
             // API로 이름 가져오기
             fetch('/api/guardian', { headers: { 'Authorization': 'Bearer ' + token } })
               .then(function(r) { return r.json(); })

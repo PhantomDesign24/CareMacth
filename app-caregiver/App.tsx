@@ -226,6 +226,35 @@ export default function App() {
         }
       }
       if (data.type === 'USER_LOGIN' && data.userId) {
+        // 역할 체크: 간병인 앱은 CAREGIVER만 허용
+        if (data.role && data.role !== 'CAREGIVER') {
+          // 강제 로그아웃
+          if (webViewRef.current) {
+            webViewRef.current.injectJavaScript(`
+              localStorage.removeItem('cm_access_token');
+              localStorage.removeItem('cm_refresh_token');
+              true;
+            `);
+          }
+          setUserName('');
+          setUserEmail('');
+          setUserToken('');
+          await SecureStore.deleteItemAsync('saved_token').catch(() => {});
+          await SecureStore.deleteItemAsync('biometric_enabled').catch(() => {});
+          showModal({
+            icon: 'alert-circle-outline',
+            iconColor: '#E74C3C',
+            title: '간병인 전용 앱',
+            message: '이 앱은 간병인만 이용할 수 있습니다.\n보호자는 별도의 케어매치 앱을 설치해주세요.',
+            buttons: [{ text: '확인', style: 'primary', onPress: () => {
+              hideModal();
+              if (webViewRef.current) {
+                webViewRef.current.injectJavaScript(`window.location.href = '/auth/login'; true;`);
+              }
+            }}],
+          });
+          return;
+        }
         try {
           const tokenData = await Notifications.getDevicePushTokenAsync();
           await fetch(`${APP_CONFIG.apiUrl}/notifications/device-token`, {
@@ -285,7 +314,9 @@ export default function App() {
         try {
           var p = JSON.parse(atob(token.split('.')[1]));
           if (p.id && window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: p.id }));
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_LOGIN', userId: p.id, role: p.role }));
+            // 역할이 CAREGIVER가 아니면 API 호출하지 않음 (403 방지)
+            if (p.role !== 'CAREGIVER') return;
             fetch('/api/caregiver/profile', { headers: { 'Authorization': 'Bearer ' + token } })
               .then(function(r) { return r.json(); })
               .then(function(res) {
