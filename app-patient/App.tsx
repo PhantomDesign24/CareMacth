@@ -169,18 +169,34 @@ export default function App() {
     } catch (e) { console.log('Push setup error:', e); }
   };
 
-  // 앱 포그라운드 복귀 시 결제 진행 중이었으면 대시보드로 이동
+  // 앱 포그라운드 복귀 시 결제 진행 중이었으면 확인 모달 표시
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active' && paymentInProgressRef.current) {
         paymentInProgressRef.current = false;
-        if (webViewRef.current) {
-          // 결제내역 탭으로 이동 + reload하여 최신 상태 반영
-          webViewRef.current.injectJavaScript(`
-            window.location.href = '/dashboard/guardian?tab=history';
-            true;
-          `);
-        }
+        // 결제 완료 여부를 사용자에게 확인
+        showModal({
+          icon: 'card-outline',
+          iconColor: '#FF922E',
+          title: '결제 진행 확인',
+          message: '결제를 완료하셨나요?\n결제 내역에서 상태를 확인할 수 있습니다.',
+          buttons: [
+            { text: '이 페이지에 머물기', style: 'cancel', onPress: hideModal },
+            {
+              text: '결제 내역 보기',
+              style: 'primary',
+              onPress: () => {
+                hideModal();
+                if (webViewRef.current) {
+                  webViewRef.current.injectJavaScript(`
+                    window.location.href = '/dashboard/guardian?tab=history';
+                    true;
+                  `);
+                }
+              },
+            },
+          ],
+        });
       }
     });
     return () => sub.remove();
