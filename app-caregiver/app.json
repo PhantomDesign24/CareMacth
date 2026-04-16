@@ -9,13 +9,14 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#2ECC71"
+      "backgroundColor": "#FFFFFF"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "kr.carematch.caregiver",
       "infoPlist": {
+        "NSFaceIDUsageDescription": "생체 인증으로 빠르게 로그인합니다.",
         "NSLocationWhenInUseUsageDescription": "출퇴근 체크를 위해 위치 정보가 필요합니다.",
         "NSCameraUsageDescription": "간병 일지 사진 업로드를 위해 카메라 접근이 필요합니다.",
         "NSPhotoLibraryUsageDescription": "간병 일지 사진 조회를 위해 사진 접근이 필요합니다.",
@@ -29,12 +30,13 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#2ECC71"
+        "backgroundColor": "#FFFFFF"
       },
       "googleServicesFile": "./google-services.json",
       "package": "kr.carematch.caregiver",
       "permissions": [
         "INTERNET",
+        "USE_BIOMETRIC",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "CAMERA",

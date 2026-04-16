@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FiPhone, FiArrowRight, FiMessageCircle, FiHelpCircle, FiBell, FiBook } from "react-icons/fi";
+import { SITE } from "@/config/site";
 
 export default function CommunityPage() {
   const sections = [
@@ -9,8 +10,8 @@ export default function CommunityPage() {
       icon: <FiHelpCircle className="w-7 h-7" />,
       title: "고객센터",
       desc: "간병 서비스 이용 중 궁금한 점이나 불편한 사항을 문의해주세요. 전담 상담원이 신속하게 답변드립니다.",
-      link: "tel:1555-0801",
-      linkText: "전화 상담 1555-0801",
+      link: `tel:${SITE.phone}`,
+      linkText: `전화 상담 ${SITE.phone}`,
       color: "primary",
     },
     {
@@ -141,11 +142,11 @@ export default function CommunityPage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
             <a
-              href="tel:1555-0801"
+              href={`tel:${SITE.phone}`}
               className="inline-flex items-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-primary-500 text-white font-bold rounded-2xl hover:bg-primary-600 transition-all shadow-xl w-full sm:w-auto justify-center"
             >
               <FiPhone className="w-5 h-5" />
-              1555-0801
+              {SITE.phone}
             </a>
             <a
               href="http://pf.kakao.com/_nnJxkxj"

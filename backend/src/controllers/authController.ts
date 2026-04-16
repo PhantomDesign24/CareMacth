@@ -41,18 +41,24 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     const hashedPassword = await bcrypt.hash(password, 12);
     const referralCode = generateReferralCode();
 
-    // 추천인 처리
+    // 플랫폼 설정에서 추천 포인트 가져오기
+    const platformConfig = await prisma.platformConfig.findFirst();
+    const referralPoints = platformConfig?.referralPoints || 10000;
+
+    // 추천인 처리 — 추천인과 신규 가입자 양쪽에 포인트 지급
     let referrerUserId: string | undefined;
+    let welcomePoints = 0;
     if (referredBy) {
       const referrer = await prisma.user.findUnique({
         where: { referralCode: referredBy },
       });
       if (referrer) {
         referrerUserId = referrer.id;
+        welcomePoints = referralPoints;
         // 추천인에게 포인트 지급
         await prisma.user.update({
           where: { id: referrer.id },
-          data: { points: { increment: 10000 } },
+          data: { points: { increment: referralPoints } },
         });
       }
     }
@@ -66,6 +72,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         role,
         referralCode,
         referredBy: referrerUserId,
+        points: welcomePoints,
         ...(role === 'GUARDIAN' && {
           guardian: {
             create: {},
@@ -120,6 +127,10 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       throw new AppError('이메일 또는 비밀번호가 올바르지 않습니다.', 401);
+    }
+
+    if (user.deletedAt) {
+      throw new AppError('탈퇴한 계정입니다. 새로 가입해주세요.', 403);
     }
 
     if (!user.isActive) {
@@ -330,6 +341,111 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     res.json({
       success: true,
       data: { tempPassword },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /me - 회원 탈퇴 (soft delete)
+export const deleteAccount = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { password, reason } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      include: { guardian: true, caregiver: true },
+    });
+
+    if (!user) {
+      throw new AppError('사용자를 찾을 수 없습니다.', 404);
+    }
+
+    // 비밀번호 확인 (소셜 로그인은 스킵)
+    if (user.authProvider === 'LOCAL') {
+      if (!password) {
+        throw new AppError('비밀번호를 입력해주세요.', 400);
+      }
+      if (!user.password) {
+        throw new AppError('비밀번호가 설정되지 않은 계정입니다.', 400);
+      }
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        throw new AppError('비밀번호가 일치하지 않습니다.', 401);
+      }
+    }
+
+    // 진행 중인 계약 확인
+    if (user.guardian) {
+      const activeContracts = await prisma.contract.count({
+        where: {
+          guardianId: user.guardian.id,
+          status: { in: ['ACTIVE', 'EXTENDED'] },
+        },
+      });
+      if (activeContracts > 0) {
+        throw new AppError(`진행 중인 간병 계약이 ${activeContracts}건 있어 탈퇴할 수 없습니다. 계약 완료 또는 취소 후 다시 시도해주세요.`, 400);
+      }
+    }
+    if (user.caregiver) {
+      const activeContracts = await prisma.contract.count({
+        where: {
+          caregiverId: user.caregiver.id,
+          status: { in: ['ACTIVE', 'EXTENDED'] },
+        },
+      });
+      if (activeContracts > 0) {
+        throw new AppError(`진행 중인 간병 계약이 ${activeContracts}건 있어 탈퇴할 수 없습니다. 계약 완료 후 다시 시도해주세요.`, 400);
+      }
+    }
+
+    // 미정산 금액 확인 (간병인)
+    if (user.caregiver) {
+      const unpaidEarnings = await prisma.earning.count({
+        where: {
+          caregiverId: user.caregiver.id,
+          isPaid: false,
+        },
+      });
+      if (unpaidEarnings > 0) {
+        throw new AppError(`미정산 수익이 ${unpaidEarnings}건 있습니다. 정산 완료 후 탈퇴 가능합니다.`, 400);
+      }
+    }
+
+    // Soft delete + 개인정보 익명화
+    const timestamp = Date.now();
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          isActive: false,
+          deletedAt: new Date(),
+          // 개인정보 익명화 (GDPR/개인정보보호법 준수)
+          email: `deleted_${timestamp}_${user.id.slice(0, 8)}@deleted.local`,
+          phone: `DELETED_${timestamp}`,
+          name: '(탈퇴회원)',
+          password: null,
+          profileImage: null,
+          fcmToken: null,
+          socialId: null,
+        },
+      });
+
+      // 기기 토큰 해제
+      await tx.deviceToken.updateMany({
+        where: { userId: user.id },
+        data: { userId: null },
+      });
+
+      // 탈퇴 이력 로그 (선택, notification으로 대체)
+      if (reason) {
+        console.log(`[탈퇴] userId=${user.id}, reason="${reason}"`);
+      }
+    });
+
+    res.json({
+      success: true,
+      message: '회원 탈퇴가 완료되었습니다. 그동안 케어매치를 이용해주셔서 감사합니다.',
     });
   } catch (error) {
     next(error);

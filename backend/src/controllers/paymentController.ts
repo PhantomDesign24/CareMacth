@@ -23,7 +23,7 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       throw new AppError('보호자 정보를 찾을 수 없습니다.', 404);
     }
 
-    const { contractId, method, pointsUsed, isRecurring, recurringWeek } = req.body;
+    const { contractId, method, pointsUsed, useAllPoints, isRecurring, recurringWeek } = req.body;
 
     if (!contractId || !method) {
       throw new AppError('계약 ID와 결제 방법은 필수입니다.', 400);
@@ -50,17 +50,18 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       paymentAmount = contract.dailyRate * 7;
     }
 
-    // 포인트 사용
+    // 포인트 사용 (자동 전액 사용 또는 수동 입력)
     let actualPointsUsed = 0;
-    if (pointsUsed && pointsUsed > 0) {
+    if ((pointsUsed && pointsUsed > 0) || useAllPoints) {
       const user = await prisma.user.findUnique({
         where: { id: req.user!.id },
       });
       const availablePoints = user?.points || 0;
-      if (pointsUsed > availablePoints) {
+      const requestedPoints = useAllPoints ? availablePoints : pointsUsed;
+      if (requestedPoints > availablePoints) {
         throw new AppError(`사용 가능한 포인트(${availablePoints.toLocaleString()}P)를 초과했습니다.`, 400);
       }
-      actualPointsUsed = Math.min(pointsUsed, availablePoints, paymentAmount);
+      actualPointsUsed = Math.min(requestedPoints, availablePoints, paymentAmount);
     }
 
     const amount = paymentAmount - actualPointsUsed;

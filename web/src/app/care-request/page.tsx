@@ -6,6 +6,7 @@ import CareRequestForm from "@/components/CareRequestForm";
 import { FiInfo, FiSearch } from "react-icons/fi";
 import { careRequestAPI, guardianAPI } from "@/lib/api";
 import { AxiosError } from "axios";
+import { SITE } from "@/config/site";
 
 export default function CareRequestPage() {
   const router = useRouter();
@@ -41,8 +42,11 @@ export default function CareRequestPage() {
         birthDate: data.patientAge ? `${new Date().getFullYear() - parseInt(data.patientAge)}-01-01` : undefined,
         gender: resolvedGender,
         weight: data.patientWeight ? parseFloat(data.patientWeight) : undefined,
+        height: data.patientHeight ? parseFloat(data.patientHeight) : undefined,
+        consciousness: data.consciousness || undefined,
         mobilityStatus: resolvedMobility,
         hasDementia: data.hasDementia || false,
+        dementiaLevel: data.hasDementia ? (data.dementiaLevel || undefined) : undefined,
         hasInfection: data.hasInfection || false,
         infectionDetail: data.infectionDetails || undefined,
         diagnosis: Array.isArray(data.diagnosis) ? data.diagnosis.join(', ') : data.diagnosis || undefined,
@@ -66,18 +70,26 @@ export default function CareRequestPage() {
       // PreferredGender mapping: form sends "male"/"female"/"", Prisma expects "M"/"F"/undefined
       const preferredGenderMap: Record<string, string> = { male: 'M', female: 'F', '남성': 'M', '여성': 'F' };
 
+      // Address mapping: locationName is hospital name (for hospital) or main address (for home)
+      const isHospital = data.locationType === 'hospital';
+      const hospitalName = isHospital ? (data.locationName || undefined) : undefined;
+      const address = isHospital
+        ? (data.locationAddress || data.locationName || '주소 미입력')
+        : ([data.locationName, data.locationAddress].filter(Boolean).join(' ') || '주소 미입력');
+
       const requestPayload: Record<string, unknown> = {
         patientId,
         careType: careTypeMap[data.careType] || 'INDIVIDUAL',
         scheduleType: scheduleMap[data.careSchedule] || 'FULL_TIME',
         location: locationMap[data.locationType] || 'HOSPITAL',
-        hospitalName: data.locationName || undefined,
-        address: data.locationAddress || '주소 미입력',
-        region: data.region || undefined,
+        hospitalName,
+        address,
+        region: Array.isArray(data.regions) && data.regions.length > 0 ? data.regions[0] : undefined,
+        regions: Array.isArray(data.regions) ? data.regions : [],
         startDate: data.startDate || new Date().toISOString(),
         endDate: data.duration ? undefined : undefined,
         durationDays: data.duration ? parseInt(data.duration) * (data.durationUnit === 'months' || data.durationUnit === '개월' ? 30 : data.durationUnit === 'weeks' || data.durationUnit === '주' ? 7 : 1) : undefined,
-        dailyRate: data.dailyRate ? parseInt(data.dailyRate) : 150000,
+        dailyRate: data.dailyRate ? parseInt(data.dailyRate) : undefined,
         preferredGender: data.preferredGender ? (preferredGenderMap[data.preferredGender.toLowerCase()] || undefined) : undefined,
         specialRequirements: data.specialNotes || undefined,
       };
@@ -173,10 +185,10 @@ export default function CareRequestPage() {
               <p>
                 긴급한 경우 고객센터(
                 <a
-                  href="tel:1555-0801"
+                  href={`tel:${SITE.phone}`}
                   className="text-primary-500 font-semibold hover:underline"
                 >
-                  1555-0801
+                  {SITE.phone}
                 </a>
                 )로 연락해 주세요.
               </p>

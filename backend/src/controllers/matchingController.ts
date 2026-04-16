@@ -141,36 +141,43 @@ export const autoMatch = async (req: AuthRequest, res: Response, next: NextFunct
       });
     }
 
-    // 모든 후보에게 알림 발송 (인드라이브 방식: 전체 알림)
+    // 모든 후보에게 알림 발송 (배치 처리로 N+1 방지)
     const dailyRateText = careRequest.dailyRate
       ? `제시 일당: ${careRequest.dailyRate.toLocaleString()}원`
       : '일당 미정';
-    for (const candidate of matchScores) {
-      const caregiver = candidates.find((c) => c.id === candidate.caregiverId);
-      if (caregiver) {
-        await prisma.notification.create({
-          data: {
-            userId: caregiver.userId,
-            type: 'MATCHING',
-            title: '새로운 간병 요청 매칭',
-            body: `${careRequest.patient.name} 환자의 간병 요청이 도착했습니다. ${dailyRateText} | 매칭 점수: ${candidate.score.toFixed(1)}점`,
-            data: { careRequestId, score: candidate.score, dailyRate: careRequest.dailyRate },
-          },
-        });
 
-        await prisma.matchScore.update({
+    const candidateMap = new Map(candidates.map((c) => [c.id, c]));
+    const notificationData = matchScores
+      .filter((candidate) => candidateMap.has(candidate.caregiverId))
+      .map((candidate) => {
+        const caregiver = candidateMap.get(candidate.caregiverId)!;
+        return {
+          userId: caregiver.userId,
+          type: 'MATCHING' as const,
+          title: '새로운 간병 요청 매칭',
+          body: `${careRequest.patient.name} 환자의 간병 요청이 도착했습니다. ${dailyRateText} | 매칭 점수: ${candidate.score.toFixed(1)}점`,
+          data: { careRequestId, score: candidate.score, dailyRate: careRequest.dailyRate } as any,
+        };
+      });
+
+    const candidateIds = matchScores
+      .filter((c) => candidateMap.has(c.caregiverId))
+      .map((c) => c.caregiverId);
+
+    if (notificationData.length > 0) {
+      await prisma.$transaction([
+        prisma.notification.createMany({ data: notificationData }),
+        prisma.matchScore.updateMany({
           where: {
-            careRequestId_caregiverId: {
-              careRequestId,
-              caregiverId: candidate.caregiverId,
-            },
+            careRequestId,
+            caregiverId: { in: candidateIds },
           },
           data: {
             notified: true,
             notifiedAt: new Date(),
           },
-        });
-      }
+        }),
+      ]);
     }
 
     res.json({

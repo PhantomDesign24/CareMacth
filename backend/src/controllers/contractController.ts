@@ -46,6 +46,7 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
         status: 'APPROVED',
         workStatus: { in: ['AVAILABLE', 'IMMEDIATE'] },
       },
+      include: { user: { select: { name: true } } },
     });
 
     if (!caregiver) {
@@ -157,15 +158,24 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
         data: { status: 'CANCELLED' },
       });
 
-      // 알림 발송 - 간병인
-      await tx.notification.create({
-        data: {
-          userId: caregiver.userId,
-          type: 'CONTRACT',
-          title: '계약이 체결되었습니다',
-          body: `${newContract.careRequest.patient.name} 환자의 간병 계약이 체결되었습니다. 시작일: ${startDate.toLocaleDateString('ko-KR')}`,
-          data: { contractId: newContract.id },
-        },
+      // 알림 발송 - 간병인 + 보호자
+      await tx.notification.createMany({
+        data: [
+          {
+            userId: caregiver.userId,
+            type: 'CONTRACT',
+            title: '계약이 체결되었습니다',
+            body: `${newContract.careRequest.patient.name} 환자의 간병 계약이 체결되었습니다. 시작일: ${startDate.toLocaleDateString('ko-KR')}`,
+            data: { contractId: newContract.id } as any,
+          },
+          {
+            userId: guardian.userId,
+            type: 'CONTRACT',
+            title: '매칭이 완료되었습니다',
+            body: `${caregiver.user.name} 간병인과 매칭되었습니다. 시작일: ${startDate.toLocaleDateString('ko-KR')}`,
+            data: { contractId: newContract.id } as any,
+          },
+        ],
       });
 
       return newContract;

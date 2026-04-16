@@ -1214,6 +1214,8 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
       referralPoints,
       noShowPenaltyThreshold,
       badgeThreshold,
+      associationFeeDefault,
+      cancellationFee,
     } = req.body;
 
     // 수수료 범위 검증 (0~100%)
@@ -1257,6 +1259,8 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
         ...(referralPoints !== undefined && { referralPoints: parseInt(referralPoints) }),
         ...(noShowPenaltyThreshold !== undefined && { noShowPenaltyThreshold: parseInt(noShowPenaltyThreshold) }),
         ...(badgeThreshold !== undefined && { badgeThreshold: parseInt(badgeThreshold) }),
+        ...(associationFeeDefault !== undefined && { associationFeeDefault: parseInt(associationFeeDefault) }),
+        ...(cancellationFee !== undefined && { cancellationFee: parseInt(cancellationFee) }),
       },
       create: {
         id: 'default',
@@ -1268,6 +1272,8 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
         referralPoints: referralPoints ?? 10000,
         noShowPenaltyThreshold: noShowPenaltyThreshold ?? 3,
         badgeThreshold: badgeThreshold ?? 10,
+        associationFeeDefault: associationFeeDefault ?? 30000,
+        cancellationFee: cancellationFee ?? 0,
       },
     });
 
@@ -2077,6 +2083,279 @@ export const deleteEducation = async (req: AuthRequest, res: Response, next: Nex
       success: true,
       message: '교육 과정이 삭제되었습니다.',
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /admin/association-fees - 간병인 협회비 월별 현황
+export const getAssociationFees = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const month = parseInt(req.query.month as string) || (new Date().getMonth() + 1);
+
+    const caregivers = await prisma.caregiver.findMany({
+      where: { status: { in: ['APPROVED', 'SUSPENDED'] } },
+      include: {
+        user: { select: { id: true, name: true, email: true, phone: true } },
+        feePayments: {
+          where: { year, month },
+        },
+        penalties: {
+          select: { id: true },
+        },
+        _count: {
+          select: { contracts: true },
+        },
+      },
+      orderBy: { user: { name: 'asc' } },
+    });
+
+    const rows = caregivers.map((cg) => {
+      const fee = cg.feePayments[0];
+      return {
+        caregiverId: cg.id,
+        name: cg.user.name,
+        status: cg.status,
+        workStatus: cg.workStatus,
+        phone: cg.user.phone,
+        email: cg.user.email,
+        feePaid: !!fee?.paid,
+        feeAmount: fee?.amount || 0,
+        feePaidAt: fee?.paidAt,
+        feeNote: fee?.note || '',
+        careCount: cg._count.contracts,
+        penaltyCount: cg.penaltyCount,
+      };
+    });
+
+    res.json({ success: true, data: { year, month, rows } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /admin/association-fees/:caregiverId
+export const updateAssociationFee = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+    const { caregiverId } = req.params;
+    const { year, month, paid, amount, note } = req.body;
+
+    const cg = await prisma.caregiver.findUnique({ where: { id: caregiverId } });
+    if (!cg) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+
+    const record = await prisma.associationFeePayment.upsert({
+      where: {
+        caregiverId_year_month: { caregiverId, year, month },
+      },
+      create: {
+        caregiverId,
+        year,
+        month,
+        amount: amount || 0,
+        paid,
+        paidAt: paid ? new Date() : null,
+        note: note || null,
+      },
+      update: {
+        amount: amount !== undefined ? amount : undefined,
+        paid,
+        paidAt: paid ? new Date() : null,
+        note: note !== undefined ? note : undefined,
+      },
+    });
+
+    res.json({ success: true, data: record });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /admin/association-fees/export - 엑셀(CSV) 다운로드
+export const exportAssociationFees = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+
+    // 월 파라미터 처리
+    // ?months=1,2,3 (다중월) / ?month=4 (단일월) / 없으면 연간 전체
+    let months: number[] = [];
+    if (req.query.months) {
+      months = (req.query.months as string)
+        .split(',')
+        .map((m) => parseInt(m.trim()))
+        .filter((m) => m >= 1 && m <= 12);
+    } else if (req.query.month) {
+      const m = parseInt(req.query.month as string);
+      if (m >= 1 && m <= 12) months = [m];
+    } else {
+      months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    }
+
+    if (months.length === 0) {
+      throw new AppError('유효한 월을 선택해주세요.', 400);
+    }
+    months.sort((a, b) => a - b);
+
+    const caregivers = await prisma.caregiver.findMany({
+      where: { status: { in: ['APPROVED', 'SUSPENDED'] } },
+      include: {
+        user: { select: { name: true, phone: true } },
+        feePayments: { where: { year, month: { in: months } } },
+        consultMemos: { orderBy: { createdAt: 'desc' }, take: 1 },
+        _count: { select: { contracts: true } },
+      },
+      orderBy: { user: { name: 'asc' } },
+    });
+
+    const isMultiMonth = months.length > 1;
+    const monthHeaders = months.map((m) => `${m}월`);
+    const header = isMultiMonth
+      ? ['이름', '상태', ...monthHeaders, '총 납부액', '간병기간(횟수)', '패널티(누계)', '연락처', '최근 상담 메모']
+      : ['이름', '상태', '협회비(O/X)', '납부액', '간병기간(횟수)', '패널티(누계)', '연락처', '최근 상담 메모'];
+
+    const rows = caregivers.map((cg) => {
+      const status = cg.status === 'APPROVED' ? '활동' : cg.status === 'SUSPENDED' ? '정지' : cg.status;
+      const memo = cg.consultMemos[0]?.content.replace(/\n/g, ' ').replace(/"/g, '""') || '';
+      const payByMonth = new Map(cg.feePayments.map((p) => [p.month, p]));
+
+      if (isMultiMonth) {
+        const monthCells = months.map((m) => {
+          const p = payByMonth.get(m);
+          return p?.paid ? `${p.amount.toLocaleString()}원` : 'X';
+        });
+        const total = cg.feePayments.filter((p) => p.paid).reduce((a, b) => a + b.amount, 0);
+        return [
+          cg.user.name, status, ...monthCells,
+          `${total.toLocaleString()}원`,
+          `${cg._count.contracts}회`, `${cg.penaltyCount}회`,
+          cg.user.phone, memo,
+        ];
+      } else {
+        const p = payByMonth.get(months[0]);
+        return [
+          cg.user.name, status,
+          p?.paid ? 'O' : 'X',
+          p?.paid ? `${p.amount.toLocaleString()}원` : '-',
+          `${cg._count.contracts}회`, `${cg.penaltyCount}회`,
+          cg.user.phone, memo,
+        ];
+      }
+    });
+
+    const csv = [header, ...rows]
+      .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const bom = '\uFEFF';
+    let filename: string;
+    if (months.length === 12) {
+      filename = `협회비-${year}년전체.csv`;
+    } else if (months.length === 1) {
+      filename = `협회비-${year}-${String(months[0]).padStart(2, '0')}.csv`;
+    } else {
+      filename = `협회비-${year}-${months.map((m) => String(m).padStart(2, '0')).join('_')}.csv`;
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.send(bom + csv);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ──────────────────────────────────────────────
+// 알림 템플릿 관리
+// ──────────────────────────────────────────────
+
+const DEFAULT_TEMPLATES = [
+  { key: 'MATCHING_NEW', type: 'MATCHING', name: '신규 매칭 알림', title: '새로운 간병 요청', body: '{region} 지역에 새 간병 요청이 있습니다. 일당 {dailyRate}원', description: '변수: {region}, {dailyRate}' },
+  { key: 'APPLICATION_ACCEPTED', type: 'APPLICATION', name: '지원 수락', title: '지원 수락됨', body: '{patientName} 환자 간병 지원이 수락되었습니다.', description: '변수: {patientName}' },
+  { key: 'APPLICATION_REJECTED', type: 'APPLICATION', name: '지원 미선택', title: '지원 미선택', body: '이번 공고는 다른 간병사가 선정되었습니다.', description: '' },
+  { key: 'CONTRACT_CREATED', type: 'CONTRACT', name: '계약 성사', title: '매칭 완료', body: '{caregiverName}님과 매칭되었습니다. 기간: {startDate} ~ {endDate}', description: '변수: {caregiverName}, {startDate}, {endDate}' },
+  { key: 'EXTENSION_REMINDER_3D', type: 'EXTENSION', name: '연장 3일 전 알림', title: '간병 종료 3일 전', body: '{patientName} 환자 간병이 3일 뒤 종료됩니다. 연장을 원하시면 마이페이지에서 요청해주세요.', description: '변수: {patientName}' },
+  { key: 'EXTENSION_REMINDER_1D', type: 'EXTENSION', name: '연장 1일 전 알림', title: '간병 종료 1일 전', body: '{patientName} 환자 간병이 내일 종료됩니다.', description: '변수: {patientName}' },
+  { key: 'PAYMENT_COMPLETED', type: 'PAYMENT', name: '결제 완료', title: '결제 완료', body: '{amount}원 결제가 완료되었습니다.', description: '변수: {amount}' },
+  { key: 'PENALTY_ISSUED', type: 'PENALTY', name: '패널티 부여', title: '패널티가 부여되었습니다', body: '{reason}', description: '변수: {reason}' },
+];
+
+// GET /admin/notification-templates
+export const getNotificationTemplates = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    // 템플릿 없으면 기본 시드
+    const count = await prisma.notificationTemplate.count();
+    if (count === 0) {
+      await prisma.notificationTemplate.createMany({
+        data: DEFAULT_TEMPLATES.map((t) => ({ ...t, isSystem: true })),
+      });
+    }
+
+    const templates = await prisma.notificationTemplate.findMany({
+      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+    });
+    res.json({ success: true, data: templates });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /admin/notification-templates/:id
+export const updateNotificationTemplate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { title, body, enabled, description } = req.body;
+
+    const existing = await prisma.notificationTemplate.findUnique({ where: { id } });
+    if (!existing) throw new AppError('템플릿을 찾을 수 없습니다.', 404);
+
+    const updated = await prisma.notificationTemplate.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(body !== undefined && { body }),
+        ...(enabled !== undefined && { enabled }),
+        ...(description !== undefined && { description }),
+      },
+    });
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /admin/notification-templates  (커스텀 템플릿 추가)
+export const createNotificationTemplate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { key, name, type, title, body, description } = req.body;
+    if (!key || !name || !type || !title || !body) {
+      throw new AppError('key, name, type, title, body는 필수입니다.', 400);
+    }
+    const existing = await prisma.notificationTemplate.findUnique({ where: { key } });
+    if (existing) throw new AppError('이미 존재하는 키입니다.', 400);
+
+    const created = await prisma.notificationTemplate.create({
+      data: { key, name, type, title, body, description, enabled: true, isSystem: false },
+    });
+    res.json({ success: true, data: created });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /admin/notification-templates/:id
+export const deleteNotificationTemplate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.notificationTemplate.findUnique({ where: { id } });
+    if (!existing) throw new AppError('템플릿을 찾을 수 없습니다.', 404);
+    if (existing.isSystem) throw new AppError('시스템 기본 템플릿은 삭제할 수 없습니다.', 400);
+
+    await prisma.notificationTemplate.delete({ where: { id } });
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }

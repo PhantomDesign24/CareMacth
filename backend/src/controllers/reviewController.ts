@@ -193,3 +193,28 @@ export const getCaregiverReviews = async (req: AuthRequest, res: Response, next:
     next(error);
   }
 };
+
+// GET /reviews/my - 내가 받은 리뷰 (간병인)
+export const getMyReceivedReviews = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const caregiver = await prisma.caregiver.findUnique({
+      where: { userId: req.user!.id },
+    });
+    if (!caregiver) {
+      return res.json({ success: true, data: { reviews: [] } });
+    }
+
+    const reviews = await prisma.review.findMany({
+      where: { caregiverId: caregiver.id, isHidden: false },
+      include: {
+        guardian: { include: { user: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    res.json({ success: true, data: { reviews } });
+  } catch (error) {
+    next(error);
+  }
+};

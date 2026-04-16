@@ -43,6 +43,11 @@ router.post('/naver', [
 // 내 정보 조회
 router.get('/me', authenticate, authController.getMe);
 
+// 회원 탈퇴 (soft delete)
+router.delete('/me', authenticate, [
+  body('reason').optional().trim().isLength({ max: 500 }).withMessage('사유는 500자 이내여야 합니다.'),
+], authController.deleteAccount);
+
 // 토큰 갱신
 router.post('/refresh', authenticate, authController.refreshToken);
 

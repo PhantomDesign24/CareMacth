@@ -13,32 +13,13 @@ import {
   addMemo,
   verifyCertificate,
 } from "@/lib/api";
+import {
+  caregiverStatusLabel as statusLabel,
+  caregiverStatusBadge as statusBadge,
+  PENALTY_TYPES,
+} from "@/lib/constants";
 
 // ─── Helpers ───────────────────────────────────────────
-
-function statusLabel(status: string): string {
-  const s = status?.toUpperCase();
-  switch (s) {
-    case "PENDING": return "승인 대기";
-    case "APPROVED": return "승인됨";
-    case "REJECTED": return "거절됨";
-    case "SUSPENDED": return "활동 정지";
-    case "BLACKLISTED": return "블랙리스트";
-    default: return status;
-  }
-}
-
-function statusBadge(status: string): string {
-  const s = status?.toUpperCase();
-  switch (s) {
-    case "APPROVED": return "badge-green";
-    case "PENDING": return "badge-yellow";
-    case "REJECTED": return "badge-red";
-    case "SUSPENDED": return "badge-red";
-    case "BLACKLISTED": return "badge-gray";
-    default: return "badge-gray";
-  }
-}
 
 function genderLabel(gender: string | null | undefined): string {
   if (!gender) return "";
@@ -64,13 +45,7 @@ function formatMoney(value: number | null | undefined): string {
 }
 
 function penaltyTypeLabel(type: string): string {
-  switch (type) {
-    case "NO_SHOW": return "노쇼";
-    case "CANCELLATION": return "취소";
-    case "COMPLAINT": return "민원";
-    case "MANUAL": return "수동 부여";
-    default: return type;
-  }
+  return PENALTY_TYPES.find((p) => p.value === type)?.label || type;
 }
 
 // ─── Sub-components ────────────────────────────────────
@@ -842,10 +817,9 @@ export default function CaregiverDetailPage() {
                       onChange={(e) => setPenaltyType(e.target.value)}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                     >
-                      <option value="NO_SHOW">노쇼</option>
-                      <option value="CANCELLATION">취소</option>
-                      <option value="COMPLAINT">민원</option>
-                      <option value="MANUAL">수동 부여</option>
+                      {PENALTY_TYPES.map((p) => (
+                        <option key={p.value} value={p.value}>{p.label}</option>
+                      ))}
                     </select>
                   </div>
                   <div>

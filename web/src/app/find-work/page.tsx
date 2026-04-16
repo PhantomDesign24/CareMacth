@@ -3,12 +3,34 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { careRequestAPI, caregiverAPI } from "@/lib/api";
-import { formatDate, formatMoney, formatCareType, formatLocation } from "@/lib/format";
-import { FiArrowRight, FiCheck, FiPhone, FiX, FiDollarSign } from "react-icons/fi";
+import { formatDate, formatCareType, formatLocation } from "@/lib/format";
+import { FiArrowRight, FiCheck, FiPhone, FiX, FiDollarSign, FiMapPin } from "react-icons/fi";
+import { SITE } from "@/config/site";
 
 const REGION_OPTIONS = [
   "서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산", "세종",
   "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
+];
+
+const BASE = "https://massage.phantomdesign.kr/assets/images/region";
+const REGION_CARDS = [
+  { name: "서울", img: `${BASE}/map01.png` },
+  { name: "경기", img: `${BASE}/map02.png` },
+  { name: "인천", img: `${BASE}/map03.png` },
+  { name: "대전", img: `${BASE}/map04.png` },
+  { name: "대구", img: `${BASE}/map05.png` },
+  { name: "부산", img: `${BASE}/map06.png` },
+  { name: "광주", img: `${BASE}/map07.png` },
+  { name: "울산", img: `${BASE}/map08.png` },
+  { name: "세종", img: `${BASE}/map09.png` },
+  { name: "강원", img: `${BASE}/map10.png` },
+  { name: "충북", img: `${BASE}/map11.png` },
+  { name: "충남", img: `${BASE}/map12.png` },
+  { name: "전북", img: `${BASE}/map13.png` },
+  { name: "전남", img: `${BASE}/map14.png` },
+  { name: "경북", img: `${BASE}/map15.png` },
+  { name: "경남", img: `${BASE}/map16.png` },
+  { name: "제주", img: `${BASE}/map17.png` },
 ];
 
 interface CareRequest {
@@ -43,14 +65,23 @@ interface CareRequest {
   };
 }
 
+function parseRole(token: string | null): string | null {
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.role || null;
+  } catch { return null; }
+}
+
 export default function FindWorkPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [careRequests, setCareRequests] = useState<CareRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [regionFilter, setRegionFilter] = useState("");
+  const [regionFilter, setRegionFilter] = useState<string[]>([]);
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -61,24 +92,29 @@ export default function FindWorkPage() {
   const [applyError, setApplyError] = useState("");
   const [applySuccess, setApplySuccess] = useState("");
   const [appliedIds, setAppliedIds] = useState<string[]>([]);
+  const [appliedStatuses, setAppliedStatuses] = useState<Record<string, string>>({});
 
   // Quick accept state
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+
+  const isCaregiver = userRole === "CAREGIVER";
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("cm_access_token");
       setIsLoggedIn(!!token);
+      setUserRole(parseRole(token));
     }
   }, []);
 
+  const regionKey = regionFilter.join(",");
   const fetchRequests = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const params: Record<string, unknown> = { status: "OPEN", page, limit: 20 };
-      if (regionFilter) {
-        params.region = regionFilter;
+      if (regionKey) {
+        params.regions = regionKey;
       }
       const res = await careRequestAPI.list(params);
       const data = res.data?.data || res.data;
@@ -89,12 +125,34 @@ export default function FindWorkPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, regionFilter]);
+  }, [page, regionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 선호지역 + 지원내역: 간병인 로그인 직후 1회만 로드
   useEffect(() => {
-    if (isLoggedIn) {
-      fetchRequests();
-    }
+    if (!isLoggedIn || !isCaregiver) return;
+    caregiverAPI.list()
+      .then((res) => {
+        const preferred: string[] = res.data?.data?.preferredRegions || [];
+        if (preferred.length > 0) setRegionFilter(preferred);
+      })
+      .catch(() => {});
+    caregiverAPI.getMyApplications()
+      .then((res) => {
+        const list: { careRequestId: string; status: string }[] = res.data?.data || [];
+        setAppliedIds(list.map((a) => a.careRequestId));
+        setAppliedStatuses(
+          list.reduce<Record<string, string>>((acc, a) => {
+            acc[a.careRequestId] = a.status;
+            return acc;
+          }, {})
+        );
+      })
+      .catch(() => {});
+  }, [isLoggedIn, isCaregiver]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 목록 조회: 페이지·지역 필터 변경 시
+  useEffect(() => {
+    if (isLoggedIn) fetchRequests();
   }, [isLoggedIn, fetchRequests]);
 
   const handleAcceptPrice = async (request: CareRequest) => {
@@ -108,6 +166,7 @@ export default function FindWorkPage() {
       });
       setApplySuccess(`${request.patient.name} 환자의 간병에 지원했습니다. 보호자가 확인 후 연락드립니다.`);
       setAppliedIds(prev => [...prev, request.id]);
+      setAppliedStatuses(prev => ({ ...prev, [request.id]: 'PENDING' }));
       fetchRequests();
     } catch (err: unknown) {
       const raw = (err as any)?.response?.data?.message || "";
@@ -148,6 +207,7 @@ export default function FindWorkPage() {
       setShowModal(false);
       setApplySuccess(`${modalTarget.patient.name} 환자의 간병에 제안(${rate.toLocaleString()}원)을 보냈습니다. 보호자가 확인 후 연락드립니다.`);
       setAppliedIds(prev => [...prev, modalTarget.id]);
+      setAppliedStatuses(prev => ({ ...prev, [modalTarget.id]: 'PENDING' }));
       fetchRequests();
     } catch (err: unknown) {
       const raw = (err as any)?.response?.data?.message || "";
@@ -231,11 +291,11 @@ export default function FindWorkPage() {
                   <FiArrowRight className="w-5 h-5" />
                 </Link>
                 <a
-                  href="tel:1555-0801"
+                  href={`tel:${SITE.phone}`}
                   className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-orange-700/50 backdrop-blur-sm text-white font-bold rounded-2xl text-sm sm:text-base hover:bg-orange-700/70 transition-all w-full sm:w-auto"
                 >
                   <FiPhone className="w-5 h-5" />
-                  전화 상담 1555-0801
+                  전화 상담 {SITE.phone}
                 </a>
               </div>
             </div>
@@ -327,26 +387,83 @@ export default function FindWorkPage() {
   // Logged-in view with care request listings
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
+
+      {/* Region selector section */}
+      <div className="bg-white border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">간병 일감 찾기</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            원하는 간병 요청에 가격을 수락하거나 역제안하세요.
-          </p>
-          {/* Region filter */}
-          <div className="mt-4 flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-700 shrink-0">지역 필터</label>
-            <select
-              className="input-field max-w-[200px] text-sm"
-              value={regionFilter}
-              onChange={(e) => { setRegionFilter(e.target.value); setPage(1); }}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">간병 일감 찾기</h1>
+              <p className="mt-0.5 text-sm text-gray-500">지역을 선택하거나 전체 일감을 확인하세요</p>
+            </div>
+            {regionFilter.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { setRegionFilter([]); setPage(1); }}
+                className="text-xs text-orange-500 font-medium hover:underline flex items-center gap-1"
+              >
+                <FiX className="w-3 h-3" /> 필터 해제
+              </button>
+            )}
+          </div>
+
+          {/* 전체 / 필터해제 버튼 */}
+          <div className="mb-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setRegionFilter([]); setPage(1); }}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
+                regionFilter.length === 0
+                  ? "bg-orange-500 border-orange-500 text-white shadow-sm shadow-orange-200"
+                  : "bg-white border-gray-200 text-gray-600 hover:border-orange-300"
+              }`}
             >
-              <option value="">전체 지역</option>
-              {REGION_OPTIONS.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
+              <FiMapPin className="w-3.5 h-3.5" />
+              전체 지역
+            </button>
+            {regionFilter.length > 0 && (
+              <span className="text-xs text-gray-400">
+                {regionFilter.join(" · ")} 선택됨
+              </span>
+            )}
+          </div>
+
+          {/* Region grid - 다중 선택 */}
+          <div className="grid grid-cols-6 sm:grid-cols-9 gap-2">
+            {REGION_CARDS.map((r) => {
+              const active = regionFilter.includes(r.name);
+              return (
+                <button
+                  key={r.name}
+                  type="button"
+                  onClick={() => {
+                    setRegionFilter(prev =>
+                      prev.includes(r.name)
+                        ? prev.filter(x => x !== r.name)
+                        : [...prev, r.name]
+                    );
+                    setPage(1);
+                  }}
+                  className={`group flex flex-col items-center gap-1 py-3 px-1 rounded-xl border transition-all ${
+                    active
+                      ? "border-orange-400 bg-orange-50 shadow-sm"
+                      : "border-gray-100 bg-white hover:border-orange-200 hover:shadow-sm"
+                  }`}
+                >
+                  <div
+                    className="w-9 h-[34px] bg-no-repeat bg-center"
+                    style={{
+                      backgroundImage: `url('${r.img}')`,
+                      backgroundSize: "100% 200%",
+                      backgroundPosition: active ? "center bottom" : "center top",
+                    }}
+                  />
+                  <span className={`text-[11px] font-bold leading-none ${active ? "text-orange-500" : "text-gray-700"}`}>
+                    {r.name}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -407,13 +524,19 @@ export default function FindWorkPage() {
                   <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <h3 className="font-semibold text-gray-900 text-base truncate">
                           {req.patient.name} 환자
                         </h3>
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-600">
                           {formatCareType(req.careType)}
                         </span>
+                        {appliedIds.includes(req.id) && (() => {
+                          const st = appliedStatuses[req.id];
+                          if (st === 'ACCEPTED') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">수락됨</span>;
+                          if (st === 'REJECTED') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">미선택</span>;
+                          return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-600">지원완료</span>;
+                        })()}
                       </div>
 
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm mt-3">
@@ -486,12 +609,33 @@ export default function FindWorkPage() {
                         </span>
                       </div>
 
-                      {/* Action buttons */}
-                      {appliedIds.includes(req.id) ? (
-                        <div className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 text-gray-500 font-medium rounded-xl text-sm">
-                          <FiCheck className="w-4 h-4" />
-                          지원 완료 - 보호자 응답 대기 중
+                      {/* Action buttons — 간병인만 */}
+                      {!isCaregiver ? (
+                        <div className="w-full text-center text-xs text-gray-400 py-2">
+                          간병인 계정으로 지원 가능
                         </div>
+                      ) : appliedIds.includes(req.id) ? (
+                        (() => {
+                          const st = appliedStatuses[req.id];
+                          if (st === 'ACCEPTED') return (
+                            <div className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-50 text-green-700 font-semibold rounded-xl text-sm border border-green-200">
+                              <FiCheck className="w-4 h-4" />
+                              수락됨 - 계약 진행 중
+                            </div>
+                          );
+                          if (st === 'REJECTED') return (
+                            <div className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 text-red-500 font-medium rounded-xl text-sm border border-red-200">
+                              <FiX className="w-4 h-4" />
+                              미선택
+                            </div>
+                          );
+                          return (
+                            <div className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-50 text-orange-600 font-medium rounded-xl text-sm border border-orange-200">
+                              <FiCheck className="w-4 h-4" />
+                              지원 완료 · 응답 대기 중
+                            </div>
+                          );
+                        })()
                       ) : (
                         <>
                           <button

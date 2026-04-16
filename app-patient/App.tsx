@@ -23,9 +23,10 @@ import * as Notifications from 'expo-notifications';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Device from 'expo-device';
 import * as SecureStore from 'expo-secure-store';
+import { APP_CONFIG } from './src/config';
 
-const DOMAIN = 'cm.phantomdesign.kr';
-const WEB_URL = `https://${DOMAIN}`;
+const DOMAIN = APP_CONFIG.domain;
+const WEB_URL = APP_CONFIG.webUrl;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -64,6 +65,7 @@ export default function App() {
   const [userToken, setUserToken] = useState('');
   const [biometricReady, setBiometricReady] = useState(false);
   const [showBiometricLogin, setShowBiometricLogin] = useState(false);
+  const [pendingTokenInjection, setPendingTokenInjection] = useState<string | null>(null);
 
   // 커스텀 모달 상태
   const [modal, setModal] = useState<{
@@ -106,18 +108,16 @@ export default function App() {
       if (result.success) {
         const savedToken = await SecureStore.getItemAsync('saved_token');
         if (savedToken) {
+          // JWT 형식 검증 (XSS 방어: JWT는 [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+ 만 허용)
+          if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(savedToken)) {
+            // 이상한 값 → SecureStore 초기화
+            await SecureStore.deleteItemAsync('saved_token');
+            return;
+          }
           setUserToken(savedToken);
           setShowBiometricLogin(false);
-          // WebView에 토큰 주입
-          setTimeout(() => {
-            if (webViewRef.current) {
-              webViewRef.current.injectJavaScript(`
-                localStorage.setItem('cm_access_token', '${savedToken}');
-                window.location.href = '/dashboard/guardian';
-                true;
-              `);
-            }
-          }, 300);
+          // WebView가 준비되면 onLoadEnd에서 주입하도록 예약
+          setPendingTokenInjection(savedToken);
         }
       }
     } catch {}
@@ -539,10 +539,10 @@ export default function App() {
               </View>
               <Ionicons name="chevron-forward" size={18} color="#ccc" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.mypageRow} onPress={() => Linking.openURL('tel:1588-0000')}>
+            <TouchableOpacity style={styles.mypageRow} onPress={() => Linking.openURL(`tel:${APP_CONFIG.phone}`)}>
               <View style={styles.mypageRowLeft}>
                 <Ionicons name="call-outline" size={20} color="#999" />
-                <Text style={styles.mypageRowText}>고객센터 (1588-0000)</Text>
+                <Text style={styles.mypageRowText}>고객센터 ({APP_CONFIG.phone})</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#ccc" />
             </TouchableOpacity>
@@ -594,7 +594,18 @@ export default function App() {
           source={{ uri: WEB_URL }}
           style={styles.webview}
           onNavigationStateChange={onNavigationChange}
-          onLoadEnd={() => setLoading(false)}
+          onLoadEnd={() => {
+            setLoading(false);
+            // 생체인증 후 대기 중인 토큰 주입
+            if (pendingTokenInjection && webViewRef.current) {
+              webViewRef.current.injectJavaScript(`
+                localStorage.setItem('cm_access_token', '${pendingTokenInjection}');
+                window.location.href = '/dashboard/guardian';
+                true;
+              `);
+              setPendingTokenInjection(null);
+            }
+          }}
           onMessage={onMessage}
           injectedJavaScript={injectedJS}
           javaScriptEnabled

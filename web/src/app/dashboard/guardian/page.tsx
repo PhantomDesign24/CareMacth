@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useState, useEffect, useCallback } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
-import { dashboardAPI, careRequestAPI, paymentAPI, guardianAPI, contractAPI } from "@/lib/api";
+import { dashboardAPI, careRequestAPI, paymentAPI, guardianAPI, contractAPI, extensionAPI, authAPI } from "@/lib/api";
 import { formatDate, formatMoney, formatCareStatus, formatContractStatus, formatPaymentStatus, formatPaymentMethod, formatCareType, formatLocation, formatMobility } from "@/lib/format";
+import { SITE } from "@/config/site";
 
 interface CareHistory {
   id: string;
@@ -12,10 +13,13 @@ interface CareHistory {
   caregiverName: string;
   startDate: string;
   endDate: string;
+  startDateRaw: string;
+  endDateRaw: string;
   status: string;
   careType: string;
   location: string;
   amount: number;
+  dailyRate: number;
   careRequestId: string;
   applicantCount: number;
   contractStatus: string;
@@ -36,8 +40,10 @@ interface PatientRaw {
   name: string;
   birthDate: string;
   gender: string;
+  consciousness: string | null;
   mobilityStatus: string;
   hasDementia: boolean;
+  dementiaLevel: string | null;
   hasInfection: boolean;
   infectionDetail: string | null;
   weight: number | null;
@@ -76,13 +82,15 @@ interface PatientFormData {
   name: string;
   birthDate: string;
   gender: string;
+  consciousness: string;
   mobilityStatus: string;
   hasDementia: boolean;
+  dementiaLevel: string;
   hasInfection: boolean;
   infectionDetail: string;
   weight: string;
   height: string;
-  diagnosis: string;
+  diagnosis: string[];
   medicalNotes: string;
 }
 
@@ -90,18 +98,45 @@ const emptyPatientForm: PatientFormData = {
   name: '',
   birthDate: '',
   gender: 'M',
+  consciousness: '',
   mobilityStatus: 'INDEPENDENT',
   hasDementia: false,
+  dementiaLevel: '',
   hasInfection: false,
   infectionDetail: '',
   weight: '',
   height: '',
-  diagnosis: '',
+  diagnosis: [],
   medicalNotes: '',
 };
 
-export default function GuardianDashboard() {
-  const [activeTab, setActiveTab] = useState<"history" | "payments" | "patients" | "referral">("history");
+const DIAGNOSIS_CATEGORIES = [
+  { label: "감염성 질환", items: ["CRE", "VRE", "MRSA", "결핵", "COVID-19", "간염(A/B/C형)", "HIV/AIDS", "패혈증"] },
+  { label: "암/종양", items: ["위암", "폐암", "간암", "대장암", "유방암", "췌장암", "갑상선암", "전립선암", "방광암", "자궁암", "뇌종양", "혈액암(백혈병)", "림프종", "기타 암"] },
+  { label: "뇌/신경계 질환", items: ["뇌졸중(뇌경색/뇌출혈)", "치매(알츠하이머)", "파킨슨병", "뇌손상/두부외상", "간질(뇌전증)", "척수손상", "다발성경화증", "근위축성측삭경화증(ALS)"] },
+  { label: "근골격계 질환", items: ["골절(대퇴골/척추/골반 등)", "관절염", "디스크(추간판탈출증)", "골다공증", "인공관절수술", "척추수술 후"] },
+  { label: "심혈관 질환", items: ["심근경색", "심부전", "부정맥", "협심증", "고혈압", "대동맥질환"] },
+  { label: "호흡기 질환", items: ["폐렴", "만성폐쇄성폐질환(COPD)", "천식", "폐섬유증", "기관지확장증"] },
+  { label: "소화기 질환", items: ["간경화", "장폐색", "크론병", "궤양성대장염", "췌장염"] },
+  { label: "내분비/대사 질환", items: ["당뇨병(1형/2형)", "갑상선질환", "신부전/투석"] },
+  { label: "기타", items: ["욕창", "연하장애(삼킴곤란)", "인공호흡기", "기관절개 상태", "비위관(L-tube)", "장루/요루", "수술 후 회복", "노환/노쇠", "기타(직접입력)"] },
+];
+
+export default function GuardianDashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <GuardianDashboard />
+    </Suspense>
+  );
+}
+
+function GuardianDashboard() {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const validTabs = ["history", "payments", "patients", "referral", "settings"] as const;
+  type TabKey = typeof validTabs[number];
+  const tabFromUrl = searchParams.get("tab") as TabKey | null;
+  const [activeTab, setActiveTab] = useState<TabKey>(validTabs.includes(tabFromUrl as TabKey) ? (tabFromUrl as TabKey) : "history");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -113,6 +148,45 @@ export default function GuardianDashboard() {
   const [cancelContractId, setCancelContractId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
+
+  // Extend contract modal state
+  const [extendTarget, setExtendTarget] = useState<CareHistory | null>(null);
+  const [extendEndDate, setExtendEndDate] = useState("");
+  const [extendNewCaregiver, setExtendNewCaregiver] = useState(false);
+  const [extendLoading, setExtendLoading] = useState(false);
+  const [extendError, setExtendError] = useState("");
+
+  // Delete account modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== "탈퇴합니다") {
+      setDeleteError('"탈퇴합니다"를 정확히 입력해주세요.');
+      return;
+    }
+    setDeleteLoading(true);
+    setDeleteError("");
+    try {
+      await authAPI.deleteAccount(deletePassword, deleteReason);
+      alert("회원 탈퇴가 완료되었습니다. 그동안 이용해주셔서 감사합니다.");
+      localStorage.removeItem("cm_access_token");
+      localStorage.removeItem("cm_refresh_token");
+      window.location.href = "/";
+    } catch (err: unknown) {
+      const message =
+        (err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : null) || "탈퇴 처리 중 오류가 발생했습니다.";
+      setDeleteError(message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   // Patient modal state
   const [showPatientModal, setShowPatientModal] = useState(false);
@@ -171,8 +245,10 @@ export default function GuardianDashboard() {
             name: p.name,
             birthDate: p.birthDate ? new Date(p.birthDate).toISOString().split('T')[0] : '',
             gender: p.gender || 'M',
+            consciousness: p.consciousness || null,
             mobilityStatus: p.mobilityStatus || 'INDEPENDENT',
             hasDementia: p.hasDementia ?? false,
+            dementiaLevel: p.dementiaLevel || null,
             hasInfection: p.hasInfection ?? false,
             infectionDetail: p.infectionDetail || null,
             weight: p.weight,
@@ -189,10 +265,13 @@ export default function GuardianDashboard() {
         caregiverName: c.caregiver?.user?.name || '-',
         startDate: formatDate(c.startDate),
         endDate: formatDate(c.endDate),
+        startDateRaw: c.startDate,
+        endDateRaw: c.endDate,
         status: formatContractStatus(c.status),
         careType: formatCareType(c.careRequest?.careType || ''),
         location: formatLocation(c.careRequest?.location || ''),
         amount: c.totalAmount || 0,
+        dailyRate: c.dailyRate || 0,
         careRequestId: c.careRequest?.id || c.careRequestId || '',
         applicantCount: c.careRequest?._count?.applications ?? c.careRequest?.applications?.length ?? 0,
         contractStatus: c.status || '',
@@ -229,6 +308,13 @@ export default function GuardianDashboard() {
 
   const referralCode = summary?.referralCode ?? "";
 
+  const handleTabChange = (tab: TabKey) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tab);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
   const copyReferralCode = () => {
     navigator.clipboard.writeText(referralCode);
     alert("추천인 코드가 복사되었습니다.");
@@ -248,13 +334,15 @@ export default function GuardianDashboard() {
       name: patient.raw.name,
       birthDate: patient.raw.birthDate,
       gender: patient.raw.gender,
+      consciousness: (patient.raw as any).consciousness || '',
       mobilityStatus: patient.raw.mobilityStatus,
       hasDementia: patient.raw.hasDementia,
+      dementiaLevel: (patient.raw as any).dementiaLevel || '',
       hasInfection: patient.raw.hasInfection,
       infectionDetail: patient.raw.infectionDetail || '',
       weight: patient.raw.weight != null ? String(patient.raw.weight) : '',
       height: patient.raw.height != null ? String(patient.raw.height) : '',
-      diagnosis: patient.raw.diagnosis || '',
+      diagnosis: patient.raw.diagnosis ? patient.raw.diagnosis.split(', ').filter(Boolean) : [],
       medicalNotes: patient.raw.medicalNotes || '',
     });
     setPatientFormError("");
@@ -267,7 +355,7 @@ export default function GuardianDashboard() {
     setPatientFormError("");
   };
 
-  const handlePatientFormChange = (field: keyof PatientFormData, value: string | boolean) => {
+  const handlePatientFormChange = (field: keyof PatientFormData, value: string | boolean | string[]) => {
     setPatientForm(prev => ({ ...prev, [field]: value }));
   };
 
@@ -292,13 +380,15 @@ export default function GuardianDashboard() {
         name: patientForm.name.trim(),
         birthDate: patientForm.birthDate,
         gender: patientForm.gender,
+        consciousness: patientForm.consciousness || null,
         mobilityStatus: patientForm.mobilityStatus,
         hasDementia: patientForm.hasDementia,
+        dementiaLevel: patientForm.hasDementia ? (patientForm.dementiaLevel || null) : null,
         hasInfection: patientForm.hasInfection,
         infectionDetail: patientForm.hasInfection ? patientForm.infectionDetail : null,
         weight: patientForm.weight ? parseFloat(patientForm.weight) : null,
         height: patientForm.height ? parseFloat(patientForm.height) : null,
-        diagnosis: patientForm.diagnosis || null,
+        diagnosis: patientForm.diagnosis.length > 0 ? patientForm.diagnosis.join(', ') : null,
         medicalNotes: patientForm.medicalNotes || null,
       };
 
@@ -347,18 +437,76 @@ export default function GuardianDashboard() {
     }
   };
 
+  const openExtendModal = (care: CareHistory) => {
+    setExtendTarget(care);
+    // 기본값: 현재 종료일의 7일 후
+    const base = new Date(care.endDateRaw);
+    base.setDate(base.getDate() + 7);
+    setExtendEndDate(base.toISOString().slice(0, 10));
+    setExtendNewCaregiver(false);
+    setExtendError("");
+  };
+
+  const handleExtendContract = async () => {
+    if (!extendTarget || !extendEndDate) {
+      setExtendError("새 종료일을 선택해주세요.");
+      return;
+    }
+    const curEnd = new Date(extendTarget.endDateRaw);
+    const newEnd = new Date(extendEndDate);
+    if (newEnd <= curEnd) {
+      setExtendError("새 종료일은 기존 종료일 이후여야 합니다.");
+      return;
+    }
+    const extraDays = Math.ceil((newEnd.getTime() - curEnd.getTime()) / (1000 * 60 * 60 * 24));
+    const additionalAmount = extendTarget.dailyRate * extraDays;
+
+    setExtendLoading(true);
+    setExtendError("");
+    try {
+      await extensionAPI.extend(extendTarget.id, {
+        newEndDate: new Date(extendEndDate).toISOString(),
+        isNewCaregiver: extendNewCaregiver,
+        additionalAmount,
+      });
+      alert(
+        extendNewCaregiver
+          ? "연장 요청이 접수되었습니다. 새 간병인 공고가 올라갔습니다."
+          : `연장 완료되었습니다. (추가 ${extraDays}일 · ${additionalAmount.toLocaleString()}원)`
+      );
+      setExtendTarget(null);
+      await fetchData();
+    } catch (err: unknown) {
+      const message =
+        (err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : null) || "연장 요청 중 오류가 발생했습니다.";
+      setExtendError(message);
+    } finally {
+      setExtendLoading(false);
+    }
+  };
+
   const statusBadge = (status: string) => {
-    switch (status) {
+    const s = (status || "").toLowerCase();
+    switch (s) {
       case "active":
+      case "진행 중":
         return <span className="badge-success">진행 중</span>;
       case "completed":
+      case "완료":
         return <span className="badge-primary">완료</span>;
       case "cancelled":
+      case "취소":
         return <span className="badge-danger">취소</span>;
       case "pending":
+      case "대기 중":
         return <span className="badge-warning">대기 중</span>;
+      case "extended":
+      case "연장됨":
+        return <span className="badge-primary">연장됨</span>;
       default:
-        return <span className="badge-primary">{status}</span>;
+        return <span className="badge-primary">{formatContractStatus(status)}</span>;
     }
   };
 
@@ -376,6 +524,7 @@ export default function GuardianDashboard() {
     { key: "payments" as const, label: "결제 내역" },
     { key: "patients" as const, label: "환자 정보" },
     { key: "referral" as const, label: "추천인 코드" },
+    { key: "settings" as const, label: "계정 설정" },
   ];
 
   if (loading) {
@@ -460,7 +609,7 @@ export default function GuardianDashboard() {
             <button
               key={tab.key}
               type="button"
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => handleTabChange(tab.key)}
               className={`flex-1 min-w-[100px] px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                 activeTab === tab.key
                   ? "bg-primary-500 text-white shadow-sm"
@@ -538,8 +687,7 @@ export default function GuardianDashboard() {
                           <button
                             type="button"
                             className="btn-accent text-sm px-4 py-2"
-                            // TODO: POST /api/care-requests/:id/extend API 연동 후 온라인 연장 처리
-                            onClick={() => alert("간병 연장은 1555-0801로 문의해주세요.")}
+                            onClick={() => openExtendModal(care)}
                           >
                             연장 요청
                           </button>
@@ -630,20 +778,19 @@ export default function GuardianDashboard() {
                       {/* 기본 정보 */}
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                         <div>
-                          <span className="text-gray-500">나이</span>
-                          <p className="font-medium text-gray-900">{patient.age}세</p>
+                          <span className="text-gray-500">생년월일</span>
+                          <p className="font-medium text-gray-900">
+                            {patient.raw.birthDate || '-'}
+                            {patient.age > 0 && <span className="text-gray-400 ml-1">({patient.age}세)</span>}
+                          </p>
                         </div>
                         <div>
                           <span className="text-gray-500">성별</span>
-                          <p className="font-medium text-gray-900">{patient.gender}</p>
+                          <p className="font-medium text-gray-900">{patient.gender === '여' ? '여성' : '남성'}</p>
                         </div>
                         <div>
-                          <span className="text-gray-500">키</span>
-                          <p className="font-medium text-gray-900">{patient.height}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">체중</span>
-                          <p className="font-medium text-gray-900">{patient.weight}</p>
+                          <span className="text-gray-500">키 / 체중</span>
+                          <p className="font-medium text-gray-900">{patient.height} / {patient.weight}</p>
                         </div>
                         <div>
                           <span className="text-gray-500">진단명</span>
@@ -654,8 +801,21 @@ export default function GuardianDashboard() {
                           <p className="font-medium text-gray-900">{patient.mobility}</p>
                         </div>
                         <div>
+                          <span className="text-gray-500">의식 상태</span>
+                          <p className="font-medium text-gray-900">
+                            {patient.raw.consciousness === 'clear' ? '명료' : patient.raw.consciousness === 'drowsy' ? '기면' : patient.raw.consciousness === 'stupor' ? '혼미' : patient.raw.consciousness === 'coma' ? '혼수' : '-'}
+                          </p>
+                        </div>
+                        <div>
                           <span className="text-gray-500">치매</span>
-                          <p className="font-medium text-gray-900">{patient.dementia}</p>
+                          <p className="font-medium text-gray-900">
+                            {patient.dementia}
+                            {patient.raw.hasDementia && patient.raw.dementiaLevel && (
+                              <span className="text-gray-500 ml-1">
+                                ({patient.raw.dementiaLevel === 'mild' ? '경증' : patient.raw.dementiaLevel === 'moderate' ? '중등도' : '중증'})
+                              </span>
+                            )}
+                          </p>
                         </div>
                         <div>
                           <span className="text-gray-500">감염병</span>
@@ -683,6 +843,32 @@ export default function GuardianDashboard() {
                   등록된 환자 정보가 없습니다.
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Account Settings */}
+          {activeTab === "settings" && (
+            <div className="p-6 max-w-2xl mx-auto space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">계정 설정</h3>
+                <p className="text-sm text-gray-500">계정 관련 설정을 변경합니다.</p>
+              </div>
+
+              <div className="border border-red-200 bg-red-50 rounded-2xl p-6">
+                <h4 className="font-bold text-red-700 mb-2">회원 탈퇴</h4>
+                <p className="text-sm text-red-600 mb-4 leading-relaxed">
+                  회원 탈퇴 시 계정이 즉시 비활성화되며, 개인정보는 익명 처리됩니다.<br />
+                  관련 법령에 따라 간병 이력·결제 내역은 일정 기간 보관될 수 있습니다.<br />
+                  <strong>진행 중인 계약이 있으면 탈퇴할 수 없습니다.</strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalOpen(true)}
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-xl transition-colors"
+                >
+                  회원 탈퇴하기
+                </button>
+              </div>
             </div>
           )}
 
@@ -714,6 +900,97 @@ export default function GuardianDashboard() {
           )}
         </div>
       </div>
+
+      {/* Delete Account Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-red-700 mb-4">회원 탈퇴</h3>
+
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700 mb-4">
+              <p className="font-semibold mb-2">⚠️ 탈퇴 전 꼭 확인해주세요</p>
+              <ul className="space-y-1 text-xs list-disc list-inside">
+                <li>계정이 즉시 비활성화됩니다</li>
+                <li>개인정보는 익명 처리됩니다</li>
+                <li>동일 이메일/전화번호로 다시 가입할 수 없습니다</li>
+                <li>간병 이력·결제 내역은 법령에 따라 일정 기간 보관됩니다</li>
+                <li>보유 포인트는 모두 소멸됩니다</li>
+              </ul>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  비밀번호 확인 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="현재 비밀번호"
+                  className="input-field"
+                  autoComplete="current-password"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  탈퇴 사유 <span className="text-gray-400 text-xs">(선택)</span>
+                </label>
+                <textarea
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  placeholder="서비스 개선에 참고됩니다"
+                  rows={2}
+                  maxLength={500}
+                  className="input-field resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  확인 문구 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder='"탈퇴합니다" 를 입력하세요'
+                  className="input-field"
+                />
+              </div>
+              {deleteError && (
+                <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">
+                  {deleteError}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setDeletePassword("");
+                  setDeleteReason("");
+                  setDeleteConfirmText("");
+                  setDeleteError("");
+                }}
+                disabled={deleteLoading}
+                className="btn-secondary flex-1"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading || !deletePassword || deleteConfirmText !== "탈퇴합니다"}
+                className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-gray-300 text-white font-medium rounded-xl transition-colors"
+              >
+                {deleteLoading ? "처리 중..." : "탈퇴 확정"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Contract Cancel Modal */}
       {cancelContractId && (
@@ -768,233 +1045,301 @@ export default function GuardianDashboard() {
         </div>
       )}
 
-      {/* Patient Registration/Edit Modal */}
-      {showPatientModal && (
+      {/* Extend Contract Modal */}
+      {extendTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-gray-900">
-                  {editingPatientId ? '환자 정보 수정' : '환자 등록'}
-                </h2>
-                <button
-                  type="button"
-                  onClick={closePatientModal}
-                  className="text-gray-400 hover:text-gray-600 text-xl leading-none"
-                >
-                  &times;
-                </button>
-              </div>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">간병 연장 요청</h3>
+              <button
+                type="button"
+                onClick={() => setExtendTarget(null)}
+                className="w-7 h-7 rounded-full text-gray-400 hover:bg-gray-100 text-lg leading-none"
+              >
+                ×
+              </button>
             </div>
 
-            <form onSubmit={handlePatientFormSubmit} className="p-6 space-y-5">
+            <div className="space-y-3 mb-5">
+              <div className="bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                <div className="flex justify-between text-gray-500">
+                  <span>환자</span>
+                  <span className="text-gray-700 font-medium">{extendTarget.patientName}</span>
+                </div>
+                <div className="flex justify-between text-gray-500 mt-1">
+                  <span>현재 종료일</span>
+                  <span className="text-gray-700 font-medium">{extendTarget.endDate}</span>
+                </div>
+                <div className="flex justify-between text-gray-500 mt-1">
+                  <span>일당</span>
+                  <span className="text-gray-700 font-medium">{extendTarget.dailyRate.toLocaleString()}원</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  새 종료일 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={extendEndDate}
+                  onChange={(e) => setExtendEndDate(e.target.value)}
+                  min={new Date(new Date(extendTarget.endDateRaw).getTime() + 86400000).toISOString().slice(0, 10)}
+                  className="input-field"
+                />
+                {extendEndDate && (() => {
+                  const extra = Math.ceil(
+                    (new Date(extendEndDate).getTime() - new Date(extendTarget.endDateRaw).getTime()) /
+                      (1000 * 60 * 60 * 24)
+                  );
+                  if (extra <= 0) return null;
+                  const total = extra * extendTarget.dailyRate;
+                  return (
+                    <p className="mt-2 text-sm text-orange-600 font-medium">
+                      추가 {extra}일 · {total.toLocaleString()}원
+                    </p>
+                  );
+                })()}
+              </div>
+
+              <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="extendNewCg"
+                  checked={extendNewCaregiver}
+                  onChange={(e) => setExtendNewCaregiver(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-orange-500"
+                />
+                <label htmlFor="extendNewCg" className="text-sm text-gray-700 cursor-pointer">
+                  <span className="font-medium">새로운 간병인 요청</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    체크 시 기존 간병인 대신 공고를 다시 올려 지원자 중 선택합니다.
+                  </p>
+                </label>
+              </div>
+
+              {extendError && (
+                <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{extendError}</div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setExtendTarget(null)}
+                disabled={extendLoading}
+                className="btn-secondary flex-1"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleExtendContract}
+                disabled={extendLoading || !extendEndDate}
+                className="flex-1 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white font-medium rounded-xl transition-colors"
+              >
+                {extendLoading ? "처리 중..." : "연장 요청"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Patient Registration/Edit Modal */}
+      {showPatientModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4">
+          <div className="bg-white w-full sm:rounded-2xl shadow-xl sm:max-w-lg flex flex-col max-h-[95vh] sm:max-h-[88vh] rounded-t-2xl">
+            {/* Sticky header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+              <h2 className="text-base font-bold text-gray-900">
+                {editingPatientId ? '환자 정보 수정' : '환자 등록'}
+              </h2>
+              <button type="button" onClick={closePatientModal}
+                className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 text-lg leading-none">
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handlePatientFormSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="overflow-y-auto flex-1 px-4 py-3 space-y-4">
               {patientFormError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
                   {patientFormError}
                 </div>
               )}
 
-              {/* 기본 정보 섹션 */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-3 pb-2 border-b border-gray-200">기본 정보</h3>
-                <div className="space-y-4">
-                  {/* 이름 */}
+              {/* 기본 정보 */}
+              <section>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">기본 정보</p>
+                <div className="space-y-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      이름 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={patientForm.name}
+                    <label className="block text-xs font-medium text-gray-600 mb-1">이름 <span className="text-red-500">*</span></label>
+                    <input type="text" required value={patientForm.name}
                       onChange={(e) => handlePatientFormChange('name', e.target.value)}
-                      placeholder="환자 이름"
-                      className="input-field"
-                    />
+                      placeholder="환자 이름" className="input-field text-sm py-2" />
                   </div>
-
-                  {/* 생년월일 + 성별 */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        생년월일 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={patientForm.birthDate}
+                      <label className="block text-xs font-medium text-gray-600 mb-1">생년월일 <span className="text-red-500">*</span></label>
+                      <input type="date" required value={patientForm.birthDate}
                         onChange={(e) => handlePatientFormChange('birthDate', e.target.value)}
-                        className="input-field"
-                      />
+                        className="input-field text-sm py-2" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        성별 <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        required
-                        value={patientForm.gender}
-                        onChange={(e) => handlePatientFormChange('gender', e.target.value)}
-                        className="input-field"
-                      >
-                        <option value="M">남성</option>
-                        <option value="F">여성</option>
-                      </select>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">성별 <span className="text-red-500">*</span></label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[{ value: 'M', label: '남성' }, { value: 'F', label: '여성' }].map(opt => (
+                          <label key={opt.value} className={`flex items-center justify-center py-2 rounded-lg border-2 cursor-pointer text-xs font-medium transition-all ${patientForm.gender === opt.value ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                            <input type="radio" name="gender" value={opt.value} checked={patientForm.gender === opt.value}
+                              onChange={(e) => handlePatientFormChange('gender', e.target.value)} className="sr-only" />
+                            {opt.label}
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
-
-                  {/* 키 / 체중 */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">키 (cm)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="300"
-                        value={patientForm.height}
+                      <label className="block text-xs font-medium text-gray-600 mb-1">키 (cm)</label>
+                      <input type="number" step="0.1" min="0" max="300" value={patientForm.height}
                         onChange={(e) => handlePatientFormChange('height', e.target.value)}
-                        placeholder="예: 170"
-                        className="input-field"
-                      />
+                        placeholder="예: 170" className="input-field text-sm py-2" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">몸무게 (kg)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="300"
-                        value={patientForm.weight}
+                      <label className="block text-xs font-medium text-gray-600 mb-1">체중 (kg)</label>
+                      <input type="number" step="0.1" min="0" max="300" value={patientForm.weight}
                         onChange={(e) => handlePatientFormChange('weight', e.target.value)}
-                        placeholder="예: 65"
-                        className="input-field"
-                      />
+                        placeholder="예: 65" className="input-field text-sm py-2" />
                     </div>
                   </div>
                 </div>
-              </div>
+              </section>
 
-              {/* 건강 상태 섹션 */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-3 pb-2 border-b border-gray-200">건강 상태</h3>
-                <div className="space-y-4">
-                  {/* 진단명 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">진단명</label>
-                    <input
-                      type="text"
-                      value={patientForm.diagnosis}
-                      onChange={(e) => handlePatientFormChange('diagnosis', e.target.value)}
-                      placeholder="예: 뇌졸중, 치매, 골절 등"
-                      className="input-field"
-                    />
-                  </div>
-
-                  {/* 거동상태 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      거동상태 <span className="text-red-500">*</span>
+              {/* 의식 상태 */}
+              <section>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">의식 상태 <span className="text-red-500">*</span></p>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[{ value: 'clear', label: '명료' }, { value: 'drowsy', label: '기면' }, { value: 'stupor', label: '혼미' }, { value: 'coma', label: '혼수' }].map(opt => (
+                    <label key={opt.value} className={`flex items-center justify-center py-2 rounded-lg border-2 cursor-pointer text-xs font-medium transition-all ${patientForm.consciousness === opt.value ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                      <input type="radio" name="consciousness" value={opt.value} checked={patientForm.consciousness === opt.value}
+                        onChange={(e) => handlePatientFormChange('consciousness', e.target.value)} className="sr-only" />
+                      {opt.label}
                     </label>
-                    <select
-                      required
-                      value={patientForm.mobilityStatus}
-                      onChange={(e) => handlePatientFormChange('mobilityStatus', e.target.value)}
-                      className="input-field"
-                    >
-                      <option value="INDEPENDENT">독립 보행</option>
-                      <option value="PARTIAL">부분 도움</option>
-                      <option value="DEPENDENT">완전 의존</option>
-                    </select>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {patientForm.mobilityStatus === 'INDEPENDENT' && '스스로 보행 및 일상생활이 가능한 상태'}
-                      {patientForm.mobilityStatus === 'PARTIAL' && '이동 시 부분적인 도움이 필요한 상태'}
-                      {patientForm.mobilityStatus === 'DEPENDENT' && '이동 및 일상생활 전반에 도움이 필요한 상태'}
-                    </p>
-                  </div>
+                  ))}
+                </div>
+              </section>
 
-                  {/* 치매 여부 */}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="hasDementia"
-                      checked={patientForm.hasDementia}
-                      onChange={(e) => handlePatientFormChange('hasDementia', e.target.checked)}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <label htmlFor="hasDementia" className="text-sm font-medium text-gray-700">
-                      치매 여부
+              {/* 거동 상태 */}
+              <section>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">거동 상태 <span className="text-red-500">*</span></p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { value: 'INDEPENDENT', label: '독립 보행' },
+                    { value: 'PARTIAL', label: '부분 도움' },
+                    { value: 'DEPENDENT', label: '완전 의존' },
+                  ].map(opt => (
+                    <label key={opt.value} className={`flex items-center justify-center py-2.5 rounded-lg border-2 cursor-pointer text-xs font-semibold transition-all ${patientForm.mobilityStatus === opt.value ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                      <input type="radio" name="mobilityStatus" value={opt.value} checked={patientForm.mobilityStatus === opt.value}
+                        onChange={(e) => handlePatientFormChange('mobilityStatus', e.target.value)} className="sr-only" />
+                      {opt.label}
                     </label>
-                  </div>
+                  ))}
+                </div>
+              </section>
 
-                  {/* 감염병 여부 */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="hasInfection"
-                        checked={patientForm.hasInfection}
-                        onChange={(e) => handlePatientFormChange('hasInfection', e.target.checked)}
-                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                      />
-                      <label htmlFor="hasInfection" className="text-sm font-medium text-gray-700">
-                        감염병 여부
-                      </label>
-                    </div>
-                    {patientForm.hasInfection && (
-                      <div className="ml-6">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">감염병 상세</label>
-                        <input
-                          type="text"
-                          value={patientForm.infectionDetail}
-                          onChange={(e) => handlePatientFormChange('infectionDetail', e.target.value)}
-                          placeholder="예: MRSA, 결핵, 코로나19 등"
-                          className="input-field"
-                        />
+              {/* 진단명 */}
+              <section>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">진단명 / 질환</p>
+                {patientForm.diagnosis.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {patientForm.diagnosis.map(d => (
+                      <span key={d} className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-700 text-xs font-medium rounded-md">
+                        {d}
+                        <button type="button" onClick={() => handlePatientFormChange('diagnosis', patientForm.diagnosis.filter(x => x !== d))}
+                          className="text-primary-400 hover:text-primary-700 leading-none">&times;</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
+                  {DIAGNOSIS_CATEGORIES.map(cat => (
+                    <div key={cat.label} className="border-b border-gray-100 last:border-0">
+                      <div className="px-2.5 py-1 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-wider sticky top-0">{cat.label}</div>
+                      <div className="px-2.5 py-1.5 flex flex-wrap gap-1">
+                        {cat.items.map(item => {
+                          const selected = patientForm.diagnosis.includes(item);
+                          return (
+                            <button key={item} type="button"
+                              onClick={() => handlePatientFormChange('diagnosis', selected ? patientForm.diagnosis.filter(x => x !== item) : [...patientForm.diagnosis, item])}
+                              className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${selected ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                              {item}
+                            </button>
+                          );
+                        })}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* 특이 질환 */}
+              <section>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">특이 질환</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={patientForm.hasDementia}
+                        onChange={(e) => handlePatientFormChange('hasDementia', e.target.checked)}
+                        className="w-4 h-4 text-primary-500 border-gray-300 rounded" />
+                      <span className="text-sm text-gray-700">치매 증상이 있습니다</span>
+                    </label>
+                    {patientForm.hasDementia && (
+                      <select value={patientForm.dementiaLevel}
+                        onChange={(e) => handlePatientFormChange('dementiaLevel', e.target.value)}
+                        className="input-field text-sm py-2 mt-1.5 ml-6 w-[calc(100%-1.5rem)]">
+                        <option value="">치매 정도 선택</option>
+                        <option value="mild">경증 (일상생활 가능)</option>
+                        <option value="moderate">중등도 (도움 필요)</option>
+                        <option value="severe">중증 (지속적 관리 필요)</option>
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={patientForm.hasInfection}
+                        onChange={(e) => handlePatientFormChange('hasInfection', e.target.checked)}
+                        className="w-4 h-4 text-primary-500 border-gray-300 rounded" />
+                      <span className="text-sm text-gray-700">감염성 질환이 있습니다</span>
+                    </label>
+                    {patientForm.hasInfection && (
+                      <input type="text" value={patientForm.infectionDetail}
+                        onChange={(e) => handlePatientFormChange('infectionDetail', e.target.value)}
+                        placeholder="예: MRSA, 결핵 등" className="input-field text-sm py-2 mt-1.5 ml-6 w-[calc(100%-1.5rem)]" />
                     )}
                   </div>
                 </div>
-              </div>
+              </section>
 
-              {/* 의료 특이사항 섹션 */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-3 pb-2 border-b border-gray-200">추가 정보</h3>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">의료 특이사항</label>
-                  <textarea
-                    value={patientForm.medicalNotes}
-                    onChange={(e) => handlePatientFormChange('medicalNotes', e.target.value)}
-                    placeholder="투약 중인 약물, 알레르기, 주의사항 등을 입력해주세요"
-                    rows={3}
-                    className="input-field resize-none"
-                    maxLength={1000}
-                  />
-                  <p className="text-xs text-gray-400 mt-1">
-                    {patientForm.medicalNotes.length}/1000자
-                  </p>
-                </div>
-              </div>
+              {/* 의료 특이사항 */}
+              <section className="pb-1">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">의료 특이사항</p>
+                <textarea value={patientForm.medicalNotes}
+                  onChange={(e) => handlePatientFormChange('medicalNotes', e.target.value)}
+                  placeholder="투약 중인 약물, 알레르기, 주의사항 등"
+                  rows={2} className="input-field resize-none text-sm py-2" maxLength={1000} />
+                <p className="text-[10px] text-gray-400 mt-0.5 text-right">{patientForm.medicalNotes.length}/1000</p>
+              </section>
+            </div>
 
-              {/* Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={closePatientModal}
-                  className="btn-secondary flex-1"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  disabled={patientFormLoading}
-                  className="btn-primary flex-1"
-                >
-                  {patientFormLoading
-                    ? '저장 중...'
-                    : editingPatientId ? '수정하기' : '등록하기'}
-                </button>
-              </div>
+            {/* Sticky footer */}
+            <div className="flex gap-2 px-4 py-3 border-t border-gray-100 bg-white shrink-0 rounded-b-2xl">
+              <button type="button" onClick={closePatientModal} className="btn-secondary flex-1 text-sm py-2.5">
+                취소
+              </button>
+              <button type="submit" disabled={patientFormLoading} className="btn-primary flex-1 text-sm py-2.5">
+                {patientFormLoading ? '저장 중...' : editingPatientId ? '수정하기' : '등록하기'}
+              </button>
+            </div>
             </form>
           </div>
         </div>

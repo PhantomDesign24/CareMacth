@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FF922E"
+      "backgroundColor": "#FFFFFF"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
@@ -18,13 +18,18 @@
       "infoPlist": {
         "NSFaceIDUsageDescription": "생체 인증으로 빠르게 로그인합니다.",
         "NSLocationWhenInUseUsageDescription": "간병 위치 확인을 위해 위치 정보가 필요합니다.",
+        "NSCameraUsageDescription": "환자 관련 이미지 업로드를 위해 카메라 접근이 필요합니다.",
+        "NSPhotoLibraryUsageDescription": "환자 관련 이미지 업로드를 위해 사진 접근이 필요합니다.",
         "UIBackgroundModes": ["remote-notification"]
+      },
+      "entitlements": {
+        "aps-environment": "production"
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FF922E"
+        "backgroundColor": "#FFFFFF"
       },
       "googleServicesFile": "./google-services.json",
       "package": "kr.carematch.patient",

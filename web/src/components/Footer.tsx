@@ -10,6 +10,7 @@ import {
   FaInstagram,
   FaComment,
 } from "react-icons/fa";
+import { SITE } from "@/config/site";
 
 export default function Footer() {
   return (
@@ -169,11 +170,11 @@ export default function Footer() {
             <ul className="space-y-3">
               <li>
                 <a
-                  href="tel:1555-0801"
+                  href={`tel:${SITE.phone}`}
                   className="flex items-center gap-2 text-lg sm:text-xl font-bold text-primary-400 hover:text-primary-300 transition-colors"
                 >
                   <FiPhone className="w-5 h-5" />
-                  1555-0801
+                  {SITE.phone}
                 </a>
               </li>
               <li className="flex items-center gap-2 text-sm text-gray-400">

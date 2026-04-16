@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { authenticate, authorize } from '../middlewares/auth';
-import { upload } from '../middlewares/upload';
+import { upload, handleUploadError } from '../middlewares/upload';
 import * as caregiverController from '../controllers/caregiverController';
 
 const router = Router();
@@ -41,5 +41,17 @@ router.get('/penalties', caregiverController.getPenalties);
 
 // GET /activity - 활동 이력
 router.get('/activity', caregiverController.getActivity);
+
+// GET /applications - 내가 지원한 요청 목록
+router.get('/applications', caregiverController.getMyApplications);
+
+// POST /criminal-check - 범죄이력 확인서 업로드
+router.post('/criminal-check', upload.single('document'), handleUploadError, caregiverController.uploadCriminalCheck);
+
+// POST /id-card - 신분증 업로드
+router.post('/id-card', upload.single('image'), handleUploadError, caregiverController.uploadIdCard);
+
+// 라우트 전체에 업로드 에러 핸들러 적용
+router.use(handleUploadError);
 
 export default router;

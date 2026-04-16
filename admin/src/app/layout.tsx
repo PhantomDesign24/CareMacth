@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import { useState, useEffect, useCallback } from "react";
 import { getToken, setToken, clearToken, login } from "@/lib/api";
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
+import { ADMIN_SITE } from "@/config/site";
 
 function LoginForm({ onLogin }: { onLogin: (token: string) => void }) {
   const [email, setEmail] = useState("");
@@ -203,6 +204,7 @@ export default function RootLayout({
   if (authenticated === null) {
     return (
       <html lang="ko">
+        <AdminHead />
         <body>
           <div className="flex min-h-screen items-center justify-center">
             <div className="flex flex-col items-center gap-3">
@@ -218,6 +220,7 @@ export default function RootLayout({
   if (!authenticated) {
     return (
       <html lang="ko">
+        <AdminHead />
         <body>
           <LoginForm onLogin={handleLogin} />
         </body>
@@ -227,14 +230,25 @@ export default function RootLayout({
 
   return (
     <html lang="ko">
-      <head>
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-      </head>
+      <AdminHead />
       <body>
         <AuthenticatedLayout onLogout={handleLogout}>
           {children}
         </AuthenticatedLayout>
       </body>
     </html>
+  );
+}
+
+function AdminHead() {
+  return (
+    <head>
+      <title>{ADMIN_SITE.title}</title>
+      <meta name="description" content={ADMIN_SITE.description} />
+      <meta name="robots" content="noindex, nofollow" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <link rel="icon" href="/admin/favicon.ico" />
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    </head>
   );
 }

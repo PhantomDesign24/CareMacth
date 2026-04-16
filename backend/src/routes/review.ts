@@ -18,4 +18,7 @@ router.post('/', [
 // GET /caregiver/:caregiverId - 간병인 리뷰 조회
 router.get('/caregiver/:caregiverId', reviewController.getCaregiverReviews);
 
+// GET /my - 내가 받은 리뷰 (간병인)
+router.get('/my', reviewController.getMyReceivedReviews);
+
 export default router;

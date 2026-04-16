@@ -24,6 +24,7 @@ import {
   FaSearch,
   FaHandshake,
 } from "react-icons/fa";
+import { SITE } from "@/config/site";
 
 /* ------------------------------------------------------------------ */
 /*  Home page                                                          */
@@ -179,7 +180,7 @@ function HeroSection() {
         ))}
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-28 w-full z-10">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 w-full z-10">
         <div className="max-w-3xl mx-auto text-center">
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 text-white/90 text-xs sm:text-sm font-medium mb-5 sm:mb-8">
@@ -302,7 +303,7 @@ function LiveDashboardSection() {
   const visMt = [...matches.slice(off2), ...matches.slice(0, off2)].slice(0, 4);
 
   return (
-    <section className="py-12 md:py-16 bg-gray-50">
+    <section className="py-8 md:py-12 bg-gray-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* 상단 카운터 */}
@@ -386,7 +387,7 @@ function LiveDashboardSection() {
 /* ------------------------------------------------------------------ */
 function SpecialServiceSection() {
   return (
-    <section className="py-10 sm:py-16 md:py-20 bg-gray-50">
+    <section className="py-10 sm:py-10 md:py-12 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8 sm:mb-12">
           <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-gray-900">
@@ -427,7 +428,7 @@ function CareMatchTVSection() {
   ];
 
   return (
-    <section className="py-16 md:py-20 bg-gray-900">
+    <section className="py-10 md:py-12 bg-gray-900">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-10">
           <h2 className="text-2xl md:text-3xl font-bold text-white">간병 TV</h2>
@@ -537,7 +538,7 @@ function PremiumFeaturesSection() {
   ];
 
   return (
-    <section className="py-12 sm:py-20 md:py-28 bg-gray-50">
+    <section className="py-12 sm:py-8 md:py-12 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8 sm:mb-14">
           <p className="text-primary-500 font-semibold text-sm tracking-wider uppercase mb-3">
@@ -586,7 +587,7 @@ function CareFieldsSection() {
   ];
 
   return (
-    <section className="py-12 sm:py-20 md:py-24 bg-gray-900 text-white">
+    <section className="py-8 sm:py-12 md:py-14 bg-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8 sm:mb-12">
           <h2 className="text-xl sm:text-3xl md:text-4xl font-bold">케어매치 간병 매칭 업무 분야</h2>
@@ -653,7 +654,7 @@ function WhyCareMatchSection() {
   ];
 
   return (
-    <section className="py-12 sm:py-20 md:py-28 bg-gray-50">
+    <section className="py-12 sm:py-8 md:py-12 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8 sm:mb-14">
           <p className="text-primary-500 font-semibold text-sm tracking-wider uppercase mb-3">
@@ -714,7 +715,7 @@ function CareEducationSection() {
   ];
 
   return (
-    <section ref={sectionRef} className="py-12 sm:py-20 md:py-24 bg-white overflow-hidden">
+    <section ref={sectionRef} className="py-8 sm:py-12 md:py-14 bg-white overflow-hidden">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-10 sm:mb-14">
           <p className="text-secondary-500 font-semibold text-sm tracking-wider uppercase mb-2">Education Program</p>
@@ -780,7 +781,7 @@ function CareEducationSection() {
 /* ------------------------------------------------------------------ */
 function ConsultationSection() {
   return (
-    <section className="py-12 sm:py-20 md:py-24 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 relative overflow-hidden">
+    <section className="py-8 sm:py-12 md:py-14 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 relative overflow-hidden">
       {/* Decorative */}
       <div className="absolute top-0 right-0 w-[300px] sm:w-[400px] h-[300px] sm:h-[400px] rounded-full bg-primary-500/10 blur-[100px]" />
       <div className="absolute bottom-0 left-0 w-[200px] sm:w-[300px] h-[200px] sm:h-[300px] rounded-full bg-secondary-500/10 blur-[100px]" />
@@ -796,11 +797,11 @@ function ConsultationSection() {
         </h2>
 
         <a
-          href="tel:1555-0801"
+          href={`tel:${SITE.phone}`}
           className="inline-flex items-center gap-2 sm:gap-3 text-3xl sm:text-5xl md:text-7xl font-extrabold text-primary-400 hover:text-primary-300 transition-colors mb-6 sm:mb-8"
         >
           <FiPhone className="w-8 h-8 sm:w-12 sm:h-12 md:w-16 md:h-16" />
-          1555-0801
+          {SITE.phone}
         </a>
 
         <p className="text-gray-400 text-sm sm:text-lg mb-6 sm:mb-10">
@@ -868,7 +869,7 @@ function ConsultationSection() {
 /* ------------------------------------------------------------------ */
 function AppDownloadSection() {
   return (
-    <section className="py-12 sm:py-20 md:py-28 bg-white">
+    <section className="py-12 sm:py-8 md:py-12 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-gradient-to-br from-primary-50 via-white to-secondary-50 rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-14 border border-gray-100 shadow-[0_4px_30px_rgba(0,0,0,0.06)]">
           <div className="flex flex-col md:flex-row items-center gap-6 sm:gap-10">
@@ -974,7 +975,7 @@ function FAQSection() {
   const faqs = [
     {
       q: "간병 요청 후 매칭까지 얼마나 걸리나요?",
-      a: "AI 자동 매칭 시스템을 통해 평균 30분 이내에 조건에 맞는 간병인이 매칭됩니다. 긴급한 경우 1555-0801로 전화주시면 더 빠르게 진행됩니다.",
+      a: `AI 자동 매칭 시스템을 통해 평균 30분 이내에 조건에 맞는 간병인이 매칭됩니다. 긴급한 경우 ${SITE.phone}로 전화주시면 더 빠르게 진행됩니다.`,
     },
     {
       q: "간병비는 어떻게 결정되나요?",
@@ -999,7 +1000,7 @@ function FAQSection() {
   ];
 
   return (
-    <section id="faq" className="py-12 sm:py-20 md:py-28 bg-gray-50">
+    <section id="faq" className="py-12 sm:py-8 md:py-12 bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8 sm:mb-12">
           <p className="text-primary-500 font-semibold text-sm tracking-wider uppercase mb-3">

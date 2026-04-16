@@ -20,4 +20,7 @@ router.post('/:id/progress', [
 // GET /certificate/:id - 수료증 발급
 router.get('/certificate/:id', educationController.getCertificate);
 
+// GET /certificate/:id/download - 수료증 HTML 다운로드
+router.get('/certificate/:id/download', educationController.downloadCertificate);
+
 export default router;

@@ -383,3 +383,85 @@ export const getActivity = async (req: AuthRequest, res: Response, next: NextFun
     next(error);
   }
 };
+
+
+// GET /applications - 내가 지원한 요청 목록
+export const getMyApplications = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const caregiver = await prisma.caregiver.findUnique({
+      where: { userId: req.user!.id },
+    });
+
+    if (!caregiver) {
+      throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+    }
+
+    const applications = await prisma.careApplication.findMany({
+      where: { caregiverId: caregiver.id },
+      select: {
+        careRequestId: true,
+        status: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: applications,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /criminal-check - 범죄이력 확인서 업로드
+export const uploadCriminalCheck = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) {
+      throw new AppError('파일을 업로드해주세요.', 400);
+    }
+    const caregiver = await prisma.caregiver.findUnique({
+      where: { userId: req.user!.id },
+    });
+    if (!caregiver) {
+      throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+    }
+    const url = `/uploads/${req.file.filename}`;
+    const updated = await prisma.caregiver.update({
+      where: { id: caregiver.id },
+      data: {
+        criminalCheckDoc: url,
+        criminalCheckDone: true,
+        criminalCheckDate: new Date(),
+      },
+    });
+    res.json({ success: true, data: { url, caregiver: updated } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /id-card - 신분증 업로드
+export const uploadIdCard = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) {
+      throw new AppError('파일을 업로드해주세요.', 400);
+    }
+    const caregiver = await prisma.caregiver.findUnique({
+      where: { userId: req.user!.id },
+    });
+    if (!caregiver) {
+      throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+    }
+    const url = `/uploads/${req.file.filename}`;
+    const updated = await prisma.caregiver.update({
+      where: { id: caregiver.id },
+      data: {
+        idCardImage: url,
+        identityVerified: true,
+      },
+    });
+    res.json({ success: true, data: { url, caregiver: updated } });
+  } catch (error) {
+    next(error);
+  }
+};

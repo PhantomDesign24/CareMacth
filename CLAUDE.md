@@ -4,7 +4,7 @@
 
 | 서비스 | 포트 | 경로 | 실행 방법 |
 |--------|------|------|-----------|
-| Backend API | **4000** | `/var/www/carematch/backend` | `npx ts-node-dev --respawn src/server.ts` |
+| Backend API | **4000** | `/var/www/carematch/backend` | `npm run build && node dist/server.js` (PM2) |
 | Web Frontend | **3000** | `/var/www/carematch/web` | `npx next start -p 3000` |
 | Admin Panel | **3010** | `/var/www/carematch/admin` | `npx next start -p 3010` |
 | PostgreSQL | 5432 | - | 시스템 서비스 |
@@ -21,10 +21,11 @@
 ## 빌드/배포 순서
 
 ```bash
-# 1. 백엔드 (코드 수정 시 자동 재시작 - ts-node-dev)
+# 1. 백엔드 (빌드 후 PM2로 관리)
 cd /var/www/carematch/backend
-kill $(lsof -t -i:4000); sleep 2
-npx ts-node-dev --respawn src/server.ts &>/tmp/carematch-backend.log &
+npm run build
+pm2 restart carematch-backend
+# 최초 설정: pm2 start dist/server.js --name carematch-backend --cwd /var/www/carematch/backend
 
 # 2. 웹 (빌드 필수)
 cd /var/www/carematch/web

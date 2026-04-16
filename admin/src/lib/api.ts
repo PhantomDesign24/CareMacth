@@ -211,6 +211,98 @@ export async function exportCaregivers() {
   return apiDownload("/admin/stats/export/caregivers");
 }
 
+// ─── Reports (UGC 모더레이션) ──────────────────────────
+export interface Report {
+  id: string;
+  reporterId: string;
+  targetType: "REVIEW" | "USER" | "CARE_RECORD" | "MESSAGE";
+  targetId: string;
+  reason: "INAPPROPRIATE" | "SPAM" | "ABUSE" | "FAKE" | "PRIVACY" | "OTHER";
+  detail: string | null;
+  status: "PENDING" | "REVIEWING" | "RESOLVED" | "REJECTED";
+  adminNote: string | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  reviewId: string | null;
+  createdAt: string;
+  reporter?: { id: string; name: string; email: string };
+  review?: any;
+}
+
+export async function getReports(status?: string) {
+  return apiRequest<Report[]>("/admin/reports", {
+    params: status ? { status } : undefined,
+  });
+}
+
+export async function updateReport(id: string, data: { status: string; adminNote?: string; hideReview?: boolean }) {
+  return apiRequest(`/admin/reports/${id}`, { method: "PUT", body: data });
+}
+
+// ─── Notification Templates ───────────────────────────
+export interface NotificationTemplate {
+  id: string;
+  key: string;
+  name: string;
+  type: string;
+  title: string;
+  body: string;
+  description?: string;
+  enabled: boolean;
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+export async function getNotificationTemplates() {
+  return apiRequest<NotificationTemplate[]>("/admin/notification-templates");
+}
+export async function updateNotificationTemplate(id: string, data: Partial<Pick<NotificationTemplate, "title" | "body" | "enabled" | "description">>) {
+  return apiRequest<NotificationTemplate>(`/admin/notification-templates/${id}`, { method: "PUT", body: data });
+}
+export async function createNotificationTemplate(data: Omit<NotificationTemplate, "id" | "isSystem" | "enabled" | "createdAt" | "updatedAt">) {
+  return apiRequest<NotificationTemplate>("/admin/notification-templates", { method: "POST", body: data });
+}
+export async function deleteNotificationTemplate(id: string) {
+  return apiRequest(`/admin/notification-templates/${id}`, { method: "DELETE" });
+}
+
+// ─── Association Fees ─────────────────────────────────
+export interface AssociationFeeRow {
+  caregiverId: string;
+  name: string;
+  status: string;
+  workStatus: string;
+  phone: string;
+  email: string;
+  feePaid: boolean;
+  feeAmount: number;
+  feePaidAt: string | null;
+  feeNote: string;
+  careCount: number;
+  penaltyCount: number;
+}
+export async function getAssociationFees(year?: number, month?: number) {
+  return apiRequest<{ year: number; month: number; rows: AssociationFeeRow[] }>(
+    "/admin/association-fees",
+    { params: { ...(year && { year }), ...(month && { month }) } }
+  );
+}
+export async function updateAssociationFee(caregiverId: string, data: { year: number; month: number; paid: boolean; amount?: number; note?: string }) {
+  return apiRequest(`/admin/association-fees/${caregiverId}`, { method: "PUT", body: data });
+}
+export async function exportAssociationFees(year: number, months?: number | number[]) {
+  let path = `/admin/association-fees/export?year=${year}`;
+  if (months === undefined) {
+    // 연간 전체
+  } else if (Array.isArray(months)) {
+    if (months.length === 1) path += `&month=${months[0]}`;
+    else path += `&months=${months.join(",")}`;
+  } else {
+    path += `&month=${months}`;
+  }
+  return apiDownload(path);
+}
+
 // ─── Disputes ─────────────────────────────────────────
 export async function getDisputes(params?: { status?: string; priority?: string; page?: number; limit?: number }) {
   return apiRequest<PaginatedResponse<Dispute>>("/admin/disputes", {
@@ -449,6 +541,8 @@ export interface PlatformSettings {
   referralPointAmount?: number;
   noShowPenaltyThreshold?: number;
   excellentBadgeThreshold?: number;
+  associationFeeDefault?: number;
+  cancellationFee?: number;
   // API field aliases
   individualFeePercent?: number;
   individualFeeFixed?: number;

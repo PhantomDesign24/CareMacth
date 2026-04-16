@@ -11,6 +11,7 @@ interface CareRequestFormData {
   patientAge: string;
   patientGender: string;
   patientWeight: string;
+  patientHeight: string;
   consciousness: string;
   hasDementia: boolean;
   dementiaLevel: string;
@@ -30,12 +31,15 @@ interface CareRequestFormData {
   locationType: string;
   locationName: string;
   locationAddress: string;
-  region: string;
+  regions: string[];
 
   // Schedule
   startDate: string;
   duration: string;
   durationUnit: string;
+
+  // Rate
+  dailyRate: string;
 
   // Preferences
   preferredGender: string;
@@ -50,6 +54,7 @@ const initialFormData: CareRequestFormData = {
   patientAge: "",
   patientGender: "",
   patientWeight: "",
+  patientHeight: "",
   consciousness: "",
   hasDementia: false,
   dementiaLevel: "",
@@ -65,12 +70,13 @@ const initialFormData: CareRequestFormData = {
   locationType: "",
   locationName: "",
   locationAddress: "",
-  region: "",
+  regions: [],
   startDate: "",
   duration: "",
   durationUnit: "days",
   preferredGender: "",
   preferredNationality: "",
+  dailyRate: "",
   disclaimerChecked: false,
 };
 
@@ -145,6 +151,19 @@ const REGION_OPTIONS = [
   "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
 ];
 
+const MAP_BASE = "https://massage.phantomdesign.kr/assets/images/region";
+const REGION_MAP_IMGS: Record<string, string> = {
+  서울: `${MAP_BASE}/map01.png`, 경기: `${MAP_BASE}/map02.png`,
+  인천: `${MAP_BASE}/map03.png`, 대전: `${MAP_BASE}/map04.png`,
+  대구: `${MAP_BASE}/map05.png`, 부산: `${MAP_BASE}/map06.png`,
+  광주: `${MAP_BASE}/map07.png`, 울산: `${MAP_BASE}/map08.png`,
+  세종: `${MAP_BASE}/map09.png`, 강원: `${MAP_BASE}/map10.png`,
+  충북: `${MAP_BASE}/map11.png`, 충남: `${MAP_BASE}/map12.png`,
+  전북: `${MAP_BASE}/map13.png`, 전남: `${MAP_BASE}/map14.png`,
+  경북: `${MAP_BASE}/map15.png`, 경남: `${MAP_BASE}/map16.png`,
+  제주: `${MAP_BASE}/map17.png`,
+};
+
 /* ------------------------------------------------------------------ */
 /*  Care Type Options                                                  */
 /* ------------------------------------------------------------------ */
@@ -208,9 +227,39 @@ export default function CareRequestForm({ onSubmit }: Props) {
     });
   };
 
+  const validateAll = (): string | null => {
+    // Step 1 - 환자 정보
+    if (!form.patientName?.trim()) return "환자 이름을 입력해주세요.";
+    if (!form.patientAge?.trim()) return "환자 나이를 입력해주세요.";
+    if (!form.patientGender) return "환자 성별을 선택해주세요.";
+    if (!form.consciousness) return "환자 의식상태를 선택해주세요.";
+    if (!form.mobility) return "환자 거동상태를 선택해주세요.";
+    if (form.hasDementia && !form.dementiaLevel) return "치매 정도를 선택해주세요.";
+    if (form.hasInfection && !form.infectionDetails?.trim()) return "감염 세부사항을 입력해주세요.";
+    // Step 2 - 간병 유형
+    if (!form.careType) return "간병 유형을 선택해주세요.";
+    if (!form.careSchedule) return "간병 스케줄을 선택해주세요.";
+    if (form.careSchedule === "hourly" && (!form.hourlyStart || !form.hourlyEnd)) {
+      return "시간제 간병의 시작/종료 시간을 입력해주세요.";
+    }
+    // Step 3 - 장소·일정
+    if (!form.locationType) return "간병 장소 유형을 선택해주세요.";
+    if (!form.locationName?.trim()) return "장소명을 입력해주세요.";
+    if (!form.regions || form.regions.length === 0) return "지역을 한 곳 이상 선택해주세요.";
+    if (!form.startDate) return "시작일을 선택해주세요.";
+    if (!form.duration?.trim()) return "간병 기간을 입력해주세요.";
+    // Step 4 - 동의
+    if (!form.disclaimerChecked) return "의료행위 금지 안내 동의에 체크해주세요.";
+    return null;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.disclaimerChecked) return;
+    const err = validateAll();
+    if (err) {
+      alert(err);
+      return;
+    }
     onSubmit?.(form);
   };
 
@@ -230,7 +279,7 @@ export default function CareRequestForm({ onSubmit }: Props) {
         return (
           form.locationType &&
           form.locationName &&
-          form.region &&
+          form.regions.length > 0 &&
           form.startDate &&
           form.duration
         );
@@ -352,6 +401,18 @@ export default function CareRequestForm({ onSubmit }: Props) {
                 placeholder="체중 입력"
                 value={form.patientWeight}
                 onChange={(e) => update("patientWeight", e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                키 (cm)
+              </label>
+              <input
+                type="number"
+                className="input-field"
+                placeholder="키 입력"
+                value={form.patientHeight}
+                onChange={(e) => update("patientHeight", e.target.value)}
               />
             </div>
           </div>
@@ -749,17 +810,48 @@ export default function CareRequestForm({ onSubmit }: Props) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               지역 <span className="text-red-500">*</span>
+              {form.regions.length > 0 && (
+                <span className="ml-2 text-xs text-primary-500 font-normal">
+                  {form.regions.join(", ")} 선택됨
+                </span>
+              )}
             </label>
-            <select
-              className="input-field"
-              value={form.region}
-              onChange={(e) => update("region", e.target.value)}
-            >
-              <option value="">지역을 선택하세요</option>
-              {REGION_OPTIONS.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
+            <div className="grid grid-cols-6 sm:grid-cols-9 gap-1.5">
+              {REGION_OPTIONS.map((r) => {
+                const active = form.regions.includes(r);
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() =>
+                      update(
+                        "regions",
+                        active
+                          ? form.regions.filter((x) => x !== r)
+                          : [...form.regions, r]
+                      )
+                    }
+                    className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border transition-all ${
+                      active
+                        ? "border-primary-400 bg-primary-50 shadow-sm"
+                        : "border-gray-200 bg-white hover:border-primary-300"
+                    }`}
+                  >
+                    <div
+                      className="w-8 h-[30px] bg-no-repeat bg-center"
+                      style={{
+                        backgroundImage: `url('${REGION_MAP_IMGS[r]}')`,
+                        backgroundSize: "100% 200%",
+                        backgroundPosition: active ? "center bottom" : "center top",
+                      }}
+                    />
+                    <span className={`text-[10px] font-bold leading-none ${active ? "text-primary-600" : "text-gray-600"}`}>
+                      {r}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -809,6 +901,24 @@ export default function CareRequestForm({ onSubmit }: Props) {
       {step === 4 && (
         <div className="space-y-6">
           <h3 className="text-xl font-bold text-gray-900">선호 사항 및 확인</h3>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              제시 일당 (원) <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                className="input-field pr-8"
+                placeholder="예: 150000"
+                min="0"
+                value={form.dailyRate}
+                onChange={(e) => update("dailyRate", e.target.value)}
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">원</span>
+            </div>
+            <p className="mt-1 text-xs text-gray-400">간병인에게 제시할 하루 금액. 간병인이 다른 금액을 역제안할 수 있습니다.</p>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>

@@ -7,6 +7,10 @@ import {
   deleteUnsentNotifications,
   type AdminNotification,
 } from "@/lib/api";
+import {
+  NOTIFICATION_TYPES as NOTIFICATION_TYPE_DEFS,
+  NOTIFICATION_TARGETS,
+} from "@/lib/constants";
 
 // ─── Helpers ───────────────────────────────────────────
 
@@ -27,17 +31,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 function typeLabel(type: string): string {
-  switch (type) {
-    case "SYSTEM": return "시스템";
-    case "MATCHING": return "매칭";
-    case "APPLICATION": return "지원";
-    case "CONTRACT": return "계약";
-    case "PAYMENT": return "결제";
-    case "CARE_RECORD": return "간병기록";
-    case "EXTENSION": return "연장";
-    case "PENALTY": return "패널티";
-    default: return type;
-  }
+  return NOTIFICATION_TYPE_DEFS.find((t) => t.value === type)?.label || type;
 }
 
 function typeBadge(type: string): string {
@@ -51,16 +45,10 @@ function typeBadge(type: string): string {
   }
 }
 
+// 전체 필터 옵션 (선택 필터용 — 빈 값 포함)
 const NOTIFICATION_TYPES = [
   { value: "", label: "전체" },
-  { value: "SYSTEM", label: "시스템" },
-  { value: "MATCHING", label: "매칭" },
-  { value: "APPLICATION", label: "지원" },
-  { value: "CONTRACT", label: "계약" },
-  { value: "PAYMENT", label: "결제" },
-  { value: "CARE_RECORD", label: "간병기록" },
-  { value: "EXTENSION", label: "연장" },
-  { value: "PENALTY", label: "패널티" },
+  ...NOTIFICATION_TYPE_DEFS,
 ];
 
 // ─── Main Page ────────────────────────────────────────
@@ -171,13 +159,7 @@ export default function NotificationsPage() {
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">대상</label>
             <div className="flex flex-wrap gap-3">
-              {[
-                { value: "all", label: "전체 회원" },
-                { value: "guardians", label: "보호자만" },
-                { value: "caregivers", label: "간병인만" },
-                { value: "all_devices", label: "전체 디바이스 (비회원 포함)" },
-                { value: "individual", label: "개별" },
-              ].map((opt) => (
+              {NOTIFICATION_TARGETS.map((opt) => (
                 <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"

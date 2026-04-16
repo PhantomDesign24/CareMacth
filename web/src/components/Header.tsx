@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { FiPhone, FiMenu, FiX, FiChevronDown, FiUser, FiLogOut } from "react-icons/fi";
+import { SITE } from "@/config/site";
 
 const ROLE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   GUARDIAN: { label: "보호자", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
@@ -83,11 +84,11 @@ export default function Header() {
             </div>
             <div className="flex items-center gap-4">
               <a
-                href="tel:1555-0801"
+                href={`tel:${SITE.phone}`}
                 className="flex items-center gap-1.5 text-primary-400 font-semibold hover:text-primary-300 transition-colors"
               >
                 <FiPhone className="w-3 h-3" />
-                1555-0801
+                {SITE.phone}
               </a>
               <span className="text-gray-600">|</span>
               {user ? (
@@ -152,11 +153,11 @@ export default function Header() {
           {/* Desktop right side */}
           <div className="hidden lg:flex items-center gap-3">
             <a
-              href="tel:1555-0801"
+              href={`tel:${SITE.phone}`}
               className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-primary-600"
             >
               <FiPhone className="w-4 h-4" />
-              1555-0801
+              {SITE.phone}
             </a>
             {user ? (
               <div className="relative">
@@ -211,7 +212,7 @@ export default function Header() {
           {/* Mobile: phone + menu button */}
           <div className="flex lg:hidden items-center gap-2">
             <a
-              href="tel:1555-0801"
+              href={`tel:${SITE.phone}`}
               className="p-2 rounded-lg text-primary-500"
               aria-label="전화하기"
             >
@@ -305,11 +306,11 @@ export default function Header() {
           )}
           <div className="px-4 py-2">
             <a
-              href="tel:1555-0801"
+              href={`tel:${SITE.phone}`}
               className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-primary-600 bg-primary-50"
             >
               <FiPhone className="w-4 h-4" />
-              상담전화 1555-0801
+              상담전화 {SITE.phone}
             </a>
           </div>
         </div>

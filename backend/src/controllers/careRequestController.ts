@@ -107,7 +107,8 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
         address,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
-        region: req.body.region || null,
+        region: req.body.region || (Array.isArray(req.body.regions) && req.body.regions[0]) || null,
+        regions: Array.isArray(req.body.regions) ? req.body.regions : (req.body.region ? [req.body.region] : []),
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         durationDays: durationDays ? parseInt(durationDays) : null,
@@ -158,23 +159,36 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
     } else if (req.user!.role === 'CAREGIVER') {
       whereClause.status = status || 'OPEN';
 
-      // Filter by caregiver's preferred regions if set
-      const caregiver = await prisma.caregiver.findUnique({
-        where: { userId: req.user!.id },
-        select: { preferredRegions: true },
-      });
-      if (caregiver && caregiver.preferredRegions.length > 0) {
-        whereClause.region = { in: caregiver.preferredRegions };
-      }
-
-      // Also allow filtering by region query param
-      if (req.query.region) {
-        whereClause.region = req.query.region as string;
+      // 선택 없으면 선호지역 자동 적용 (간병인만)
+      if (!req.query.regions) {
+        const caregiver = await prisma.caregiver.findUnique({
+          where: { userId: req.user!.id },
+          select: { preferredRegions: true },
+        });
+        if (caregiver && caregiver.preferredRegions.length > 0) {
+          whereClause.OR = [
+            { region: { in: caregiver.preferredRegions } },
+            { regions: { hasSome: caregiver.preferredRegions } },
+          ];
+        }
       }
     } else if (req.user!.role === 'ADMIN') {
       if (status) {
         whereClause.status = status;
       }
+    }
+
+    // 지역 필터 — 모든 역할 공통
+    const queryRegions: string[] = req.query.regions
+      ? (Array.isArray(req.query.regions)
+          ? (req.query.regions as string[])
+          : (req.query.regions as string).split(',').filter(Boolean))
+      : [];
+    if (queryRegions.length > 0) {
+      whereClause.OR = [
+        { region: { in: queryRegions } },
+        { regions: { hasSome: queryRegions } },
+      ];
     }
 
     const [careRequests, total] = await Promise.all([
@@ -185,6 +199,7 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
             select: {
               name: true,
               gender: true,
+              birthDate: true,
               mobilityStatus: true,
               hasDementia: true,
               hasInfection: true,
@@ -456,7 +471,8 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
       throw new AppError('현재 지원이 불가능한 상태입니다.', 400);
     }
 
-    // 중복 지원 확인
+    // 중복 지원 확인 — PENDING/ACCEPTED 상태만 차단
+    // REJECTED/CANCELLED 된 경우 재지원 허용
     const existingApplication = await prisma.careApplication.findUnique({
       where: {
         careRequestId_caregiverId: {
@@ -467,7 +483,13 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
     });
 
     if (existingApplication) {
-      throw new AppError('이미 지원한 간병 요청입니다.', 400);
+      if (['PENDING', 'ACCEPTED'].includes(existingApplication.status)) {
+        throw new AppError('이미 지원한 간병 요청입니다.', 400);
+      }
+      // REJECTED/CANCELLED → 기존 레코드 삭제 후 재지원 허용
+      await prisma.careApplication.delete({
+        where: { id: existingApplication.id },
+      });
     }
 
     // isAccepted가 true이면 보호자 금액 수락 → proposedRate null
@@ -628,6 +650,72 @@ export const raiseRate = async (req: AuthRequest, res: Response, next: NextFunct
   }
 };
 
+// POST /:id/expand-regions - 지역 범위 확장 재공고
+export const expandRegions = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { regions } = req.body;
+
+    if (!Array.isArray(regions) || regions.length === 0) {
+      throw new AppError('추가할 지역을 한 개 이상 선택해주세요.', 400);
+    }
+
+    const guardian = await prisma.guardian.findUnique({
+      where: { userId: req.user!.id },
+    });
+    if (!guardian) throw new AppError('보호자 정보를 찾을 수 없습니다.', 404);
+
+    const careRequest = await prisma.careRequest.findFirst({
+      where: { id, guardianId: guardian.id },
+    });
+    if (!careRequest) throw new AppError('간병 요청을 찾을 수 없습니다.', 404);
+
+    if (!['OPEN', 'MATCHING'].includes(careRequest.status)) {
+      throw new AppError('현재 상태에서는 지역을 확장할 수 없습니다.', 400);
+    }
+
+    // 기존 regions + 새 regions 병합 (중복 제거)
+    const merged = Array.from(new Set([...(careRequest.regions || []), ...regions]));
+
+    const updated = await prisma.careRequest.update({
+      where: { id },
+      data: { regions: merged },
+    });
+
+    // 추가된 지역의 간병인에게 알림
+    const addedRegions = regions.filter((r: string) => !(careRequest.regions || []).includes(r));
+    if (addedRegions.length > 0) {
+      const caregivers = await prisma.caregiver.findMany({
+        where: {
+          status: 'APPROVED',
+          preferredRegions: { hasSome: addedRegions },
+        },
+        select: { userId: true },
+      });
+      if (caregivers.length > 0) {
+        await prisma.notification.createMany({
+          data: caregivers.map((cg) => ({
+            userId: cg.userId,
+            type: 'MATCHING' as const,
+            title: '새 간병 요청',
+            body: `선호 지역(${addedRegions.join(', ')})에 새 간병 요청이 있습니다.`,
+            data: { careRequestId: id },
+          })),
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: updated,
+      message: `지역이 확장되었습니다 (${merged.join(', ')})`,
+      addedRegions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // DELETE /:id - 간병 요청 취소
 export const cancelCareRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -674,6 +762,26 @@ export const cancelCareRequest = async (req: AuthRequest, res: Response, next: N
       success: true,
       message: '간병 요청이 취소되었습니다.',
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /region-stats - 지역별 오픈 요청 수
+export const getRegionStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const stats = await prisma.careRequest.groupBy({
+      by: ['region'],
+      where: { status: 'OPEN', region: { not: null } },
+      _count: { id: true },
+    });
+
+    const result: Record<string, number> = {};
+    for (const s of stats) {
+      if (s.region) result[s.region] = s._count.id;
+    }
+
+    res.json({ success: true, data: result });
   } catch (error) {
     next(error);
   }

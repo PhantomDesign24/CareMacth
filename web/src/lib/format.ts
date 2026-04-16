@@ -109,3 +109,126 @@ export function formatMobility(status: string): string {
   };
   return map[status] || status;
 }
+
+// 지원 상태
+export function formatApplicationStatus(status: string): string {
+  const map: Record<string, string> = {
+    PENDING: '대기 중',
+    ACCEPTED: '수락됨',
+    REJECTED: '미선택',
+    CANCELLED: '취소됨',
+  };
+  return map[status] || status;
+}
+
+// 간병인 근무 상태
+export function formatWorkStatus(status: string): string {
+  const map: Record<string, string> = {
+    WORKING: '근무 중',
+    AVAILABLE: '근무 가능',
+    IMMEDIATE: '즉시 가능',
+  };
+  return map[status] || status;
+}
+
+// 신고 상태
+export function formatReportStatus(status: string): string {
+  const map: Record<string, string> = {
+    PENDING: '접수됨',
+    REVIEWING: '검토 중',
+    RESOLVED: '처리 완료',
+    REJECTED: '기각',
+  };
+  return map[status] || status;
+}
+
+// 신고 사유
+export function formatReportReason(reason: string): string {
+  const map: Record<string, string> = {
+    INAPPROPRIATE: '부적절한 내용',
+    SPAM: '스팸/광고',
+    ABUSE: '욕설·비방',
+    FAKE: '허위 사실',
+    PRIVACY: '개인정보 노출',
+    OTHER: '기타',
+  };
+  return map[reason] || reason;
+}
+
+// 신고 대상 유형
+export function formatReportTargetType(type: string): string {
+  const map: Record<string, string> = {
+    REVIEW: '리뷰',
+    USER: '사용자',
+    CARE_RECORD: '간병 일지',
+    MESSAGE: '메시지',
+  };
+  return map[type] || type;
+}
+
+// 알림 유형
+export function formatNotificationType(type: string): string {
+  const map: Record<string, string> = {
+    MATCHING: '매칭',
+    APPLICATION: '지원',
+    CONTRACT: '계약',
+    PAYMENT: '결제',
+    CARE_RECORD: '간병 기록',
+    EXTENSION: '연장',
+    PENALTY: '패널티',
+    SYSTEM: '시스템',
+  };
+  return map[type] || type;
+}
+
+// 패널티 유형
+export function formatPenaltyType(type: string): string {
+  const map: Record<string, string> = {
+    NO_SHOW: '노쇼(무단결근)',
+    CANCELLATION: '취소',
+    COMPLAINT: '민원/불만',
+    MANUAL: '관리자 직접 부여',
+  };
+  return map[type] || type;
+}
+
+// 보험 서류 상태
+export function formatInsuranceDocStatus(status: string): string {
+  const map: Record<string, string> = {
+    REQUESTED: '신청됨',
+    PROCESSING: '처리 중',
+    COMPLETED: '발급 완료',
+    REJECTED: '반려',
+  };
+  return map[status] || status;
+}
+
+// 의식 상태
+export function formatConsciousness(value: string): string {
+  const map: Record<string, string> = {
+    ALERT: '명료',
+    DROWSY: '기면',
+    STUPOR: '혼미',
+    COMA: '혼수',
+  };
+  return map[value] || value;
+}
+
+// 치매 정도
+export function formatDementiaLevel(value: string): string {
+  const map: Record<string, string> = {
+    MILD: '경증',
+    MODERATE: '중등도',
+    SEVERE: '중증',
+  };
+  return map[value] || value;
+}
+
+// 성별
+export function formatGender(gender: string): string {
+  const map: Record<string, string> = {
+    M: '남성',
+    F: '여성',
+  };
+  return map[gender] || gender;
+}

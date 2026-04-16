@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { authenticate, authorize } from '../middlewares/auth';
-import { upload } from '../middlewares/upload';
+import { upload, handleUploadError } from '../middlewares/upload';
 import * as careRecordController from '../controllers/careRecordController';
 
 const router = Router();
@@ -33,10 +33,13 @@ router.post('/daily-log', [
 router.post('/photos',
   authorize('CAREGIVER'),
   upload.array('photos', 10),
+  handleUploadError,
   careRecordController.uploadPhotos,
 );
 
 // GET /:contractId - 간병 기록 조회
 router.get('/:contractId', careRecordController.getCareRecords);
+
+router.use(handleUploadError);
 
 export default router;

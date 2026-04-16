@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI } from "@/lib/api";
-import { formatDate, formatContractStatus, formatCareType, formatLocation } from "@/lib/format";
+import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, reportAPI } from "@/lib/api";
+import { formatDate, formatContractStatus, formatCareType, formatLocation, formatPenaltyType } from "@/lib/format";
 
 interface Earnings {
   thisMonth: number;
@@ -55,8 +55,55 @@ type Status = "working" | "available" | "immediately";
 
 export default function CaregiverDashboard() {
   const [activeTab, setActiveTab] = useState<
-    "earnings" | "activity" | "penalties" | "requests" | "referral"
+    "earnings" | "activity" | "penalties" | "requests" | "reviews" | "referral" | "settings"
   >("earnings");
+
+  // 리뷰 + 신고
+  const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
+  const [reportTarget, setReportTarget] = useState<any>(null);
+  const [reportReason, setReportReason] = useState("INAPPROPRIATE");
+  const [reportDetail, setReportDetail] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
+
+  const loadReceivedReviews = useCallback(async () => {
+    try {
+      const res = await reviewAPI.myReceived();
+      setReceivedReviews(res.data?.data?.reviews || []);
+    } catch {}
+  }, []);
+
+  const submitReport = async () => {
+    if (!reportTarget) return;
+    setReportLoading(true);
+    try {
+      await reportAPI.create({
+        targetType: "REVIEW",
+        targetId: reportTarget.id,
+        reason: reportReason,
+        detail: reportDetail || undefined,
+      });
+      alert("신고가 접수되었습니다. 관리자가 검토 후 처리합니다.");
+      setReportTarget(null);
+      setReportReason("INAPPROPRIATE");
+      setReportDetail("");
+    } catch (err: unknown) {
+      const message =
+        (err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : null) || "신고 처리 중 오류가 발생했습니다.";
+      alert(message);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  // Delete account state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [currentStatus, setCurrentStatus] = useState<Status>("available");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -215,15 +262,22 @@ export default function CaregiverDashboard() {
   ];
 
   const statusBadge = (status: string) => {
-    switch (status) {
+    const s = (status || "").toLowerCase();
+    switch (s) {
       case "active":
+      case "진행 중":
         return <span className="badge-success">진행 중</span>;
       case "completed":
+      case "완료":
         return <span className="badge-primary">완료</span>;
       case "cancelled":
+      case "취소":
         return <span className="badge-danger">취소</span>;
+      case "extended":
+      case "연장됨":
+        return <span className="badge-primary">연장됨</span>;
       default:
-        return <span className="badge-primary">{status}</span>;
+        return <span className="badge-primary">{formatContractStatus(status)}</span>;
     }
   };
 
@@ -236,9 +290,40 @@ export default function CaregiverDashboard() {
     { key: "earnings" as const, label: "수익" },
     { key: "requests" as const, label: "공고 확인" },
     { key: "activity" as const, label: "활동 이력" },
+    { key: "reviews" as const, label: "받은 리뷰" },
     { key: "penalties" as const, label: "패널티" },
     { key: "referral" as const, label: "추천인 코드" },
+    { key: "settings" as const, label: "계정 설정" },
   ];
+
+  useEffect(() => {
+    if (activeTab === "reviews") loadReceivedReviews();
+  }, [activeTab, loadReceivedReviews]);
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== "탈퇴합니다") {
+      setDeleteError('"탈퇴합니다"를 정확히 입력해주세요.');
+      return;
+    }
+    setDeleteLoading(true);
+    setDeleteError("");
+    try {
+      const { authAPI } = await import("@/lib/api");
+      await authAPI.deleteAccount(deletePassword, deleteReason);
+      alert("회원 탈퇴가 완료되었습니다. 그동안 이용해주셔서 감사합니다.");
+      localStorage.removeItem("cm_access_token");
+      localStorage.removeItem("cm_refresh_token");
+      window.location.href = "/";
+    } catch (err: unknown) {
+      const message =
+        (err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : null) || "탈퇴 처리 중 오류가 발생했습니다.";
+      setDeleteError(message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -554,6 +639,71 @@ export default function CaregiverDashboard() {
             </div>
           )}
 
+          {/* Received Reviews */}
+          {activeTab === "reviews" && (
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">받은 리뷰 ({receivedReviews.length})</h3>
+              {receivedReviews.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">아직 받은 리뷰가 없습니다.</div>
+              ) : (
+                <div className="space-y-3">
+                  {receivedReviews.map((r) => (
+                    <div key={r.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-amber-500 text-lg">{"★".repeat(Math.round(r.rating))}{"☆".repeat(5 - Math.round(r.rating))}</span>
+                            <span className="text-sm text-gray-600 font-medium">{r.rating.toFixed(1)}</span>
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            {r.guardian?.user?.name || "익명"} · {formatDate(r.createdAt)}
+                            {r.wouldRehire && <span className="ml-2 text-green-600">재고용 의향 ✓</span>}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setReportTarget(r)}
+                          className="text-xs text-gray-400 hover:text-red-500 px-2 py-1 border border-gray-200 rounded-lg hover:border-red-300"
+                          title="이 리뷰 신고"
+                        >
+                          🚨 신고
+                        </button>
+                      </div>
+                      {r.comment && (
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{r.comment}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Account Settings */}
+          {activeTab === "settings" && (
+            <div className="p-6 max-w-2xl mx-auto space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">계정 설정</h3>
+                <p className="text-sm text-gray-500">계정 관련 설정을 변경합니다.</p>
+              </div>
+
+              <div className="border border-red-200 bg-red-50 rounded-2xl p-6">
+                <h4 className="font-bold text-red-700 mb-2">회원 탈퇴</h4>
+                <p className="text-sm text-red-600 mb-4 leading-relaxed">
+                  회원 탈퇴 시 계정이 즉시 비활성화되며, 개인정보는 익명 처리됩니다.<br />
+                  <strong>진행 중인 계약이 있거나 미정산 수익이 있으면 탈퇴할 수 없습니다.</strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalOpen(true)}
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-xl transition-colors"
+                >
+                  회원 탈퇴하기
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Referral */}
           {activeTab === "referral" && (
             <div className="p-6">
@@ -584,6 +734,107 @@ export default function CaregiverDashboard() {
           )}
         </div>
       </div>
+
+      {/* Report Review Modal */}
+      {reportTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setReportTarget(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">리뷰 신고</h3>
+            <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
+              <div className="text-xs text-gray-500 mb-1">신고할 리뷰</div>
+              <div className="text-gray-700">
+                ⭐ {reportTarget.rating} / {reportTarget.comment?.slice(0, 80) || "(내용 없음)"}
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">신고 사유 *</label>
+                <select
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="INAPPROPRIATE">부적절한 내용</option>
+                  <option value="SPAM">스팸/광고</option>
+                  <option value="ABUSE">욕설·비방</option>
+                  <option value="FAKE">허위 사실</option>
+                  <option value="PRIVACY">개인정보 노출</option>
+                  <option value="OTHER">기타</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">상세 설명 <span className="text-gray-400 text-xs">(선택)</span></label>
+                <textarea
+                  value={reportDetail}
+                  onChange={(e) => setReportDetail(e.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  placeholder="관리자 검토에 참고할 내용을 적어주세요"
+                  className="input-field resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setReportTarget(null)}
+                disabled={reportLoading}
+                className="btn-secondary flex-1"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={submitReport}
+                disabled={reportLoading}
+                className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium rounded-xl"
+              >
+                {reportLoading ? "처리 중..." : "신고 접수"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-red-700 mb-4">회원 탈퇴</h3>
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700 mb-4">
+              <p className="font-semibold mb-2">⚠️ 탈퇴 전 꼭 확인해주세요</p>
+              <ul className="space-y-1 text-xs list-disc list-inside">
+                <li>계정이 즉시 비활성화됩니다</li>
+                <li>개인정보는 익명 처리됩니다</li>
+                <li>동일 이메일/전화번호로 다시 가입할 수 없습니다</li>
+                <li>간병 이력·정산 내역은 법령에 따라 일정 기간 보관됩니다</li>
+                <li>보유 포인트는 모두 소멸됩니다</li>
+              </ul>
+            </div>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호 확인 <span className="text-red-500">*</span></label>
+                <input type="password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} placeholder="현재 비밀번호" className="input-field" autoComplete="current-password" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">탈퇴 사유 <span className="text-gray-400 text-xs">(선택)</span></label>
+                <textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} rows={2} maxLength={500} className="input-field resize-none" placeholder="서비스 개선에 참고됩니다" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">확인 문구 <span className="text-red-500">*</span></label>
+                <input type="text" value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} placeholder='"탈퇴합니다" 를 입력하세요' className="input-field" />
+              </div>
+              {deleteError && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{deleteError}</div>}
+            </div>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => { setDeleteModalOpen(false); setDeletePassword(""); setDeleteReason(""); setDeleteConfirmText(""); setDeleteError(""); }} disabled={deleteLoading} className="btn-secondary flex-1">취소</button>
+              <button type="button" onClick={handleDeleteAccount} disabled={deleteLoading || !deletePassword || deleteConfirmText !== "탈퇴합니다"} className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-gray-300 text-white font-medium rounded-xl transition-colors">
+                {deleteLoading ? "처리 중..." : "탈퇴 확정"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Contract Cancel Modal (Caregiver) */}
       {cancelContractId && (

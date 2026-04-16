@@ -58,6 +58,7 @@ export function setupCronJobs() {
       const completedContracts = await prisma.contract.findMany({
         where: {
           status: 'COMPLETED',
+          cancelledAt: null,  // 취소된 계약 제외
           endDate: {
             gte: new Date(yesterday.setHours(0, 0, 0, 0)),
             lt: new Date(yesterday.setHours(23, 59, 59, 999)),

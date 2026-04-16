@@ -51,15 +51,15 @@ export const createInsuranceDocRequest = async (req: AuthRequest, res: Response,
       where: { role: 'ADMIN', isActive: true },
     });
 
-    for (const admin of admins) {
-      await prisma.notification.create({
-        data: {
+    if (admins.length > 0) {
+      await prisma.notification.createMany({
+        data: admins.map((admin) => ({
           userId: admin.id,
-          type: 'SYSTEM',
+          type: 'SYSTEM' as const,
           title: '간병보험 서류 신청',
           body: `${patientName} 환자의 ${documentType} 신청이 접수되었습니다. (보험사: ${insuranceCompany})`,
-          data: { insuranceDocRequestId: docRequest.id },
-        },
+          data: { insuranceDocRequestId: docRequest.id } as any,
+        })),
       });
     }
 

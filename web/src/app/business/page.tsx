@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { FiPhone, FiCheck, FiMail, FiArrowRight } from "react-icons/fi";
 import { FaHospital, FaBuilding, FaHandshake } from "react-icons/fa";
+import { SITE } from "@/config/site";
 
 export default function BusinessPage() {
   const [form, setForm] = useState({
@@ -91,11 +92,11 @@ export default function BusinessPage() {
 
             <div className="mt-8">
               <a
-                href="tel:1555-0801"
+                href={`tel:${SITE.phone}`}
                 className="inline-flex items-center gap-2 sm:gap-3 text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#FF922E] hover:text-[#FFB347] transition-colors"
               >
                 <FiPhone className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10" />
-                1555-0801
+                {SITE.phone}
               </a>
               <p className="mt-2 text-gray-400 text-xs sm:text-sm">평일 09:30~17:30 (점심 12:00~13:00)</p>
             </div>
@@ -173,7 +174,7 @@ export default function BusinessPage() {
               <p className="text-sm sm:text-base text-gray-600">
                 담당자가 확인 후 연락드리겠습니다.
                 <br />
-                빠른 상담은 <strong>1555-0801</strong>로 전화해주세요.
+                빠른 상담은 <strong>{SITE.phone}</strong>로 전화해주세요.
               </p>
             </div>
           ) : (

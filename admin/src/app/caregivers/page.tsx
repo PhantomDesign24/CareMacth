@@ -14,75 +14,14 @@ import {
   Caregiver,
 } from "@/lib/api";
 
-const statusOptions = [
-  { value: "", label: "전체 상태" },
-  { value: "PENDING", label: "승인 대기" },
-  { value: "APPROVED", label: "승인됨" },
-  { value: "REJECTED", label: "거절됨" },
-  { value: "SUSPENDED", label: "활동 정지" },
-  { value: "BLACKLISTED", label: "블랙리스트" },
-];
-
-function statusLabel(status: string): string {
-  const s = status?.toUpperCase();
-  switch (s) {
-    case "PENDING": return "승인 대기";
-    case "APPROVED": return "승인됨";
-    case "REJECTED": return "거절됨";
-    case "SUSPENDED": return "활동 정지";
-    case "BLACKLISTED": return "블랙리스트";
-    default: return status;
-  }
-}
-
-function statusBadge(status: string): string {
-  const s = status?.toUpperCase();
-  switch (s) {
-    case "APPROVED": return "badge-green";
-    case "PENDING": return "badge-yellow";
-    case "REJECTED": return "badge-red";
-    case "SUSPENDED": return "badge-red";
-    case "BLACKLISTED": return "badge-gray";
-    default: return "badge-gray";
-  }
-}
-
-const regionOptions = [
-  { value: "", label: "전체 지역" },
-  { value: "서울", label: "서울" },
-  { value: "경기", label: "경기" },
-  { value: "인천", label: "인천" },
-  { value: "부산", label: "부산" },
-  { value: "대구", label: "대구" },
-  { value: "광주", label: "광주" },
-  { value: "대전", label: "대전" },
-  { value: "울산", label: "울산" },
-  { value: "세종", label: "세종" },
-  { value: "강원", label: "강원" },
-  { value: "충북", label: "충북" },
-  { value: "충남", label: "충남" },
-  { value: "전북", label: "전북" },
-  { value: "전남", label: "전남" },
-  { value: "경북", label: "경북" },
-  { value: "경남", label: "경남" },
-  { value: "제주", label: "제주" },
-];
-
-const experienceOptions = [
-  { value: "", label: "전체 경력" },
-  { value: "0-1", label: "1년 미만" },
-  { value: "1-3", label: "1~3년" },
-  { value: "3-5", label: "3~5년" },
-  { value: "5-10", label: "5~10년" },
-  { value: "10-", label: "10년 이상" },
-];
-
-const workStatusOptions = [
-  { value: "", label: "전체 근무상태" },
-  { value: "WORKING", label: "근무중" },
-  { value: "AVAILABLE", label: "근무가능" },
-  { value: "IMMEDIATE", label: "즉시가능" },
-];
+import {
+  CAREGIVER_STATUS_OPTIONS as statusOptions,
+  REGION_OPTIONS as regionOptions,
+  EXPERIENCE_OPTIONS as experienceOptions,
+  WORK_STATUS_OPTIONS as workStatusOptions,
+  caregiverStatusLabel as statusLabel,
+  caregiverStatusBadge as statusBadge,
+} from "@/lib/constants";
 
 export default function CaregiversPage() {
   const [search, setSearch] = useState("");

@@ -52,6 +52,7 @@ model User {
   fcmToken      String?      // Firebase Cloud Messaging 토큰
   pushEnabled   Boolean      @default(true) // 푸시 알림 수신 여부
   isActive      Boolean      @default(true)
+  deletedAt     DateTime?    // 회원 탈퇴 시각 (soft delete)
   referralCode  String       @unique // 추천인 코드
   referredBy    String?      // 추천인 ID
   points        Int          @default(0) // 포인트
@@ -151,6 +152,7 @@ model Caregiver {
   earnings          Earning[]
   educations        EducationRecord[]
   consultMemos      ConsultMemo[]
+  feePayments       AssociationFeePayment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -192,8 +194,10 @@ model Patient {
   name            String
   birthDate       DateTime
   gender          String         // M, F
+  consciousness   String?        // clear, drowsy, stupor, coma
   mobilityStatus  MobilityStatus
   hasDementia     Boolean        @default(false)
+  dementiaLevel   String?        // mild, moderate, severe
   hasInfection    Boolean        @default(false)
   infectionDetail String?
   medicalNotes    String?        // 특이사항
@@ -247,7 +251,8 @@ model CareRequest {
   location            CareLocation
   hospitalName        String?
   address             String
-  region              String?   // 지역 (서울, 경기, 인천 등)
+  region              String?   // 지역 (서울, 경기, 인천 등) - 레거시
+  regions             String[]  // 다중 지역 선택
   latitude            Float?
   longitude           Float?
 
@@ -539,10 +544,81 @@ model Review {
   rating      Float     // 1-5
   comment     String?
   wouldRehire Boolean   @default(false) // 재고용 의사
+  isHidden    Boolean   @default(false) // 관리자 가림 처리
 
   createdAt   DateTime @default(now())
 
+  reports     Report[]
+
   @@unique([guardianId, contractId])
+}
+
+// ==========================================
+// 8-1. 신고 / 차단 (iOS 심사 필수)
+// ==========================================
+
+enum ReportTargetType {
+  REVIEW      // 리뷰
+  USER        // 사용자 프로필
+  CARE_RECORD // 간병 일지
+  MESSAGE     // 메시지
+}
+
+enum ReportStatus {
+  PENDING     // 검토 대기
+  REVIEWING   // 검토 중
+  RESOLVED    // 처리 완료
+  REJECTED    // 신고 기각
+}
+
+enum ReportReason {
+  INAPPROPRIATE  // 부적절한 내용
+  SPAM           // 스팸/광고
+  ABUSE          // 욕설·비방
+  FAKE           // 허위 사실
+  PRIVACY        // 개인정보 노출
+  OTHER          // 기타
+}
+
+model Report {
+  id          String           @id @default(uuid())
+  reporterId  String           // 신고자 userId
+  targetType  ReportTargetType
+  targetId    String           // 대상 ID (review/user/careRecord 등의 id)
+  reason      ReportReason
+  detail      String?          // 상세 설명
+  status      ReportStatus     @default(PENDING)
+  adminNote   String?          // 관리자 처리 메모
+  reviewedAt  DateTime?
+  reviewedBy  String?          // 처리한 관리자 userId
+
+  // 옵셔널 관계 (리뷰일 때만)
+  reviewId    String?
+  review      Review?          @relation(fields: [reviewId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([targetType, targetId])
+  @@index([status])
+  @@index([reporterId])
+}
+
+// ==========================================
+// 8-2. 사용자 차단 (iOS 심사 필수)
+// ==========================================
+
+model UserBlock {
+  id          String   @id @default(uuid())
+  blockerId   String   // 차단한 사람
+  blockedId   String   // 차단당한 사람
+  reason      String?
+
+  createdAt   DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
 }
 
 // ==========================================
@@ -691,8 +767,51 @@ model ConsultMemo {
 }
 
 // ==========================================
+// 14-1. 협회비 월별 납부 이력
+// ==========================================
+
+model AssociationFeePayment {
+  id          String    @id @default(uuid())
+  caregiverId String
+  caregiver   Caregiver @relation(fields: [caregiverId], references: [id])
+  year        Int       // 연도
+  month       Int       // 월 (1-12)
+  amount      Int       // 납부액
+  paid        Boolean   @default(false)
+  paidAt      DateTime?
+  note        String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([caregiverId, year, month])
+  @@index([year, month])
+  @@index([paid])
+}
+
+// ==========================================
 // 15. 플랫폼 설정
 // ==========================================
+
+// ==========================================
+// 15-1. 알림 템플릿
+// ==========================================
+
+model NotificationTemplate {
+  id          String   @id @default(uuid())
+  key         String   @unique  // MATCHING_NEW, APPLICATION_ACCEPTED, EXTENSION_REMINDER_3D 등
+  name        String            // 표시용 이름
+  type        String            // MATCHING, APPLICATION, CONTRACT, PAYMENT 등
+  title       String            // 알림 제목 (변수: {name}, {date} 등)
+  body        String            // 알림 본문
+  description String?           // 관리자 안내 문구
+  enabled     Boolean  @default(true)
+  isSystem    Boolean  @default(false) // 시스템 기본 템플릿 (삭제 불가)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([enabled])
+}
 
 model PlatformConfig {
   id                    String @id @default("default")
@@ -704,6 +823,8 @@ model PlatformConfig {
   referralPoints        Int    @default(10000) // 추천인 포인트
   noShowPenaltyThreshold Int   @default(3)     // 노쇼 패널티 임계값
   badgeThreshold        Int    @default(10)    // 우수 간병사 뱃지 매칭 횟수
+  associationFeeDefault Int    @default(30000) // 협회비 기본 금액(원)
+  cancellationFee       Int    @default(0)     // 기본 취소 수수료(원) - 향후 확장
 
   updatedAt             DateTime @updatedAt
 }

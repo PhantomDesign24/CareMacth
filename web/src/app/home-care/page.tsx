@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FiPhone, FiArrowRight, FiCheck } from "react-icons/fi";
 import { FaHandHoldingHeart } from "react-icons/fa";
+import { SITE } from "@/config/site";
 
 export default function HomeCarePage() {
   const services = [
@@ -25,7 +26,7 @@ export default function HomeCarePage() {
   ];
 
   const steps = [
-    { step: "01", title: "전화 상담", desc: "1555-0801로 전화하시면 전문 상담원이 방문요양 서비스에 대해 안내해드립니다." },
+    { step: "01", title: "전화 상담", desc: `${SITE.phone}로 전화하시면 전문 상담원이 방문요양 서비스에 대해 안내해드립니다.` },
     { step: "02", title: "방문 상담", desc: "전담 케어코디네이터가 직접 방문하여 어르신의 상태와 필요한 서비스를 파악합니다." },
     { step: "03", title: "요양보호사 매칭", desc: "어르신의 상태와 요구에 맞는 최적의 요양보호사를 AI 시스템으로 매칭합니다." },
     { step: "04", title: "서비스 시작", desc: "매칭된 요양보호사가 가정을 방문하여 체계적인 방문요양 서비스를 제공합니다." },
@@ -64,11 +65,11 @@ export default function HomeCarePage() {
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
               <a
-                href="tel:1555-0801"
+                href={`tel:${SITE.phone}`}
                 className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white text-green-700 font-bold rounded-2xl text-sm sm:text-base hover:bg-gray-50 transition-all shadow-xl w-full sm:w-auto"
               >
                 <FiPhone className="w-5 h-5" />
-                전화 상담 1555-0801
+                전화 상담 {SITE.phone}
               </a>
               <Link
                 href="/care-request"
@@ -160,11 +161,11 @@ export default function HomeCarePage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
             <a
-              href="tel:1555-0801"
+              href={`tel:${SITE.phone}`}
               className="inline-flex items-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white text-green-700 font-bold rounded-2xl hover:bg-gray-50 transition-all shadow-xl w-full sm:w-auto justify-center"
             >
               <FiPhone className="w-5 h-5" />
-              1555-0801
+              {SITE.phone}
             </a>
             <Link
               href="/care-request"

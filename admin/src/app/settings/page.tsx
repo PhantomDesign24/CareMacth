@@ -4,14 +4,16 @@ import { useState, useEffect, useCallback } from "react";
 import { getPlatformConfig, updatePlatformConfig, PlatformSettings } from "@/lib/api";
 
 const defaultSettings: PlatformSettings = {
-  oneOnOneFeePercentage: 5,
+  oneOnOneFeePercentage: 10,
   oneOnOneFeeFixed: 0,
-  familyCareFeePercentage: 4,
-  familyCareFeeFixed: 10000,
+  familyCareFeePercentage: 15,
+  familyCareFeeFixed: 0,
   taxRate: 3.3,
   referralPointAmount: 10000,
   noShowPenaltyThreshold: 3,
-  excellentBadgeThreshold: 100,
+  excellentBadgeThreshold: 10,
+  associationFeeDefault: 30000,
+  cancellationFee: 0,
 };
 
 export default function SettingsPage() {
@@ -272,6 +274,27 @@ export default function SettingsPage() {
                 min="1"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">회</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">협회비 기본 금액</h3>
+            <p className="mt-1 text-sm text-gray-500">간병인 월별 협회비 관리 페이지에서 기본값으로 사용됩니다.</p>
+          </div>
+          <div className="max-w-xs">
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">월 협회비</label>
+            <div className="relative">
+              <input
+                type="number"
+                value={settings.associationFeeDefault ?? 0}
+                onChange={(e) => handleChange("associationFeeDefault", Number(e.target.value))}
+                className="input-field pr-10"
+                step="1000"
+                min="0"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">원</span>
             </div>
           </div>
         </div>

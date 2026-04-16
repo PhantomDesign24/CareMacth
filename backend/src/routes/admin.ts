@@ -70,6 +70,8 @@ router.put('/platform-config', [
   body('referralPoints').optional().isInt({ min: 0 }).withMessage('추천 포인트는 0 이상이어야 합니다.'),
   body('noShowPenaltyThreshold').optional().isInt({ min: 1 }).withMessage('노쇼 임계값은 1 이상이어야 합니다.'),
   body('badgeThreshold').optional().isInt({ min: 1 }).withMessage('뱃지 임계값은 1 이상이어야 합니다.'),
+  body('associationFeeDefault').optional().isInt({ min: 0 }).withMessage('협회비 기본 금액은 0 이상이어야 합니다.'),
+  body('cancellationFee').optional().isInt({ min: 0 }).withMessage('취소 수수료는 0 이상이어야 합니다.'),
 ], adminController.updatePlatformConfig);
 
 // 프로모션
@@ -78,6 +80,26 @@ router.put('/promotions', [
   body('referralPoints').optional().isInt({ min: 0 }).withMessage('추천 포인트는 0 이상이어야 합니다.'),
   body('badgeThreshold').optional().isInt({ min: 1 }).withMessage('뱃지 임계값은 1 이상이어야 합니다.'),
 ], adminController.updatePromotions);
+
+// 신고 관리 (iOS 심사 필수 - UGC 모더레이션)
+router.get('/reports', require('../controllers/reportController').adminGetReports);
+router.put('/reports/:id', require('../controllers/reportController').adminUpdateReport);
+
+// 알림 템플릿 관리
+router.get('/notification-templates', adminController.getNotificationTemplates);
+router.post('/notification-templates', adminController.createNotificationTemplate);
+router.put('/notification-templates/:id', adminController.updateNotificationTemplate);
+router.delete('/notification-templates/:id', adminController.deleteNotificationTemplate);
+
+// 협회비 월별 관리
+router.get('/association-fees', adminController.getAssociationFees);
+router.get('/association-fees/export', adminController.exportAssociationFees);
+router.put('/association-fees/:caregiverId', [
+  body('year').isInt({ min: 2020 }).withMessage('유효한 연도를 입력해주세요.'),
+  body('month').isInt({ min: 1, max: 12 }).withMessage('유효한 월을 입력해주세요.'),
+  body('paid').isBoolean().withMessage('paid 값은 boolean이어야 합니다.'),
+  body('amount').optional().isInt({ min: 0 }).withMessage('납부액은 0 이상이어야 합니다.'),
+], adminController.updateAssociationFee);
 
 // 교육 관리
 router.get('/education', adminController.getAdminEducations);
