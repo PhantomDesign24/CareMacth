@@ -73,6 +73,8 @@ export default function App() {
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [debugVisible, setDebugVisible] = useState(false);
   const addLog = useCallback((tag: string, msg: string) => {
+    // 릴리즈 빌드에서는 디버그 로그 완전 비활성화 (성능·보안)
+    if (!__DEV__) return;
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
     const line = `${time} [${tag}] ${msg}`;
@@ -907,8 +909,9 @@ export default function App() {
                       hideModal();
                       setPaymentActive(false);
                       if (webViewRef.current) {
+                        // 결제 중엔 WebView가 토스 도메인에 있으므로 절대 URL로 이동해야 함
                         webViewRef.current.injectJavaScript(`
-                          window.location.href = '/dashboard/guardian?tab=history';
+                          window.location.href = '${WEB_URL}/dashboard/guardian?tab=history';
                           true;
                         `);
                       }
@@ -950,17 +953,19 @@ export default function App() {
       </View>
       )}
 
-      {/* 디버그 로그 오버레이 토글 버튼 (우측 상단) */}
-      <TouchableOpacity
-        style={styles.debugFab}
-        onPress={() => setDebugVisible((v) => !v)}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.debugFabText}>🐞{debugLogs.length}</Text>
-      </TouchableOpacity>
+      {/* 디버그 로그 오버레이 토글 버튼 (개발 빌드에서만) */}
+      {__DEV__ && (
+        <TouchableOpacity
+          style={styles.debugFab}
+          onPress={() => setDebugVisible((v) => !v)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.debugFabText}>🐞{debugLogs.length}</Text>
+        </TouchableOpacity>
+      )}
 
       {/* 디버그 로그 오버레이 */}
-      {debugVisible && (
+      {__DEV__ && debugVisible && (
         <View style={styles.debugPanel}>
           <View style={styles.debugHeader}>
             <Text style={styles.debugHeaderText}>
