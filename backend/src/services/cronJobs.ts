@@ -192,10 +192,10 @@ export function setupCronJobs() {
     }
   });
 
-  // 매 10분: 15분 이상 PENDING 상태인 결제 자동 실패 처리 (토스 세션 만료 후처리)
-  cron.schedule('*/10 * * * *', async () => {
+  // 매 2분: 5분 이상 PENDING 상태인 결제 자동 실패 처리 (토스 세션 만료 후처리)
+  cron.schedule('*/2 * * * *', async () => {
     try {
-      const cutoff = new Date(Date.now() - 15 * 60 * 1000);
+      const cutoff = new Date(Date.now() - 5 * 60 * 1000);
       const result = await prisma.payment.updateMany({
         where: {
           status: 'PENDING',

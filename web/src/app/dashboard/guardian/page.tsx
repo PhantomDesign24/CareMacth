@@ -810,16 +810,20 @@ function GuardianDashboard() {
 
           {/* Payment history */}
           {activeTab === "payments" && (() => {
+            // 실결제(완료/에스크로/환불)만 "유의미"한 내역으로 간주
+            // PENDING/FAILED는 시도만 하고 완결 안 된 상태라 기본 숨김 (필터로 볼 수 있음)
+            const meaningfulPayments = payments.filter(p => !/대기|PENDING|실패|FAILED/i.test(p.status));
             const paymentFilters = [
-              { value: "all", label: "전체", count: payments.length },
-              { value: "pending", label: "대기", count: payments.filter(p => /대기|PENDING|결제 대기/i.test(p.status)).length },
+              { value: "all", label: "전체", count: meaningfulPayments.length },
               { value: "completed", label: "완료", count: payments.filter(p => /완료|COMPLETED|결제 완료/i.test(p.status)).length },
               { value: "escrow", label: "보관중", count: payments.filter(p => /ESCROW|에스크로/i.test(p.status)).length },
               { value: "refunded", label: "환불", count: payments.filter(p => /환불|REFUNDED/i.test(p.status)).length },
+              { value: "pending", label: "대기", count: payments.filter(p => /대기|PENDING|결제 대기/i.test(p.status)).length },
               { value: "failed", label: "실패", count: payments.filter(p => /실패|FAILED/i.test(p.status)).length },
             ];
             const filteredPayments = payments.filter((p) => {
-              if (paymentFilter === "all") return true;
+              // "전체"는 PENDING/FAILED 제외 (대기·실패는 명시적으로 선택해야 보임)
+              if (paymentFilter === "all") return !/대기|PENDING|실패|FAILED/i.test(p.status);
               if (paymentFilter === "pending") return /대기|PENDING|결제 대기/i.test(p.status);
               if (paymentFilter === "completed") return /완료|COMPLETED|결제 완료/i.test(p.status);
               if (paymentFilter === "escrow") return /ESCROW|에스크로/i.test(p.status);
