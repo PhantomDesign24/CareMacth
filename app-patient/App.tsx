@@ -13,7 +13,6 @@ import {
   Switch,
   Linking,
   Modal,
-  AppState,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -66,7 +65,6 @@ export default function App() {
   const [biometricReady, setBiometricReady] = useState(false);
   const [showBiometricLogin, setShowBiometricLogin] = useState(false);
   const [pendingTokenInjection, setPendingTokenInjection] = useState<string | null>(null);
-  const paymentInProgressRef = useRef(false);
 
   // 커스텀 모달 상태
   const [modal, setModal] = useState<{
@@ -168,39 +166,6 @@ export default function App() {
       // 유저 연결은 WebView 로그인 시 onMessage에서 처리
     } catch (e) { console.log('Push setup error:', e); }
   };
-
-  // 앱 포그라운드 복귀 시 결제 진행 중이었으면 확인 모달 표시
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && paymentInProgressRef.current) {
-        paymentInProgressRef.current = false;
-        // 결제 완료 여부를 사용자에게 확인
-        showModal({
-          icon: 'card-outline',
-          iconColor: '#FF922E',
-          title: '결제 진행 확인',
-          message: '결제를 완료하셨나요?\n결제 내역에서 상태를 확인할 수 있습니다.',
-          buttons: [
-            { text: '이 페이지에 머물기', style: 'cancel', onPress: hideModal },
-            {
-              text: '결제 내역 보기',
-              style: 'primary',
-              onPress: () => {
-                hideModal();
-                if (webViewRef.current) {
-                  webViewRef.current.injectJavaScript(`
-                    window.location.href = '/dashboard/guardian?tab=history';
-                    true;
-                  `);
-                }
-              },
-            },
-          ],
-        });
-      }
-    });
-    return () => sub.remove();
-  }, []);
 
   // 알림 수신 리스너
   useEffect(() => {
@@ -659,39 +624,42 @@ export default function App() {
           style={styles.webview}
           onShouldStartLoadWithRequest={(req) => {
             const url = req.url || '';
-            // 토스·카카오페이 등 결제 도메인은 외부 브라우저로 분리
-            const externalHosts = [
-              'pay.toss.im',
-              'checkout.tosspayments.com',
-              'm.tosspayments.com',
-              'event.tosspayments.com',
-              'pg.tosspayments.com',
-              'kpg.tosspayments.com',
-              'toss.im',
-              'tosspayments.com',
-              'qr.kakaopay.com',
-              'app.kakaopay.com',
-              'mobile-pay.kakaopay.com',
+            // http(s)는 WebView 안에서 그대로 (토스 결제창도 WebView에서 열림)
+            if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('about:')) {
+              return true;
+            }
+            // Android intent:// URL → 내부 package 파싱하여 외부 앱 열기
+            if (url.startsWith('intent://')) {
+              // intent 파싱 실패 시 fallback URL로 열기 시도
+              Linking.openURL(url).catch(() => {
+                // intent URL 파싱 실패 → fallback URL (보통 #Intent;...;S.browser_fallback_url=...;end)
+                const fallbackMatch = url.match(/S\.browser_fallback_url=([^;]+)/);
+                if (fallbackMatch) {
+                  try {
+                    const fallback = decodeURIComponent(fallbackMatch[1]);
+                    Linking.openURL(fallback).catch(() => {});
+                  } catch {}
+                }
+              });
+              return false;
+            }
+            // 카드/은행 앱 스킴은 외부 앱으로 위임 (복귀 시 토스 WebView로 자동 복귀)
+            const appSchemes = [
+              'market://', 'tmap://', 'iamporttoss://', 'supertoss://', 'kftc-bankpay://',
+              'ispmobile://', 'mpocket.online.ansimclick://', 'kb-acp://',
+              'mpocket.online.ansimclick.kftcbankpay://', 'hdcardappcardansimclick://',
+              'smshinhanansimclick://', 'shinhan-sr-ansimclick://', 'smshinhan://',
+              'smlotteapp://', 'lottesmartpay://', 'lotteappcard://', 'cloudpay://',
+              'nhappcardansimclick://', 'nhappvardansimclick://', 'citispay://',
+              'citicardappkr://', 'citimobileapp://', 'payco://', 'kakaotalk://',
+              'kakaopay://', 'samsungpay://', 'mpocket.online.ansimclick.appcard://',
             ];
-            // intent://, market://, tmap://, iamporttoss:// 등 앱 스킴도 외부로
-            if (url.startsWith('intent://') || url.startsWith('market://') || url.startsWith('tmap://') ||
-                url.startsWith('iamporttoss://') || url.startsWith('supertoss://') || url.startsWith('kftc-bankpay://') ||
-                url.startsWith('ispmobile://') || url.startsWith('mpocket.online.ansimclick://') ||
-                url.startsWith('kb-acp://') || url.startsWith('mpocket.online.ansimclick.kftcbankpay://') ||
-                url.startsWith('hdcardappcardansimclick://') || url.startsWith('smshinhanansimclick://') ||
-                url.startsWith('shinhan-sr-ansimclick://') || url.startsWith('smshinhan://') ||
-                url.startsWith('smlotteapp://') || url.startsWith('lottesmartpay://') ||
-                url.startsWith('lotteappcard://') || url.startsWith('cloudpay://') ||
-                url.startsWith('nhappcardansimclick://') || url.startsWith('nhappvardansimclick://') ||
-                url.startsWith('citispay://') || url.startsWith('citicardappkr://') ||
-                url.startsWith('citimobileapp://') || url.startsWith('payco://') ||
-                url.startsWith('kakaotalk://') || url.startsWith('kakaopay://')) {
-              paymentInProgressRef.current = true;
+            if (appSchemes.some((s) => url.startsWith(s))) {
               Linking.openURL(url).catch(() => {});
               return false;
             }
-            if (externalHosts.some((h) => url.includes(h))) {
-              paymentInProgressRef.current = true;
+            // 그 외 알 수 없는 스킴도 기본적으로 외부로
+            if (!url.startsWith('http') && !url.startsWith('file:') && !url.startsWith('blob:')) {
               Linking.openURL(url).catch(() => {});
               return false;
             }
