@@ -69,6 +69,18 @@ export default function App() {
   const [pendingTokenInjection, setPendingTokenInjection] = useState<string | null>(null);
   const [paymentActive, setPaymentActive] = useState(false);
 
+  // 디버그 로그 오버레이 (결제 흐름 추적용)
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [debugVisible, setDebugVisible] = useState(false);
+  const addLog = useCallback((tag: string, msg: string) => {
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    setDebugLogs((prev) => {
+      const next = [...prev, `${time} [${tag}] ${msg}`];
+      return next.length > 100 ? next.slice(-100) : next;
+    });
+  }, []);
+
   // 커스텀 모달 상태
   const [modal, setModal] = useState<{
     visible: boolean;
@@ -272,6 +284,11 @@ export default function App() {
   const onMessage = async (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
+      // 디버그 로그 수신 (WebView 내부 JS에서 보낸 네트워크/콘솔)
+      if (data.type === 'DEBUG_LOG') {
+        addLog(data.tag || 'WEB', String(data.msg || ''));
+        return;
+      }
       if (data.type === 'CALL') {
         // 전화 걸기
       }
@@ -349,6 +366,80 @@ export default function App() {
     window.IS_CAREMATCH_APP = true;
     window.APP_TYPE = 'PATIENT';
     window.APP_PLATFORM = '${Platform.OS}';
+
+    // 디버그: console.log, window.open, error 가로채서 앱으로 전달
+    (function() {
+      function sendDbg(tag, msg) {
+        try {
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'DEBUG_LOG', tag: tag, msg: String(msg).slice(0, 200) }));
+          }
+        } catch(e) {}
+      }
+      var origLog = console.log;
+      console.log = function() {
+        try { sendDbg('LOG', Array.from(arguments).join(' ')); } catch(e) {}
+        origLog.apply(console, arguments);
+      };
+      var origErr = console.error;
+      console.error = function() {
+        try { sendDbg('ERR', Array.from(arguments).join(' ')); } catch(e) {}
+        origErr.apply(console, arguments);
+      };
+      var origOpen = window.open;
+      window.open = function(url, name, features) {
+        sendDbg('WIN_OPEN', url + ' | ' + (features||''));
+        return origOpen.apply(window, arguments);
+      };
+      window.addEventListener('error', function(e) {
+        sendDbg('PAGE_ERR', (e.message||'') + ' @ ' + (e.filename||'') + ':' + (e.lineno||''));
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        sendDbg('REJECT', String(e.reason));
+      });
+
+      // fetch 가로채기 (요청/응답 모두 로깅)
+      var origFetch = window.fetch;
+      window.fetch = function() {
+        var args = arguments;
+        var url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+        var method = (args[1] && args[1].method) || 'GET';
+        sendDbg('FETCH_REQ', method + ' ' + url.slice(0, 120));
+        return origFetch.apply(this, args).then(function(res) {
+          var cloned = res.clone();
+          cloned.text().then(function(txt) {
+            sendDbg('FETCH_RES', res.status + ' ' + url.slice(0, 80) + ' | ' + txt.slice(0, 300));
+          }).catch(function(){});
+          return res;
+        }).catch(function(err) {
+          sendDbg('FETCH_ERR', url.slice(0, 80) + ' | ' + (err && err.message || ''));
+          throw err;
+        });
+      };
+
+      // XMLHttpRequest 가로채기
+      var XHR = window.XMLHttpRequest;
+      var origOpen2 = XHR.prototype.open;
+      var origSend = XHR.prototype.send;
+      XHR.prototype.open = function(method, url) {
+        this.__dbg_method = method;
+        this.__dbg_url = url;
+        return origOpen2.apply(this, arguments);
+      };
+      XHR.prototype.send = function(body) {
+        var self = this;
+        sendDbg('XHR_REQ', (self.__dbg_method||'') + ' ' + (self.__dbg_url||'').slice(0, 120));
+        self.addEventListener('load', function() {
+          var resp = '';
+          try { resp = self.responseText ? self.responseText.slice(0, 300) : ''; } catch(e){}
+          sendDbg('XHR_RES', self.status + ' ' + (self.__dbg_url||'').slice(0, 80) + ' | ' + resp);
+        });
+        self.addEventListener('error', function() {
+          sendDbg('XHR_ERR', (self.__dbg_url||'').slice(0, 80));
+        });
+        return origSend.apply(this, arguments);
+      };
+    })();
 
     // 하단 탭바 높이만큼 웹 padding 추가
     document.body.style.paddingBottom = '70px';
@@ -659,14 +750,17 @@ export default function App() {
           style={styles.webview}
           onShouldStartLoadWithRequest={(req) => {
             const url = req.url || '';
+            addLog('NAV', url.length > 80 ? url.slice(0, 80) + '...' : url);
             // http(s)는 WebView 안에서 그대로 (토스 결제창도 WebView에서 열림)
             if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('about:')) {
               return true;
             }
             // Android intent:// URL → 내부 package 파싱하여 외부 앱 열기
             if (url.startsWith('intent://')) {
+              addLog('INTENT', url.slice(0, 100));
               // intent 파싱 실패 시 fallback URL로 열기 시도
-              Linking.openURL(url).catch(() => {
+              Linking.openURL(url).catch((err) => {
+                addLog('INTENT_FAIL', err?.message || 'unknown');
                 // intent URL 파싱 실패 → fallback URL (보통 #Intent;...;S.browser_fallback_url=...;end)
                 const fallbackMatch = url.match(/S\.browser_fallback_url=([^;]+)/);
                 if (fallbackMatch) {
@@ -690,18 +784,25 @@ export default function App() {
               'kakaopay://', 'samsungpay://', 'mpocket.online.ansimclick.appcard://',
             ];
             if (appSchemes.some((s) => url.startsWith(s))) {
-              Linking.openURL(url).catch(() => {});
+              addLog('SCHEME', url.slice(0, 80));
+              Linking.openURL(url).catch((err) => addLog('SCHEME_FAIL', err?.message || 'unknown'));
               return false;
             }
             // 그 외 알 수 없는 스킴도 기본적으로 외부로
             if (!url.startsWith('http') && !url.startsWith('file:') && !url.startsWith('blob:')) {
-              Linking.openURL(url).catch(() => {});
+              addLog('UNKNOWN_SCHEME', url.slice(0, 80));
+              Linking.openURL(url).catch((err) => addLog('UNKNOWN_FAIL', err?.message || 'unknown'));
               return false;
             }
             return true;
           }}
-          onNavigationStateChange={onNavigationChange}
+          onNavigationStateChange={(navState) => {
+            addLog('NAV_STATE', `${navState.loading ? 'LOAD' : 'DONE'} ${(navState.url || '').slice(0, 80)}`);
+            onNavigationChange(navState);
+          }}
+          onLoadStart={(e) => addLog('LOAD_START', (e.nativeEvent?.url || '').slice(0, 80))}
           onLoadEnd={() => {
+            addLog('LOAD_END', 'ok');
             setLoading(false);
             // 생체인증 후 대기 중인 토큰 주입
             if (pendingTokenInjection && webViewRef.current) {
@@ -729,13 +830,11 @@ export default function App() {
           mixedContentMode="always"
           originWhitelist={['*']}
           onOpenWindow={(event) => {
-            // 카카오페이/네이버페이 등은 window.open으로 팝업을 열려고 함
-            // 팝업 URL을 현재 WebView에서 이동시켜 처리 (결제 완료 후 원 페이지로 복귀)
             const { targetUrl } = event.nativeEvent || {};
+            addLog('OPEN_WIN', targetUrl ? targetUrl.slice(0, 80) : '(no url)');
             if (!targetUrl) return;
-            // 앱 스킴이면 외부 앱으로 위임
             if (!targetUrl.startsWith('http')) {
-              Linking.openURL(targetUrl).catch(() => {});
+              Linking.openURL(targetUrl).catch((err) => addLog('OPEN_WIN_FAIL', err?.message || 'err'));
               return;
             }
             if (webViewRef.current) {
@@ -744,6 +843,8 @@ export default function App() {
               );
             }
           }}
+          onError={(e) => addLog('ERROR', e.nativeEvent?.description || 'error')}
+          onHttpError={(e) => addLog('HTTP_ERR', `${e.nativeEvent?.statusCode} ${e.nativeEvent?.url?.slice(0, 60)}`)}
           userAgent={
             Platform.OS === 'android'
               ? 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 CareMatch-Patient/android'
@@ -816,6 +917,37 @@ export default function App() {
       </View>
       )}
 
+      {/* 디버그 로그 오버레이 토글 버튼 (우측 상단) */}
+      <TouchableOpacity
+        style={styles.debugFab}
+        onPress={() => setDebugVisible((v) => !v)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.debugFabText}>🐞{debugLogs.length}</Text>
+      </TouchableOpacity>
+
+      {/* 디버그 로그 오버레이 */}
+      {debugVisible && (
+        <View style={styles.debugPanel}>
+          <View style={styles.debugHeader}>
+            <Text style={styles.debugHeaderText}>
+              실시간 로그 ({debugLogs.length})
+            </Text>
+            <TouchableOpacity onPress={() => setDebugLogs([])} style={styles.debugBtn}>
+              <Text style={styles.debugBtnText}>Clear</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setDebugVisible(false)} style={styles.debugBtn}>
+              <Text style={styles.debugBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.debugList} ref={(r) => { if (r) r.scrollToEnd({ animated: false }); }}>
+            {debugLogs.map((line, i) => (
+              <Text key={i} style={styles.debugLine} selectable>{line}</Text>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* 커스텀 모달 */}
       <Modal visible={modal.visible} transparent animationType="fade" onRequestClose={hideModal}>
         <View style={styles.modalOverlay}>
@@ -880,6 +1012,49 @@ const styles = StyleSheet.create({
   },
   loadingTitle: { fontSize: 24, fontWeight: 'bold', color: '#FF922E' },
   loadingDesc: { fontSize: 14, color: '#999', marginTop: 4 },
+
+  // 디버그 오버레이
+  debugFab: {
+    position: 'absolute',
+    top: 60,
+    right: 10,
+    width: 60,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    elevation: 10,
+  },
+  debugFabText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  debugPanel: {
+    position: 'absolute',
+    left: 0, right: 0, bottom: 0,
+    height: '55%',
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    zIndex: 9998,
+    elevation: 9,
+  },
+  debugHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    gap: 8,
+  },
+  debugHeaderText: { color: '#0f0', fontSize: 12, fontWeight: '700', flex: 1 },
+  debugBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#333',
+    borderRadius: 4,
+  },
+  debugBtnText: { color: '#fff', fontSize: 11 },
+  debugList: { flex: 1, paddingHorizontal: 8, paddingVertical: 6 },
+  debugLine: { color: '#0f0', fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', marginBottom: 3 },
 
   // 결제 진행 중 배너
   paymentBanner: {
