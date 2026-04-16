@@ -758,21 +758,51 @@ export default function App() {
             if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('about:')) {
               return true;
             }
-            // Android intent:// URL → 내부 package 파싱하여 외부 앱 열기
+            // Android intent:// URL → 스킴 파싱 → 앱 직접 호출
             if (url.startsWith('intent://')) {
               addLog('INTENT', url.slice(0, 100));
-              // intent 파싱 실패 시 fallback URL로 열기 시도
-              Linking.openURL(url).catch((err) => {
-                addLog('INTENT_FAIL', err?.message || 'unknown');
-                // intent URL 파싱 실패 → fallback URL (보통 #Intent;...;S.browser_fallback_url=...;end)
-                const fallbackMatch = url.match(/S\.browser_fallback_url=([^;]+)/);
-                if (fallbackMatch) {
-                  try {
-                    const fallback = decodeURIComponent(fallbackMatch[1]);
-                    Linking.openURL(fallback).catch(() => {});
-                  } catch {}
-                }
+              // intent://HOST/PATH?QUERY#Intent;scheme=XX;package=YY;...;end
+              const intentBody = url.substring('intent://'.length);
+              const hashIdx = intentBody.indexOf('#Intent;');
+              const pathPart = hashIdx >= 0 ? intentBody.substring(0, hashIdx) : intentBody;
+              const paramsPart = hashIdx >= 0 ? intentBody.substring(hashIdx + '#Intent;'.length) : '';
+              const params: Record<string, string> = {};
+              paramsPart.split(';').forEach((p) => {
+                const eq = p.indexOf('=');
+                if (eq > 0) params[p.substring(0, eq)] = p.substring(eq + 1);
               });
+              const scheme = params.scheme || '';
+              const packageName = params.package || '';
+              const fallback = params['S.browser_fallback_url'];
+              const appUrl = scheme ? `${scheme}://${pathPart}` : '';
+              addLog('INTENT_PARSE', `scheme=${scheme} pkg=${packageName}`);
+              // 1순위: scheme://path 로 앱 직접 호출
+              if (appUrl) {
+                Linking.openURL(appUrl).catch(() => {
+                  addLog('INTENT_APP_FAIL', appUrl.slice(0, 60));
+                  // 2순위: 앱 미설치 → Play Store 열기
+                  if (packageName) {
+                    Linking.openURL(`market://details?id=${packageName}`).catch(() => {
+                      // 3순위: fallback URL
+                      if (fallback) {
+                        try { Linking.openURL(decodeURIComponent(fallback)).catch(() => {}); } catch {}
+                      }
+                    });
+                  } else if (fallback) {
+                    try { Linking.openURL(decodeURIComponent(fallback)).catch(() => {}); } catch {}
+                  }
+                });
+              } else if (fallback) {
+                try { Linking.openURL(decodeURIComponent(fallback)).catch(() => {}); } catch {}
+              }
+              return false;
+            }
+            // app:// 스킴 (카카오페이 WebView 내부 닫기 신호) → 이전 페이지로
+            if (url.startsWith('app://')) {
+              addLog('APP_SCHEME', url);
+              if (url.includes('/close') && webViewRef.current) {
+                webViewRef.current.goBack();
+              }
               return false;
             }
             // 카드/은행 앱 스킴은 외부 앱으로 위임 (복귀 시 토스 WebView로 자동 복귀)

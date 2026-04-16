@@ -51,7 +51,8 @@
           "icon": "./assets/notification-icon.png",
           "color": "#FF922E"
         }
-      ]
+      ],
+      "./plugins/withAndroidQueries.js"
     ],
     "notification": {
       "icon": "./assets/notification-icon.png",
