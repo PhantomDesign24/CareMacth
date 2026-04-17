@@ -139,7 +139,8 @@ export const caregiverAPI = {
     return api.put("/caregiver/work-status", { workStatus: statusMap[status] || status.toUpperCase() });
   },
   apply: (requestId: string) =>
-    api.post(`/care-requests/${requestId}/apply`),
+    // 제시 금액 수락하고 지원 (isAccepted=true)
+    api.post(`/care-requests/${requestId}/apply`, { isAccepted: true }),
   applyWithProposal: (requestId: string, data: { proposedRate?: number | null; isAccepted: boolean; message?: string }) =>
     api.post(`/care-requests/${requestId}/apply`, data),
   getEarnings: (params?: Record<string, unknown>) =>
