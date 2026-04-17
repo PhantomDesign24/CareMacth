@@ -110,6 +110,7 @@ model Caregiver {
   nationality       String?   // 국적
   birthDate         DateTime?
   address           String?
+  corporateName     String?   // 간병인 사용 법인명 (PDF 간병일지에 표시, 간병인 직접 입력)
   latitude          Float?
   longitude         Float?
   preferredRegions  String[]  // 희망 근무 지역

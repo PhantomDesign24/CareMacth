@@ -226,6 +226,7 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
 
     const {
       contractId,
+      date,
       careHoursManual,
       mealCare,
       activityCare,
@@ -254,17 +255,18 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
       throw new AppError('유효한 계약을 찾을 수 없습니다.', 404);
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // 기록 기준 날짜: 클라이언트가 보낸 date(YYYY-MM-DD) 우선, 없으면 오늘
+    const targetDate = date ? new Date(`${date}T00:00:00`) : new Date();
+    targetDate.setHours(0, 0, 0, 0);
 
-    // 오늘의 기록 찾기 또는 생성
+    // 해당 날짜의 기록 찾기 또는 생성
     let record = await prisma.careRecord.findFirst({
       where: {
         contractId,
         caregiverId: caregiver.id,
         date: {
-          gte: today,
-          lt: new Date(today.getTime() + 86400000),
+          gte: targetDate,
+          lt: new Date(targetDate.getTime() + 86400000),
         },
       },
     });
@@ -295,7 +297,7 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
         data: {
           contractId,
           caregiverId: caregiver.id,
-          date: today,
+          date: targetDate,
           ...logData,
         },
       });
@@ -593,7 +595,7 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
       ['생년월일', patient.birthDate ? new Date(patient.birthDate).toISOString().slice(0, 10) : '-', '병원명', contract.careRequest.hospitalName || contract.careRequest.address || '-'],
       ['간병 시작일', contract.startDate ? new Date(contract.startDate).toISOString().slice(0, 10) : '-', '간병 기간', contract.careRequest.durationDays ? `${contract.careRequest.durationDays}일` : '-'],
       ['간병인 성명', caregiverUser?.name || '-', '간병인 연락처', caregiverUser?.phone || '-'],
-      ['간병인 사용 법인명', '', '', ''],
+      ['간병인 사용 법인명', caregiver.corporateName || '', '', ''],
     ];
 
     info.forEach((row, idx) => {
@@ -659,8 +661,9 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
       drawCell(TABLE_LEFT + dateW, y, timeW, rowH, hoursStr, { size: 10, align: 'center', bg: rowBg });
 
       const mark = (v: boolean) => (v ? '■' : '□');
+      const otherSuffix = r?.otherCare && r.otherCareNote ? `(${r.otherCareNote})` : '';
       const taskText = r
-        ? `${mark(r.mealCare)} 식사보조   ${mark(r.activityCare)} 활동보조   ${mark(r.excretionCare)} 배변보조   ${mark(r.hygieneCare)} 위생보조   ${mark(r.otherCare)} 기타`
+        ? `${mark(r.mealCare)} 식사보조   ${mark(r.activityCare)} 활동보조   ${mark(r.excretionCare)} 배변보조   ${mark(r.hygieneCare)} 위생보조   ${mark(r.otherCare)} 기타${otherSuffix ? ' ' + otherSuffix : ''}`
         : '□ 식사보조   □ 활동보조   □ 배변보조   □ 위생보조   □ 기타';
       drawCell(TABLE_LEFT + dateW + timeW, y, taskW, rowH, taskText, { size: 9, bg: rowBg, align: 'center' });
       y += rowH;

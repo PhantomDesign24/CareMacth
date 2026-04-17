@@ -120,6 +120,7 @@ function CaregiverDashboard() {
   };
 
   // Delete account state
+  const [corporateName, setCorporateName] = useState("");
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
@@ -177,6 +178,7 @@ function CaregiverDashboard() {
         referralCode: user.referralCode || '',
         penaltyScore: profile.penaltyCount || 0,
       });
+      setCorporateName(profile.corporateName || '');
       if (profile.workStatus) {
         const statusMap: Record<string, Status> = { WORKING: 'working', AVAILABLE: 'available', IMMEDIATE: 'immediately' };
         setCurrentStatus(statusMap[profile.workStatus] || 'available');
@@ -990,6 +992,38 @@ function CaregiverDashboard() {
               <div>
                 <h3 className="text-lg font-bold text-gray-900 mb-2">계정 설정</h3>
                 <p className="text-sm text-gray-500">계정 관련 설정을 변경합니다.</p>
+              </div>
+
+              {/* 간병일지 정보 설정 */}
+              <div className="border border-gray-200 bg-white rounded-2xl p-6">
+                <h4 className="font-bold text-gray-900 mb-1">간병일지 PDF 정보</h4>
+                <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                  보험사 제출용 간병일지 PDF에 자동으로 포함됩니다. 한 번 저장하면 다음부터는 자동으로 채워집니다.
+                </p>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  간병인 사용 법인명
+                </label>
+                <input
+                  type="text"
+                  value={corporateName}
+                  onChange={(e) => setCorporateName(e.target.value)}
+                  placeholder="예: ○○케어 주식회사"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await caregiverAPI.updateProfile({ corporateName });
+                      showToast("저장되었습니다.", "success");
+                    } catch {
+                      showToast("저장에 실패했습니다.", "error");
+                    }
+                  }}
+                  className="mt-3 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800"
+                >
+                  저장
+                </button>
               </div>
 
               <div className="border border-red-200 bg-red-50 rounded-2xl p-6">

@@ -28,6 +28,9 @@ function localDateStr(d: Date | string): string {
   const dt = typeof d === 'string' ? new Date(d) : d;
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
+function localDateStrFromToday(): string {
+  return localDateStr(new Date());
+}
 
 export default function JournalPage() {
   const params = useParams();
@@ -39,6 +42,8 @@ export default function JournalPage() {
   const [history, setHistory] = useState<CareRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // 선택된 일자 (기본: 오늘)
+  const [selectedDate, setSelectedDate] = useState<string>(() => localDateStrFromToday());
   const [form, setForm] = useState({
     careHoursManual: "",
     mealCare: false,
@@ -59,9 +64,8 @@ export default function JournalPage() {
       ]);
       setContract(contractRes.data?.data || contractRes.data);
       const records: CareRecord[] = recordsRes.data?.data?.records || recordsRes.data?.data || [];
-      // 로컬 날짜 기준 비교 (타임존 버그 방지)
-      const todayStr = localDateStr(new Date());
-      const t = records.find((r) => r.date && localDateStr(r.date) === todayStr) || null;
+      // 선택된 날짜에 해당하는 기록 찾기 (기본: 오늘)
+      const t = records.find((r) => r.date && localDateStr(r.date) === selectedDate) || null;
       setToday(t);
       setHistory(records);
       if (t) {
@@ -92,7 +96,7 @@ export default function JournalPage() {
     } finally {
       setLoading(false);
     }
-  }, [contractId]);
+  }, [contractId, selectedDate]);
 
   useEffect(() => {
     loadData();
@@ -137,7 +141,7 @@ export default function JournalPage() {
       setSaving(true);
       await careRecordAPI.saveDailyLog({
         contractId,
-        date: localDateStr(new Date()),
+        date: selectedDate,
         careHoursManual: form.careHoursManual ? parseFloat(form.careHoursManual) : null,
         mealCare: form.mealCare,
         activityCare: form.activityCare,
@@ -183,7 +187,7 @@ export default function JournalPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="bg-white border-b border-gray-200 sticky top-16 md:top-20 z-10">
+      <div className="bg-white border-b border-gray-200 sticky top-16 md:top-[72px] z-10">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
           <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600">
             <FiArrowLeft className="w-5 h-5" />
@@ -192,7 +196,7 @@ export default function JournalPage() {
             <h1 className="text-lg font-bold text-gray-900">간병 일지</h1>
             {contract && (
               <p className="text-xs text-gray-500">
-                {contract.careRequest?.patient?.name || "환자"} · {new Date().toLocaleDateString("ko-KR")}
+                {contract.careRequest?.patient?.name || "환자"} · {new Date(selectedDate).toLocaleDateString("ko-KR")}
               </p>
             )}
           </div>
@@ -219,6 +223,58 @@ export default function JournalPage() {
             </div>
           </div>
         )}
+
+        {/* 날짜 선택 */}
+        <div className="bg-white rounded-xl p-4 border border-gray-100">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-bold text-gray-900">기록 날짜</h2>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(selectedDate);
+                  d.setDate(d.getDate() - 1);
+                  setSelectedDate(localDateStr(d));
+                }}
+                className="px-2 py-1 text-sm border border-gray-200 rounded-md hover:bg-gray-50"
+              >
+                ◀
+              </button>
+              <input
+                type="date"
+                value={selectedDate}
+                max={localDateStrFromToday()}
+                min={contract?.startDate ? localDateStr(contract.startDate) : undefined}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="border border-gray-200 rounded-md px-2 py-1 text-sm focus:outline-none focus:border-orange-400"
+              />
+              <button
+                type="button"
+                disabled={selectedDate >= localDateStrFromToday()}
+                onClick={() => {
+                  const d = new Date(selectedDate);
+                  d.setDate(d.getDate() + 1);
+                  setSelectedDate(localDateStr(d));
+                }}
+                className="px-2 py-1 text-sm border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-40"
+              >
+                ▶
+              </button>
+              {selectedDate !== localDateStrFromToday() && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(localDateStrFromToday())}
+                  className="px-2 py-1 text-xs bg-gray-900 text-white rounded-md"
+                >
+                  오늘
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            과거 일자를 선택해 해당 날짜의 기록을 확인·수정할 수 있습니다.
+          </p>
+        </div>
 
         {/* 출퇴근 */}
         <div className="bg-white rounded-xl p-4 border border-gray-100">
@@ -249,7 +305,7 @@ export default function JournalPage() {
             <button
               type="button"
               onClick={handleCheckIn}
-              disabled={checkedIn}
+              disabled={checkedIn || selectedDate !== localDateStrFromToday()}
               className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-green-500 text-white font-bold text-sm hover:bg-green-600 disabled:bg-gray-200 disabled:text-gray-400"
             >
               <FiLogIn className="w-4 h-4" /> 출근 체크
@@ -257,12 +313,17 @@ export default function JournalPage() {
             <button
               type="button"
               onClick={handleCheckOut}
-              disabled={!checkedIn || checkedOut}
+              disabled={!checkedIn || checkedOut || selectedDate !== localDateStrFromToday()}
               className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-orange-500 text-white font-bold text-sm hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400"
             >
               <FiLogOut className="w-4 h-4" /> 퇴근 체크
             </button>
           </div>
+          {selectedDate !== localDateStrFromToday() && (
+            <p className="text-xs text-amber-600 mt-2">
+              ⚠ 과거 일자에는 출퇴근 체크할 수 없습니다. 간병시간은 수동 입력을 사용하세요.
+            </p>
+          )}
         </div>
 
         {/* 간병시간 */}

@@ -151,6 +151,8 @@ export const caregiverAPI = {
     api.get("/caregiver/activity", { params }),
   getMyApplications: () =>
     api.get("/caregiver/applications"),
+  updateProfile: (data: Record<string, unknown>) =>
+    api.put('/caregiver/profile', data),
 };
 
 export const paymentAPI = {
