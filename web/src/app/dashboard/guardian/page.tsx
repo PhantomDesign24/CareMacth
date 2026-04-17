@@ -3,9 +3,10 @@
 import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
-import { dashboardAPI, careRequestAPI, paymentAPI, guardianAPI, contractAPI, extensionAPI, authAPI } from "@/lib/api";
+import { dashboardAPI, careRequestAPI, paymentAPI, guardianAPI, contractAPI, extensionAPI, authAPI, insuranceAPI, disputeAPI } from "@/lib/api";
 import { formatDate, formatMoney, formatCareStatus, formatContractStatus, formatPaymentStatus, formatPaymentMethod, formatCareType, formatLocation, formatMobility } from "@/lib/format";
 import { showToast } from "@/components/Toast";
+import NotificationPrefsSection from "@/components/NotificationPrefsSection";
 import { SITE } from "@/config/site";
 
 interface CareHistory {
@@ -152,6 +153,28 @@ function GuardianDashboard() {
   const [cancelContractId, setCancelContractId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
+
+  // 환불 모달
+  const [refundTarget, setRefundTarget] = useState<Payment | null>(null);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundLoading, setRefundLoading] = useState(false);
+
+  // 보험서류 신청 모달
+  const [insuranceTarget, setInsuranceTarget] = useState<CareHistory | null>(null);
+  const [insuranceForm, setInsuranceForm] = useState({
+    insuranceCompany: "",
+    documentType: "간병확인서",
+  });
+  const [insuranceLoading, setInsuranceLoading] = useState(false);
+
+  // 분쟁 접수 모달
+  const [disputeTarget, setDisputeTarget] = useState<CareHistory | null>(null);
+  const [disputeForm, setDisputeForm] = useState({
+    category: "CARE_QUALITY",
+    title: "",
+    description: "",
+  });
+  const [disputeLoading, setDisputeLoading] = useState(false);
 
   // Extend contract modal state
   const [extendTarget, setExtendTarget] = useState<CareHistory | null>(null);
@@ -832,6 +855,36 @@ function GuardianDashboard() {
                             연장 요청
                           </button>
                         )}
+                        {!care.isVirtual && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
+                              window.open(`/api/contracts/${care.id}/pdf?token=${encodeURIComponent(t || "")}`, "_blank");
+                            }}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                          >
+                            📄 계약서
+                          </button>
+                        )}
+                        {!care.isVirtual && (care.contractStatus === 'COMPLETED' || care.isPaid) && (
+                          <button
+                            type="button"
+                            onClick={() => setInsuranceTarget(care)}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                          >
+                            🛡 보험서류
+                          </button>
+                        )}
+                        {!care.isVirtual && (
+                          <button
+                            type="button"
+                            onClick={() => setDisputeTarget(care)}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors"
+                          >
+                            ⚠ 분쟁 접수
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -912,6 +965,7 @@ function GuardianDashboard() {
                         <tbody>
                           {filteredPayments.map((pay) => {
                             const canReceipt = /완료|COMPLETED|ESCROW|에스크로/i.test(pay.status);
+                            const canRefund = canReceipt;
                             return (
                             <tr key={pay.id} className="border-b border-gray-50 last:border-0">
                               <td className="py-3 px-2 text-gray-700">{pay.date}</td>
@@ -924,18 +978,29 @@ function GuardianDashboard() {
                                 {statusBadge(pay.status)}
                               </td>
                               <td className="py-3 px-2 text-center">
-                                {canReceipt && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
-                                      window.open(`/api/payments/${pay.id}/receipt?token=${encodeURIComponent(t || "")}`, "_blank");
-                                    }}
-                                    className="text-xs px-2 py-1 bg-gray-900 text-white rounded"
-                                  >
-                                    PDF
-                                  </button>
-                                )}
+                                <div className="flex items-center justify-center gap-1">
+                                  {canReceipt && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
+                                        window.open(`/api/payments/${pay.id}/receipt?token=${encodeURIComponent(t || "")}`, "_blank");
+                                      }}
+                                      className="text-xs px-2 py-1 bg-gray-900 text-white rounded"
+                                    >
+                                      PDF
+                                    </button>
+                                  )}
+                                  {canRefund && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setRefundTarget(pay)}
+                                      className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                    >
+                                      환불
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                             );
@@ -1077,6 +1142,9 @@ function GuardianDashboard() {
                 <p className="text-sm text-gray-500">계정 관련 설정을 변경합니다.</p>
               </div>
 
+              {/* 알림 카테고리 설정 */}
+              <NotificationPrefsSection />
+
               <div className="border border-red-200 bg-red-50 rounded-2xl p-6">
                 <h4 className="font-bold text-red-700 mb-2">회원 탈퇴</h4>
                 <p className="text-sm text-red-600 mb-4 leading-relaxed">
@@ -1216,6 +1284,243 @@ function GuardianDashboard() {
       )}
 
       {/* Contract Cancel Modal */}
+      {/* 분쟁 접수 모달 */}
+      {disputeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">⚠ 분쟁 접수</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {disputeTarget.patientName} 환자 간병 관련 분쟁을 접수합니다. 관리자가 검토 후 처리합니다.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  분류 <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={disputeForm.category}
+                  onChange={(e) => setDisputeForm({ ...disputeForm, category: e.target.value })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-400"
+                >
+                  <option value="CARE_QUALITY">간병 품질 불만</option>
+                  <option value="CANCELLATION">취소 관련</option>
+                  <option value="PAYMENT">결제 관련</option>
+                  <option value="ABUSE">욕설/폭언</option>
+                  <option value="NO_SHOW">노쇼</option>
+                  <option value="OTHER">기타</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  제목 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={disputeForm.title}
+                  onChange={(e) => setDisputeForm({ ...disputeForm, title: e.target.value })}
+                  placeholder="예: 간병인이 시간 대로 오지 않음"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  상세 내용 <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={disputeForm.description}
+                  onChange={(e) => setDisputeForm({ ...disputeForm, description: e.target.value })}
+                  placeholder="발생한 상황을 구체적으로 작성해주세요"
+                  rows={4}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-400 resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => { setDisputeTarget(null); setDisputeForm({ category: "CARE_QUALITY", title: "", description: "" }); }}
+                disabled={disputeLoading}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={
+                  disputeLoading ||
+                  !disputeForm.title.trim() ||
+                  !disputeForm.description.trim()
+                }
+                onClick={async () => {
+                  setDisputeLoading(true);
+                  try {
+                    await disputeAPI.create({
+                      contractId: disputeTarget.id,
+                      category: disputeForm.category,
+                      title: disputeForm.title.trim(),
+                      description: disputeForm.description.trim(),
+                    });
+                    showToast("분쟁이 접수되었습니다. 관리자가 검토 후 처리합니다.", "success");
+                    setDisputeTarget(null);
+                    setDisputeForm({ category: "CARE_QUALITY", title: "", description: "" });
+                  } catch (err: any) {
+                    showToast(err?.response?.data?.message || "접수 실패", "error");
+                  } finally {
+                    setDisputeLoading(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-xl text-sm font-bold hover:bg-amber-700 disabled:opacity-50"
+              >
+                {disputeLoading ? "접수 중..." : "접수"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 보험서류 신청 모달 */}
+      {insuranceTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">간병보험 서류 신청</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {insuranceTarget.patientName} 환자 · {insuranceTarget.startDate} ~ {insuranceTarget.endDate}
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  보험사 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={insuranceForm.insuranceCompany}
+                  onChange={(e) => setInsuranceForm({ ...insuranceForm, insuranceCompany: e.target.value })}
+                  placeholder="예: 삼성생명"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  서류 종류 <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={insuranceForm.documentType}
+                  onChange={(e) => setInsuranceForm({ ...insuranceForm, documentType: e.target.value })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+                >
+                  <option value="간병확인서">간병확인서</option>
+                  <option value="영수증">영수증</option>
+                  <option value="간병일지">간병일지</option>
+                  <option value="진단서">진단서</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setInsuranceTarget(null)}
+                disabled={insuranceLoading}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={insuranceLoading || !insuranceForm.insuranceCompany.trim()}
+                onClick={async () => {
+                  setInsuranceLoading(true);
+                  try {
+                    const patientName = insuranceTarget.patientName;
+                    await insuranceAPI.create({
+                      patientName,
+                      birthDate: "1900-01-01", // 환자 정보에서 더 정확한 값을 넘길 수도 있음
+                      carePeriod: `${insuranceTarget.startDate} ~ ${insuranceTarget.endDate}`,
+                      insuranceCompany: insuranceForm.insuranceCompany.trim(),
+                      documentType: insuranceForm.documentType,
+                    });
+                    showToast("보험서류 신청이 접수되었습니다. 1~2일 내 처리됩니다.", "success");
+                    setInsuranceTarget(null);
+                    setInsuranceForm({ insuranceCompany: "", documentType: "간병확인서" });
+                  } catch (err: any) {
+                    showToast(err?.response?.data?.message || "신청 실패", "error");
+                  } finally {
+                    setInsuranceLoading(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {insuranceLoading ? "처리 중..." : "신청"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 환불 모달 */}
+      {refundTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">환불 요청</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              관리자 검토 후 환불이 처리됩니다.
+            </p>
+            <div className="bg-gray-50 rounded-xl p-3 text-sm mb-4">
+              <div className="flex justify-between">
+                <span className="text-gray-500">결제 금액</span>
+                <span className="font-semibold text-gray-900">
+                  {refundTarget.amount.toLocaleString()}원
+                </span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-gray-500">결제일</span>
+                <span className="text-gray-700">{refundTarget.date}</span>
+              </div>
+            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              환불 사유 <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              placeholder="환불 사유를 상세히 작성해주세요"
+              rows={4}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-400 resize-none"
+            />
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => { setRefundTarget(null); setRefundReason(""); }}
+                disabled={refundLoading}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={refundLoading || !refundReason.trim()}
+                onClick={async () => {
+                  setRefundLoading(true);
+                  try {
+                    await paymentAPI.refund(refundTarget.id, refundReason.trim());
+                    showToast("환불 요청이 접수되었습니다.", "success");
+                    setRefundTarget(null);
+                    setRefundReason("");
+                    fetchData();
+                  } catch (err: any) {
+                    showToast(err?.response?.data?.message || "환불 요청 실패", "error");
+                  } finally {
+                    setRefundLoading(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 disabled:opacity-50"
+              >
+                {refundLoading ? "처리 중..." : "환불 요청"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {cancelContractId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">

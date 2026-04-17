@@ -70,53 +70,38 @@ export default function DisputesPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await getDisputes({
-        status: statusFilter || undefined,
-        priority: priorityFilter || undefined,
-        page: currentPage,
-        limit,
-      });
+      // 실제 Dispute API 호출
+      const { apiRequest } = await import("@/lib/api");
+      const statusMap: Record<string, string> = {
+        pending: "PENDING",
+        processing: "PROCESSING",
+        resolved: "RESOLVED",
+        escalated: "ESCALATED",
+        rejected: "REJECTED",
+      };
+      const params = new URLSearchParams();
+      if (statusFilter && statusMap[statusFilter]) params.set("status", statusMap[statusFilter]);
+      const queryString = params.toString() ? `?${params.toString()}` : "";
+      const raw: any = await apiRequest(`/disputes/admin${queryString}`);
+      const list = Array.isArray(raw) ? raw : (raw?.data || []);
 
-      const raw = res as any;
-      const list = raw?.disputes || raw?.data || (Array.isArray(raw) ? raw : []);
-      const pag = raw?.pagination;
-
-      // Flatten nested fields from backend response
-      // Backend returns cancelled contracts with: guardian.user.name, caregiver.user.name,
-      // careRequest.patient.name, cancellationReason, cancelledAt, status
-      const flattened = (Array.isArray(list) ? list : []).map((d: any) => ({
-        ...d,
-        contractId: d.contractId || d.id,
-        patientName:
-          d.patientName ||
-          d.careRequest?.patient?.name ||
-          d.guardian?.user?.name ||
-          d.guardian?.name ||
-          "",
-        caregiverName:
-          d.caregiverName ||
-          d.caregiver?.user?.name ||
-          d.caregiver?.name ||
-          "",
-        type:
-          d.type ||
-          d.disputeType ||
-          d.cancellationReason ||
-          d.careRequest?.careType ||
-          "",
-        description:
-          d.description ||
-          d.reason ||
-          d.cancellationReason ||
-          "",
-        status: d.status || "CANCELLED",
-        priority: d.priority || "-",
-        createdAt: d.createdAt || d.cancelledAt || d.updatedAt || "",
+      const flattened = list.map((d: any) => ({
+        id: d.id,
+        contractId: d.contractId,
+        patientName: d.contract?.careRequest?.patient?.name || "-",
+        reporterName: d.reporter?.name || "-",
+        targetName: d.target?.name || "-",
+        type: d.category || "",
+        title: d.title || "",
+        description: d.description || "",
+        status: d.status || "PENDING",
+        resolution: d.resolution || "",
+        createdAt: d.createdAt || "",
       }));
 
       setDisputes(flattened);
-      setTotalItems(pag?.total ?? list.length ?? 0);
-      setTotalPages(pag?.totalPages ?? 1);
+      setTotalItems(flattened.length);
+      setTotalPages(1);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "분쟁 데이터를 불러오지 못했습니다.");
     } finally {
@@ -389,20 +374,28 @@ export default function DisputesPage() {
                 className="btn-success"
                 disabled={!resolution.trim() || actionLoading === selectedDispute.id}
                 onClick={async () => {
-                  const disputeId = selectedDispute.contractId || selectedDispute.id;
                   setActionLoading(selectedDispute.id);
                   try {
-                    setDisputes((prev) =>
-                      prev.map((d) =>
-                        d.id === selectedDispute.id
-                          ? { ...d, status: transitionStatus, resolution }
-                          : d
-                      )
-                    );
+                    const { apiRequest } = await import("@/lib/api");
+                    const statusMap: Record<string, string> = {
+                      processing: "PROCESSING",
+                      resolved: "RESOLVED",
+                      escalated: "ESCALATED",
+                      rejected: "REJECTED",
+                    };
+                    await apiRequest(`/disputes/admin/${selectedDispute.id}`, {
+                      method: "PATCH",
+                      body: JSON.stringify({
+                        status: statusMap[transitionStatus] || "RESOLVED",
+                        resolution,
+                      }),
+                    });
+                    alert("처리가 완료되었습니다.");
                     setShowResolveModal(false);
                     setResolution("");
-                  } catch (err: unknown) {
-                    alert(err instanceof Error ? err.message : `분쟁 ${disputeId} 처리 중 오류가 발생했습니다.`);
+                    fetchData();
+                  } catch (err: any) {
+                    alert(err?.message || "처리 중 오류");
                   } finally {
                     setActionLoading(null);
                   }

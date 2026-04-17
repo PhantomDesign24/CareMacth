@@ -3,9 +3,10 @@
 import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
-import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, reportAPI } from "@/lib/api";
+import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, reportAPI, paymentAPI } from "@/lib/api";
 import { formatDate, formatContractStatus, formatCareType, formatLocation, formatPenaltyType } from "@/lib/format";
 import { showToast } from "@/components/Toast";
+import NotificationPrefsSection from "@/components/NotificationPrefsSection";
 
 interface Earnings {
   thisMonth: number;
@@ -162,6 +163,12 @@ function CaregiverDashboard() {
   const [cancelContractId, setCancelContractId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
+
+  // 추가 간병비 요청 모달
+  const [additionalFeeContractId, setAdditionalFeeContractId] = useState<string | null>(null);
+  const [additionalFeeAmount, setAdditionalFeeAmount] = useState("");
+  const [additionalFeeReason, setAdditionalFeeReason] = useState("");
+  const [additionalFeeLoading, setAdditionalFeeLoading] = useState(false);
 
   const [summary, setSummary] = useState<CaregiverSummary | null>(null);
   const [earnings, setEarnings] = useState<Earnings>({ thisMonth: 0, lastMonth: 0, total: 0, pending: 0 });
@@ -946,6 +953,13 @@ function CaregiverDashboard() {
                           </Link>
                           <button
                             type="button"
+                            onClick={() => { setAdditionalFeeContractId(activity.id); setAdditionalFeeAmount(""); setAdditionalFeeReason(""); }}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                          >
+                            💰 추가비 요청
+                          </button>
+                          <button
+                            type="button"
                             className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
                             onClick={() => {
                               setCancelContractId(activity.id);
@@ -956,6 +970,17 @@ function CaregiverDashboard() {
                           </button>
                         </>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
+                          window.open(`/api/contracts/${activity.id}/pdf?token=${encodeURIComponent(t || "")}`, "_blank");
+                        }}
+                        className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                        title="계약서 PDF"
+                      >
+                        📄 계약서
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1091,6 +1116,9 @@ function CaregiverDashboard() {
                   저장
                 </button>
               </div>
+
+              {/* 알림 카테고리 설정 */}
+              <NotificationPrefsSection />
 
               <div className="border border-red-200 bg-red-50 rounded-2xl p-6">
                 <h4 className="font-bold text-red-700 mb-2">회원 탈퇴</h4>
@@ -1235,6 +1263,77 @@ function CaregiverDashboard() {
               <button type="button" onClick={() => { setDeleteModalOpen(false); setDeletePassword(""); setDeleteReason(""); setDeleteConfirmText(""); setDeleteError(""); }} disabled={deleteLoading} className="btn-secondary flex-1">취소</button>
               <button type="button" onClick={handleDeleteAccount} disabled={deleteLoading || !deletePassword || deleteConfirmText !== "탈퇴합니다"} className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-gray-300 text-white font-medium rounded-xl transition-colors">
                 {deleteLoading ? "처리 중..." : "탈퇴 확정"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 추가 간병비 요청 모달 */}
+      {additionalFeeContractId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">추가 간병비 요청</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              보호자가 승인하면 결제됩니다.
+            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              금액 (원) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={additionalFeeAmount}
+              onChange={(e) => setAdditionalFeeAmount(e.target.value)}
+              placeholder="예: 50000"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400 mb-3"
+            />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              사유 <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={additionalFeeReason}
+              onChange={(e) => setAdditionalFeeReason(e.target.value)}
+              placeholder="추가 발생 사유를 기재해주세요"
+              rows={3}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400 resize-none"
+            />
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setAdditionalFeeContractId(null)}
+                disabled={additionalFeeLoading}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={
+                  additionalFeeLoading ||
+                  !additionalFeeAmount ||
+                  parseInt(additionalFeeAmount) <= 0 ||
+                  !additionalFeeReason.trim()
+                }
+                onClick={async () => {
+                  setAdditionalFeeLoading(true);
+                  try {
+                    await paymentAPI.createAdditionalFee({
+                      contractId: additionalFeeContractId,
+                      amount: parseInt(additionalFeeAmount),
+                      reason: additionalFeeReason.trim(),
+                    });
+                    showToast("추가 간병비 요청이 전송되었습니다.", "success");
+                    setAdditionalFeeContractId(null);
+                  } catch (err: any) {
+                    showToast(err?.response?.data?.message || "요청 실패", "error");
+                  } finally {
+                    setAdditionalFeeLoading(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 disabled:opacity-50"
+              >
+                {additionalFeeLoading ? "전송 중..." : "요청 전송"}
               </button>
             </div>
           </div>

@@ -34,7 +34,7 @@ class ApiError extends Error {
   }
 }
 
-async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, headers = {}, params } = options;
 
   let url = `${API_BASE_URL}${path}`;

@@ -40,6 +40,9 @@ router.delete('/notifications/unsent', adminController.deleteUnsentNotifications
 
 // 환자 관리
 router.get('/patients', adminController.getPatients);
+router.get('/patients/:id', adminController.getPatientDetail);
+router.put('/patients/:id', adminController.updatePatientByAdmin);
+router.delete('/patients/:id', adminController.deletePatientByAdmin);
 
 // 통계
 router.get('/stats', adminController.getStats);

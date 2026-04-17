@@ -46,4 +46,20 @@ router.post('/:id/refund', [
 // GET /history - 결제 이력
 router.get('/history', paymentController.getPaymentHistory);
 
+// POST /additional-fees - 추가 간병비 요청 (간병인)
+router.post('/additional-fees', [
+  body('contractId').notEmpty(),
+  body('amount').isInt({ min: 1 }),
+  body('reason').trim().isLength({ min: 1, max: 500 }),
+], paymentController.createAdditionalFee);
+
+// GET /additional-fees - 내 추가 간병비 목록
+router.get('/additional-fees', paymentController.getAdditionalFees);
+
+// POST /additional-fees/:id/approve - 보호자 승인
+router.post('/additional-fees/:id/approve', paymentController.approveAdditionalFee);
+
+// POST /additional-fees/:id/reject - 보호자 거절
+router.post('/additional-fees/:id/reject', paymentController.rejectAdditionalFee);
+
 export default router;

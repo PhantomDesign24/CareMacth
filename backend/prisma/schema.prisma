@@ -67,6 +67,8 @@ model User {
   deviceTokens  DeviceToken[]
   sentMessages  Message[]     @relation("SentMessages")
   receivedMessages Message[]  @relation("ReceivedMessages")
+  disputesFiled Dispute[]     @relation("DisputeReporter")
+  disputesReceived Dispute[]  @relation("DisputeTarget")
 
   @@index([role])
   @@index([referralCode])
@@ -382,6 +384,7 @@ model Contract {
   careRecords     CareRecord[]
   extensions      ContractExtension[]
   additionalFees  AdditionalFee[]
+  disputes        Dispute[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -893,4 +896,52 @@ model DeviceToken {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+// ==========================================
+// 19. 분쟁 관리
+// ==========================================
+
+enum DisputeStatus {
+  PENDING      // 접수
+  PROCESSING   // 처리중
+  RESOLVED     // 해결됨
+  ESCALATED    // 에스컬레이션
+  REJECTED     // 기각
+}
+
+enum DisputeCategory {
+  CARE_QUALITY  // 간병 품질
+  CANCELLATION  // 취소 관련
+  PAYMENT       // 결제 관련
+  ABUSE         // 욕설/폭언
+  NO_SHOW       // 노쇼
+  OTHER         // 기타
+}
+
+model Dispute {
+  id          String          @id @default(uuid())
+  contractId  String?
+  contract    Contract?       @relation(fields: [contractId], references: [id])
+  reporterId  String          // 신고자 userId
+  reporter    User            @relation("DisputeReporter", fields: [reporterId], references: [id])
+  targetId    String?         // 피신고자 userId
+  target      User?           @relation("DisputeTarget", fields: [targetId], references: [id])
+
+  category    DisputeCategory
+  title       String
+  description String          // 신고 내용 상세
+  evidence    String[]        // 증빙 이미지 URL들
+
+  status      DisputeStatus   @default(PENDING)
+  resolution  String?         // 관리자 처리 내용
+  handledBy   String?         // 관리자 userId
+  handledAt   DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([contractId])
+  @@index([reporterId])
+  @@index([status])
 }

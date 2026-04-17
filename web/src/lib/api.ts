@@ -123,6 +123,8 @@ export const careRequestAPI = {
     api.post(`/care-requests/${id}/extend`, data),
   raiseRate: (id: string, newDailyRate: number) =>
     api.post(`/care-requests/${id}/raise-rate`, { newDailyRate }),
+  expandRegions: (id: string, regions: string[]) =>
+    api.post(`/care-requests/${id}/expand-regions`, { regions }),
 };
 
 export const caregiverAPI = {
@@ -166,6 +168,13 @@ export const paymentAPI = {
     api.post("/payments", data),
   confirm: (data: Record<string, unknown>) =>
     api.post("/payments/confirm", data),
+  refund: (id: string, reason: string, amount?: number) =>
+    api.post(`/payments/${id}/refund`, { reason, ...(amount ? { amount } : {}) }),
+  createAdditionalFee: (data: { contractId: string; amount: number; reason: string }) =>
+    api.post("/payments/additional-fees", data),
+  getAdditionalFees: () => api.get("/payments/additional-fees"),
+  approveAdditionalFee: (id: string) => api.post(`/payments/additional-fees/${id}/approve`),
+  rejectAdditionalFee: (id: string) => api.post(`/payments/additional-fees/${id}/reject`),
 };
 
 export const dashboardAPI = {
@@ -224,12 +233,54 @@ export const careRequestExtAPI = {
     api.post(`/care-requests/${id}/expand-regions`, { regions }),
 };
 
+export const disputeAPI = {
+  create: (data: {
+    contractId?: string;
+    category: string;
+    title: string;
+    description: string;
+    evidence?: string[];
+  }) => api.post("/disputes", data),
+  list: () => api.get("/disputes"),
+};
+
+export const insuranceAPI = {
+  create: (data: {
+    patientName: string;
+    birthDate: string;
+    carePeriod: string;
+    insuranceCompany: string;
+    documentType: string;
+  }) => api.post("/insurance", data),
+  getStatus: (id: string) => api.get(`/insurance/${id}/status`),
+};
+
+export const notificationAPI = {
+  list: () => api.get('/notifications'),
+  getPushSetting: () => api.get('/notifications/push-setting'),
+  updatePushSetting: (enabled: boolean) =>
+    api.put('/notifications/push-setting', { enabled }),
+  updateCategoryPrefs: (prefs: Record<string, boolean>) =>
+    api.put('/notifications/category-prefs', { prefs }),
+};
+
 export const contractAPI = {
   get: (id: string) => api.get(`/contracts/${id}`),
   cancel: (id: string, reason: string) =>
     api.post(`/contracts/${id}/cancel`, { reason }),
   updateCorporateName: (id: string, corporateName: string) =>
     api.patch(`/contracts/${id}/corporate-name`, { corporateName }),
+  getPdfUrl: (id: string, token?: string) =>
+    `/api/contracts/${id}/pdf?token=${encodeURIComponent(token || '')}`,
+};
+
+export const educationAPI = {
+  list: () => api.get('/education'),
+  updateProgress: (id: string, progress: number) =>
+    api.post(`/education/${id}/progress`, { progress }),
+  getCertificate: (id: string) => api.get(`/education/certificate/${id}`),
+  getCertificatePdfUrl: (id: string, token?: string) =>
+    `/api/education/certificate/${id}/pdf?token=${encodeURIComponent(token || '')}`,
 };
 
 export const applicantAPI = {

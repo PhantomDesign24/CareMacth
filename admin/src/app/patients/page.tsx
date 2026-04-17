@@ -16,6 +16,9 @@ export default function PatientsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const limit = 10;
 
@@ -50,6 +53,26 @@ export default function PatientsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // 상세 로딩
+  useEffect(() => {
+    if (!detailId) {
+      setDetail(null);
+      return;
+    }
+    (async () => {
+      setDetailLoading(true);
+      try {
+        const { apiRequest } = await import("@/lib/api");
+        const res = await apiRequest<any>(`/admin/patients/${detailId}`);
+        setDetail(res);
+      } catch {
+        setDetail(null);
+      } finally {
+        setDetailLoading(false);
+      }
+    })();
+  }, [detailId]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -121,6 +144,42 @@ export default function PatientsPage() {
         const isActive = v === "활성" || v === "active";
         return <span className={isActive ? "badge-green" : "badge-gray"}>{v}</span>;
       },
+    },
+    {
+      key: "id",
+      label: "관리",
+      align: "center",
+      render: (value, row) => (
+        <div className="flex gap-1 justify-center">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setDetailId(value as string); }}
+            className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+          >
+            상세
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!confirm(`${row.name} 환자를 삭제하시겠습니까? 진행 중인 간병이 있으면 실패합니다.`)) return;
+              (async () => {
+                try {
+                  const { apiRequest } = await import("@/lib/api");
+                  await apiRequest(`/admin/patients/${value}`, { method: "DELETE" });
+                  alert("삭제되었습니다.");
+                  fetchData();
+                } catch (err: any) {
+                  alert(err?.message || "삭제 실패");
+                }
+              })();
+            }}
+            className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+          >
+            삭제
+          </button>
+        </div>
+      ),
     },
   ];
 
@@ -226,6 +285,72 @@ export default function PatientsPage() {
         totalItems={totalItems}
         emptyMessage="조건에 맞는 환자가 없습니다."
       />
+
+      {/* 상세 모달 */}
+      {detailId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setDetailId(null)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xl font-bold text-gray-900">환자 상세 정보</h3>
+                <button onClick={() => setDetailId(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+              </div>
+              {detailLoading && <div className="py-12 text-center text-gray-400">불러오는 중...</div>}
+              {!detailLoading && detail && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <DetailRow label="이름" value={detail.name} />
+                    <DetailRow label="생년월일" value={detail.birthDate ? new Date(detail.birthDate).toISOString().slice(0, 10) : "-"} />
+                    <DetailRow label="성별" value={detail.gender === "M" ? "남" : detail.gender === "F" ? "여" : "-"} />
+                    <DetailRow label="체중/키" value={`${detail.weight || "-"}kg / ${detail.height || "-"}cm`} />
+                    <DetailRow label="의식 상태" value={detail.consciousness || "-"} />
+                    <DetailRow label="거동 상태" value={detail.mobilityStatus === "DEPENDENT" ? "완전의존" : detail.mobilityStatus === "PARTIAL" ? "부분도움" : "독립보행"} />
+                    <DetailRow label="치매" value={detail.hasDementia ? (detail.dementiaLevel || "있음") : "없음"} />
+                    <DetailRow label="감염" value={detail.hasInfection ? (detail.infectionDetail || "있음") : "없음"} />
+                    <DetailRow label="진단명" value={detail.diagnosis || "-"} full />
+                    <DetailRow label="특이사항" value={detail.medicalNotes || "-"} full />
+                  </div>
+                  <div className="border-t pt-4">
+                    <h4 className="font-semibold text-gray-900 mb-2">보호자 정보</h4>
+                    <div className="bg-gray-50 rounded-xl p-3 text-sm">
+                      <div>{detail.guardian?.user?.name || "-"}</div>
+                      <div className="text-gray-500">{detail.guardian?.user?.phone} / {detail.guardian?.user?.email}</div>
+                    </div>
+                  </div>
+                  {Array.isArray(detail.careRequests) && detail.careRequests.length > 0 && (
+                    <div className="border-t pt-4">
+                      <h4 className="font-semibold text-gray-900 mb-2">간병 이력 ({detail.careRequests.length}건)</h4>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {detail.careRequests.map((cr: any) => (
+                          <div key={cr.id} className="bg-gray-50 rounded-lg p-3 text-sm flex justify-between items-start">
+                            <div>
+                              <div className="font-medium">{cr.careType === "INDIVIDUAL" ? "1:1" : "가족"} 간병</div>
+                              <div className="text-xs text-gray-500">
+                                {new Date(cr.startDate).toISOString().slice(0, 10)} ~{" "}
+                                {cr.endDate ? new Date(cr.endDate).toISOString().slice(0, 10) : "미정"}
+                              </div>
+                            </div>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{cr.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailRow({ label, value, full }: { label: string; value: string; full?: boolean }) {
+  return (
+    <div className={full ? "col-span-2" : ""}>
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-sm font-medium text-gray-900">{value}</div>
     </div>
   );
 }

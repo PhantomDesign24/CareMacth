@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { applicantAPI, careRequestAPI } from "@/lib/api";
+import { showToast } from "@/components/Toast";
 import {
   formatDate,
   formatMoney,
@@ -48,6 +49,7 @@ interface CareRequest {
   dailyRate: number;
   previousDailyRate: number | null;
   status: string;
+  regions?: string[];
   patient?: {
     name: string;
   };
@@ -73,6 +75,9 @@ export default function ApplicantsPage() {
   // 금액 인상 모달 상태
   const [showRaiseModal, setShowRaiseModal] = useState(false);
   const [newDailyRate, setNewDailyRate] = useState("");
+  const [showExpandRegionModal, setShowExpandRegionModal] = useState(false);
+  const [expandRegions, setExpandRegions] = useState<string[]>([]);
+  const [expandingRegion, setExpandingRegion] = useState(false);
   const [raisingRate, setRaisingRate] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -372,19 +377,25 @@ export default function ApplicantsPage() {
                   현재 일당: {(careRequest?.dailyRate || 0).toLocaleString()}원
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setNewDailyRate("");
-                  setShowRaiseModal(true);
-                }}
-                className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-xl transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
-                금액 올리기
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewDailyRate("");
+                    setShowRaiseModal(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-xl transition-colors"
+                >
+                  💰 금액 올리기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowExpandRegionModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl transition-colors"
+                >
+                  🌏 지역 확대
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -650,6 +661,77 @@ export default function ApplicantsPage() {
         )}
 
         {/* 금액 인상 모달 */}
+        {/* 지역 확대 모달 */}
+        {showExpandRegionModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">지역 확대 재검색</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                현재 지역 외에 추가로 알림을 받을 지역을 선택하세요. 해당 지역 간병인에게 공고가 재발송됩니다.
+              </p>
+              <div className="flex flex-wrap gap-2 mb-5 max-h-48 overflow-y-auto">
+                {["서울","경기","인천","부산","대구","광주","대전","울산","세종","강원","충북","충남","전북","전남","경북","경남","제주"].map((region) => {
+                  const already = (careRequest?.regions || []).includes(region);
+                  const picked = expandRegions.includes(region);
+                  return (
+                    <button
+                      key={region}
+                      type="button"
+                      disabled={already}
+                      onClick={() => {
+                        setExpandRegions((prev) =>
+                          prev.includes(region) ? prev.filter((r) => r !== region) : [...prev, region]
+                        );
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-sm ${
+                        already
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : picked
+                          ? "bg-blue-500 text-white"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      {region}{already ? " (이미 선택됨)" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowExpandRegionModal(false); setExpandRegions([]); }}
+                  disabled={expandingRegion}
+                  className="btn-secondary flex-1 text-sm"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  disabled={expandingRegion || expandRegions.length === 0}
+                  onClick={async () => {
+                    setExpandingRegion(true);
+                    try {
+                      const merged = [...(careRequest?.regions || []), ...expandRegions];
+                      await careRequestAPI.expandRegions(careRequestId, merged);
+                      showToast("지역이 확대되었습니다. 해당 지역 간병인에게 알림이 발송됩니다.", "success");
+                      setShowExpandRegionModal(false);
+                      setExpandRegions([]);
+                      fetchData();
+                    } catch (err: any) {
+                      showToast(err?.response?.data?.message || "확대 실패", "error");
+                    } finally {
+                      setExpandingRegion(false);
+                    }
+                  }}
+                  className="flex-1 text-sm px-4 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-medium rounded-xl"
+                >
+                  {expandingRegion ? "처리 중..." : `${expandRegions.length}개 지역 추가`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showRaiseModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
             <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">

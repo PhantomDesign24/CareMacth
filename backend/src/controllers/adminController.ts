@@ -2360,3 +2360,81 @@ export const deleteNotificationTemplate = async (req: AuthRequest, res: Response
     next(error);
   }
 };
+
+// GET /patients/:id - 환자 상세 (관리자)
+export const getPatientDetail = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const patient = await prisma.patient.findUnique({
+      where: { id },
+      include: {
+        guardian: {
+          include: { user: { select: { name: true, email: true, phone: true } } },
+        },
+        careRequests: {
+          include: {
+            contract: {
+              include: {
+                caregiver: { include: { user: { select: { name: true } } } },
+                payments: { select: { id: true, status: true, totalAmount: true, paidAt: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!patient) throw new AppError('환자를 찾을 수 없습니다.', 404);
+    res.json({ success: true, data: patient });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /patients/:id - 환자 정보 수정 (관리자)
+export const updatePatientByAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { name, birthDate, gender, weight, height, consciousness, hasDementia, dementiaLevel, hasInfection, infectionDetail, medicalNotes, diagnosis } = req.body;
+    const exists = await prisma.patient.findUnique({ where: { id } });
+    if (!exists) throw new AppError('환자를 찾을 수 없습니다.', 404);
+
+    const updated = await prisma.patient.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(birthDate !== undefined && { birthDate: new Date(birthDate) }),
+        ...(gender !== undefined && { gender }),
+        ...(weight !== undefined && { weight: weight ? parseFloat(weight) : null }),
+        ...(height !== undefined && { height: height ? parseFloat(height) : null }),
+        ...(consciousness !== undefined && { consciousness }),
+        ...(hasDementia !== undefined && { hasDementia: !!hasDementia }),
+        ...(dementiaLevel !== undefined && { dementiaLevel }),
+        ...(hasInfection !== undefined && { hasInfection: !!hasInfection }),
+        ...(infectionDetail !== undefined && { infectionDetail }),
+        ...(medicalNotes !== undefined && { medicalNotes }),
+        ...(diagnosis !== undefined && { diagnosis }),
+      },
+    });
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /patients/:id - 환자 삭제 (관리자, 진행 중 간병 없을 때만)
+export const deletePatientByAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const activeRequests = await prisma.careRequest.count({
+      where: { patientId: id, status: { in: ['OPEN', 'MATCHED', 'IN_PROGRESS', 'MATCHING'] } },
+    });
+    if (activeRequests > 0) {
+      throw new AppError('진행 중인 간병 요청이 있는 환자는 삭제할 수 없습니다.', 400);
+    }
+    await prisma.patient.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};

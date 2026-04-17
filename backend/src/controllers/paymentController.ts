@@ -604,3 +604,116 @@ export const generatePaymentReceipt = async (req: AuthRequest, res: Response, ne
     next(error);
   }
 };
+
+// POST /additional-fees - 간병인이 추가 간병비 요청
+export const createAdditionalFee = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { contractId, amount, reason } = req.body;
+    if (!contractId || !amount || !reason) throw new AppError('필수 항목 누락', 400);
+
+    const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+    if (!caregiver) throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+
+    const contract = await prisma.contract.findFirst({
+      where: { id: contractId, caregiverId: caregiver.id, status: { in: ['ACTIVE', 'EXTENDED'] } },
+    });
+    if (!contract) throw new AppError('유효한 계약이 아닙니다.', 404);
+
+    const fee = await prisma.additionalFee.create({
+      data: {
+        contractId,
+        amount: parseInt(amount),
+        reason: String(reason).trim(),
+        requestedBy: caregiver.id,
+      },
+    });
+
+    // 보호자 알림
+    await prisma.notification.create({
+      data: {
+        userId: contract.guardianId,
+        type: 'PAYMENT',
+        title: '추가 간병비 요청',
+        body: `간병인이 ${parseInt(amount).toLocaleString()}원 추가 간병비를 요청했습니다.`,
+        data: { feeId: fee.id, contractId },
+      },
+    }).catch(() => {});
+
+    res.status(201).json({ success: true, data: fee });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /additional-fees - 내 추가 간병비 목록
+export const getAdditionalFees = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const role = req.user!.role;
+    let fees: any[] = [];
+    if (role === 'CAREGIVER') {
+      const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+      if (!caregiver) throw new AppError('간병인 정보 없음', 404);
+      fees = await prisma.additionalFee.findMany({
+        where: { requestedBy: caregiver.id },
+        include: { contract: { include: { careRequest: { include: { patient: { select: { name: true } } } } } } },
+        orderBy: { createdAt: 'desc' },
+      });
+    } else if (role === 'GUARDIAN') {
+      const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
+      if (!guardian) throw new AppError('보호자 정보 없음', 404);
+      fees = await prisma.additionalFee.findMany({
+        where: { contract: { guardianId: guardian.id } },
+        include: { contract: { include: { careRequest: { include: { patient: { select: { name: true } } } } } } },
+        orderBy: { createdAt: 'desc' },
+      });
+    } else {
+      fees = [];
+    }
+    res.json({ success: true, data: fees });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /additional-fees/:id/approve - 보호자가 승인 (결제 없이 승인 처리)
+export const approveAdditionalFee = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
+    if (!guardian) throw new AppError('보호자 정보 없음', 404);
+
+    const fee = await prisma.additionalFee.findUnique({
+      where: { id },
+      include: { contract: true },
+    });
+    if (!fee) throw new AppError('요청을 찾을 수 없습니다.', 404);
+    if (fee.contract.guardianId !== guardian.id) throw new AppError('권한 없음', 403);
+
+    const updated = await prisma.additionalFee.update({
+      where: { id },
+      data: { approvedByGuardian: true },
+    });
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /additional-fees/:id/reject - 보호자가 거절
+export const rejectAdditionalFee = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
+    if (!guardian) throw new AppError('보호자 정보 없음', 404);
+    const fee = await prisma.additionalFee.findUnique({
+      where: { id },
+      include: { contract: true },
+    });
+    if (!fee) throw new AppError('요청을 찾을 수 없습니다.', 404);
+    if (fee.contract.guardianId !== guardian.id) throw new AppError('권한 없음', 403);
+    await prisma.additionalFee.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
