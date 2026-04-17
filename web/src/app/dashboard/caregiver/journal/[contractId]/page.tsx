@@ -44,6 +44,8 @@ export default function JournalPage() {
   const [saving, setSaving] = useState(false);
   // 선택된 일자 (기본: 오늘)
   const [selectedDate, setSelectedDate] = useState<string>(() => localDateStrFromToday());
+  // 이 계약 한정 법인명
+  const [contractCorporateName, setContractCorporateName] = useState<string>("");
   const [form, setForm] = useState({
     careHoursManual: "",
     mealCare: false,
@@ -62,7 +64,9 @@ export default function JournalPage() {
         contractAPI.get(contractId),
         careRecordAPI.list(contractId, { limit: 30 }),
       ]);
-      setContract(contractRes.data?.data || contractRes.data);
+      const loadedContract = contractRes.data?.data || contractRes.data;
+      setContract(loadedContract);
+      setContractCorporateName(loadedContract?.corporateName || "");
       const records: CareRecord[] = recordsRes.data?.data?.records || recordsRes.data?.data || [];
       // 선택된 날짜에 해당하는 기록 찾기 (기본: 오늘)
       const t = records.find((r) => r.date && localDateStr(r.date) === selectedDate) || null;
@@ -220,6 +224,35 @@ export default function JournalPage() {
               <InfoRow label="병원명" value={contract.careRequest?.hospitalName || contract.careRequest?.address || "-"} />
               <InfoRow label="간병 시작일" value={contract.startDate ? new Date(contract.startDate).toLocaleDateString("ko-KR") : "-"} />
               <InfoRow label="간병 종료일" value={contract.endDate ? new Date(contract.endDate).toLocaleDateString("ko-KR") : "-"} />
+            </div>
+            {/* 이 계약에서 사용된 법인명 (간병일지 PDF에 반영) */}
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <label className="block text-xs text-gray-500 mb-1">
+                간병인 사용 법인명 <span className="text-gray-400">(이 간병건 한정, 비워두면 프로필 기본값 사용)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={contractCorporateName}
+                  onChange={(e) => setContractCorporateName(e.target.value)}
+                  placeholder="파견 법인명 (선택)"
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await contractAPI.updateCorporateName(contractId, contractCorporateName);
+                      showToast("법인명 저장됨", "success");
+                    } catch {
+                      showToast("저장 실패", "error");
+                    }
+                  }}
+                  className="px-3 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800"
+                >
+                  저장
+                </button>
+              </div>
             </div>
           </div>
         )}

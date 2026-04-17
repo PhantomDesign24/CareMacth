@@ -595,7 +595,7 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
       ['생년월일', patient.birthDate ? new Date(patient.birthDate).toISOString().slice(0, 10) : '-', '병원명', contract.careRequest.hospitalName || contract.careRequest.address || '-'],
       ['간병 시작일', contract.startDate ? new Date(contract.startDate).toISOString().slice(0, 10) : '-', '간병 기간', contract.careRequest.durationDays ? `${contract.careRequest.durationDays}일` : '-'],
       ['간병인 성명', caregiverUser?.name || '-', '간병인 연락처', caregiverUser?.phone || '-'],
-      ['간병인 사용 법인명', caregiver.corporateName || '', '', ''],
+      ['간병인 사용 법인명', contract.corporateName || caregiver.corporateName || '', '', ''],
     ];
 
     info.forEach((row, idx) => {

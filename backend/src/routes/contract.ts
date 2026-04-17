@@ -32,4 +32,9 @@ router.post('/:id/extend', authorize('GUARDIAN'), [
   body('additionalDays').optional().isInt({ min: 1 }).withMessage('연장 일수는 1일 이상이어야 합니다.'),
 ], contractController.extendContract);
 
+// PATCH /:id/corporate-name - 간병인 사용 법인명 수정 (간병인 본인, 간병일지 PDF용)
+router.patch('/:id/corporate-name', authorize('CAREGIVER'), [
+  body('corporateName').optional({ nullable: true }).isLength({ max: 100 }).withMessage('법인명은 100자 이내여야 합니다.'),
+], contractController.updateCorporateName);
+
 export default router;

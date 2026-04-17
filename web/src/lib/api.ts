@@ -226,6 +226,8 @@ export const contractAPI = {
   get: (id: string) => api.get(`/contracts/${id}`),
   cancel: (id: string, reason: string) =>
     api.post(`/contracts/${id}/cancel`, { reason }),
+  updateCorporateName: (id: string, corporateName: string) =>
+    api.patch(`/contracts/${id}/corporate-name`, { corporateName }),
 };
 
 export const applicantAPI = {

@@ -592,3 +592,28 @@ export const extendContract = async (req: AuthRequest, res: Response, next: Next
     next(error);
   }
 };
+
+// PATCH /:id/corporate-name - 간병일지 PDF용 법인명 업데이트 (간병인 본인)
+export const updateCorporateName = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { corporateName } = req.body;
+
+    const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+    if (!caregiver) throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+
+    const contract = await prisma.contract.findFirst({
+      where: { id, caregiverId: caregiver.id },
+    });
+    if (!contract) throw new AppError('계약을 찾을 수 없습니다.', 404);
+
+    const updated = await prisma.contract.update({
+      where: { id },
+      data: { corporateName: corporateName || null },
+    });
+
+    res.json({ success: true, data: { id: updated.id, corporateName: updated.corporateName } });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -369,6 +369,7 @@ model Contract {
   status          ContractStatus @default(ACTIVE)
   contractDoc     String?        // 계약서 URL
   medicalActClause Boolean       @default(true) // 의료행위 금지 조항 포함
+  corporateName   String?        // 간병인 사용 법인명 (이 계약건에서 파견된 업체명, PDF 간병일지용)
 
   // 취소 정책
   cancellationPolicy String?
