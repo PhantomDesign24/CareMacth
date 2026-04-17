@@ -56,6 +56,9 @@ router.post('/:id/apply', authorize('CAREGIVER'), [
   body('isAccepted').optional().isBoolean().withMessage('수락 여부는 true/false여야 합니다.'),
 ], careRequestController.applyToCareRequest);
 
+// DELETE /:id/apply - 간병인 본인 지원 취소 (보호자 선택 전까지만)
+router.delete('/:id/apply', authorize('CAREGIVER'), careRequestController.cancelApplication);
+
 // DELETE /:id - 간병 요청 취소 (보호자만)
 router.delete('/:id', authorize('GUARDIAN'), careRequestController.cancelCareRequest);
 

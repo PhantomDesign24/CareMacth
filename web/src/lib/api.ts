@@ -153,6 +153,8 @@ export const caregiverAPI = {
     api.get("/caregiver/applications"),
   updateProfile: (data: Record<string, unknown>) =>
     api.put('/caregiver/profile', data),
+  cancelApplication: (careRequestId: string) =>
+    api.delete(`/care-requests/${careRequestId}/apply`),
 };
 
 export const paymentAPI = {

@@ -906,10 +906,13 @@ function GuardianDashboard() {
                             <th className="text-left py-3 px-2 font-semibold text-gray-600">결제수단</th>
                             <th className="text-right py-3 px-2 font-semibold text-gray-600">금액</th>
                             <th className="text-center py-3 px-2 font-semibold text-gray-600">상태</th>
+                            <th className="text-center py-3 px-2 font-semibold text-gray-600">영수증</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredPayments.map((pay) => (
+                          {filteredPayments.map((pay) => {
+                            const canReceipt = /완료|COMPLETED|ESCROW|에스크로/i.test(pay.status);
+                            return (
                             <tr key={pay.id} className="border-b border-gray-50 last:border-0">
                               <td className="py-3 px-2 text-gray-700">{pay.date}</td>
                               <td className="py-3 px-2 text-gray-700">{pay.description}</td>
@@ -920,8 +923,23 @@ function GuardianDashboard() {
                               <td className="py-3 px-2 text-center">
                                 {statusBadge(pay.status)}
                               </td>
+                              <td className="py-3 px-2 text-center">
+                                {canReceipt && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
+                                      window.open(`/api/payments/${pay.id}/receipt?token=${encodeURIComponent(t || "")}`, "_blank");
+                                    }}
+                                    className="text-xs px-2 py-1 bg-gray-900 text-white rounded"
+                                  >
+                                    PDF
+                                  </button>
+                                )}
+                              </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

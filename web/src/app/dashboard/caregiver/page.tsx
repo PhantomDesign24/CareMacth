@@ -6,6 +6,7 @@ import Link from "next/link";
 import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, reportAPI } from "@/lib/api";
 import { formatDate, formatContractStatus, formatCareType, formatLocation, formatPenaltyType } from "@/lib/format";
 import { showToast } from "@/components/Toast";
+import ScheduleCalendar from "@/components/ScheduleCalendar";
 
 interface Earnings {
   thisMonth: number;
@@ -793,6 +794,24 @@ function CaregiverDashboard() {
                             </div>
                           )}
                         </div>
+                        {status === 'PENDING' && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!confirm('지원을 취소하시겠습니까?')) return;
+                              try {
+                                await caregiverAPI.cancelApplication(cr.id);
+                                showToast('지원이 취소되었습니다.', 'success');
+                                fetchData();
+                              } catch (err: any) {
+                                showToast(err?.response?.data?.message || '취소 실패', 'error');
+                              }
+                            }}
+                            className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
+                          >
+                            지원 취소
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -807,6 +826,11 @@ function CaregiverDashboard() {
               <div className="p-6">
                 <h3 className="text-lg font-bold text-gray-900 mb-2">간병일지 작성</h3>
                 <p className="text-sm text-gray-500">진행 중인 간병 건을 선택해 일지를 작성하세요.</p>
+              </div>
+              {/* 월간 스케줄 달력 */}
+              <ScheduleCalendar contracts={activityHistory} />
+              <div className="p-6 pb-2">
+                <h4 className="text-sm font-bold text-gray-900">진행 중인 간병</h4>
               </div>
               {activityHistory.filter((a) => a.contractStatus === 'ACTIVE' || a.contractStatus === 'EXTENDED').length === 0 && (
                 <div className="p-12 text-center text-gray-400">

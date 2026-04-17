@@ -23,4 +23,7 @@ router.get('/certificate/:id', educationController.getCertificate);
 // GET /certificate/:id/download - 수료증 HTML 다운로드
 router.get('/certificate/:id/download', educationController.downloadCertificate);
 
+// GET /certificate/:id/pdf - 수료증 PDF 다운로드 (pdfkit)
+router.get('/certificate/:id/pdf', educationController.downloadCertificatePdf);
+
 export default router;

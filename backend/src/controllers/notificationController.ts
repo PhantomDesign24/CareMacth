@@ -239,13 +239,41 @@ export const getPushSetting = async (req: AuthRequest, res: Response, next: Next
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      select: { pushEnabled: true },
+      select: { pushEnabled: true, notificationPrefs: true },
     });
 
     res.json({
       success: true,
-      data: { pushEnabled: user?.pushEnabled ?? true },
+      data: {
+        pushEnabled: user?.pushEnabled ?? true,
+        notificationPrefs: user?.notificationPrefs || {},
+      },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /category-prefs - 카테고리별 알림 설정
+export const updateCategoryPrefs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { prefs } = req.body;
+    if (!prefs || typeof prefs !== 'object') {
+      return res.status(400).json({ success: false, message: 'prefs 객체가 필요합니다.' });
+    }
+    // 유효한 카테고리만 필터링
+    const validKeys = ['MATCHING', 'APPLICATION', 'CONTRACT', 'PAYMENT', 'CARE_RECORD', 'EXTENSION', 'PENALTY', 'SYSTEM'];
+    const filtered: Record<string, boolean> = {};
+    for (const k of validKeys) {
+      if (typeof prefs[k] === 'boolean') filtered[k] = prefs[k];
+    }
+
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { notificationPrefs: filtered },
+    });
+
+    res.json({ success: true, data: { notificationPrefs: filtered } });
   } catch (error) {
     next(error);
   }

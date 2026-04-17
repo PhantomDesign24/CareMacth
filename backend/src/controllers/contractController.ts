@@ -617,3 +617,165 @@ export const updateCorporateName = async (req: AuthRequest, res: Response, next:
     next(error);
   }
 };
+
+// GET /:id/pdf - 계약서 PDF 생성
+export const generateContractPdf = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const fs = require('fs');
+    const { id } = req.params;
+
+    const contract = await prisma.contract.findUnique({
+      where: { id },
+      include: {
+        careRequest: { include: { patient: true } },
+        caregiver: { include: { user: { select: { name: true, phone: true } } } },
+        guardian: { include: { user: { select: { name: true, phone: true, email: true } } } },
+      },
+    });
+    if (!contract) throw new AppError('계약을 찾을 수 없습니다.', 404);
+
+    const userId = req.user!.id;
+    const role = req.user!.role;
+    const isRelated =
+      role === 'ADMIN' ||
+      contract.guardian.userId === userId ||
+      contract.caregiver.userId === userId;
+    if (!isRelated) throw new AppError('조회 권한이 없습니다.', 403);
+
+    const FONT_REGULAR = '/usr/share/fonts/truetype/nanum/NanumGothic.ttf';
+    const FONT_BOLD = '/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf';
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="contract-${id.slice(0, 8)}.pdf"`);
+    doc.pipe(res);
+
+    if (fs.existsSync(FONT_REGULAR)) doc.registerFont('Kor', FONT_REGULAR);
+    if (fs.existsSync(FONT_BOLD)) doc.registerFont('KorBold', FONT_BOLD);
+
+    const PAGE_W = 595.28;
+    const MARGIN = 50;
+    const CONTENT_W = PAGE_W - MARGIN * 2;
+    const COLOR_PRIMARY = '#1E3A5F';
+    const COLOR_SUB = '#4A5568';
+    const COLOR_BORDER = '#CBD5E0';
+    const COLOR_HEADER_BG = '#EDF2F7';
+
+    // 헤더
+    doc.font('KorBold').fontSize(11).fillColor(COLOR_PRIMARY).text('CAREMATCH', MARGIN, 50);
+    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB).text('케어매치 주식회사', MARGIN, 64);
+    const docId = `CT-${id.slice(0, 8).toUpperCase()}`;
+    doc.fontSize(8).fillColor(COLOR_SUB)
+      .text(`계약번호  ${docId}`, MARGIN, 50, { width: CONTENT_W, align: 'right' });
+    doc.fontSize(8)
+      .text(`발행일  ${new Date().toISOString().slice(0, 10)}`, MARGIN, 64, { width: CONTENT_W, align: 'right' });
+
+    // 타이틀
+    doc.font('KorBold').fontSize(22).fillColor(COLOR_PRIMARY)
+      .text('간 병 서 비 스 계 약 서', MARGIN, 100, { width: CONTENT_W, align: 'center', characterSpacing: 2 });
+    doc.lineWidth(1.5).strokeColor(COLOR_PRIMARY).moveTo(MARGIN, 140).lineTo(PAGE_W - MARGIN, 140).stroke();
+
+    let y = 160;
+
+    const drawTableRow = (label: string, value: string) => {
+      const rowH = 24;
+      const labelW = 120;
+      doc.lineWidth(0.5).strokeColor(COLOR_BORDER);
+      doc.rect(MARGIN, y, labelW, rowH).fillAndStroke(COLOR_HEADER_BG, COLOR_BORDER);
+      doc.rect(MARGIN + labelW, y, CONTENT_W - labelW, rowH).stroke();
+      doc.fillColor(COLOR_PRIMARY).font('KorBold').fontSize(10)
+        .text(label, MARGIN + 8, y + 7, { width: labelW - 16 });
+      doc.fillColor('#1A202C').font('Kor').fontSize(10)
+        .text(value, MARGIN + labelW + 8, y + 7, { width: CONTENT_W - labelW - 16 });
+      y += rowH;
+    };
+
+    // 당사자
+    doc.font('KorBold').fontSize(11).fillColor(COLOR_PRIMARY).text('Ⅰ. 계약 당사자', MARGIN, y);
+    y += 18;
+    drawTableRow('갑 (보호자)', `${contract.guardian.user?.name || '-'} (${contract.guardian.user?.phone || '-'})`);
+    drawTableRow('을 (간병인)', `${contract.caregiver.user?.name || '-'} (${contract.caregiver.user?.phone || '-'})`);
+    drawTableRow('환자', contract.careRequest.patient.name);
+    y += 12;
+
+    // 계약 내용
+    doc.font('KorBold').fontSize(11).fillColor(COLOR_PRIMARY).text('Ⅱ. 간병 내용', MARGIN, y);
+    y += 18;
+    drawTableRow('간병 유형', contract.careRequest.careType === 'INDIVIDUAL' ? '1:1 개인 간병' : '가족 간병');
+    drawTableRow('스케줄', contract.careRequest.scheduleType === 'FULL_TIME' ? '24시간' : '시간제');
+    drawTableRow('장소', `${contract.careRequest.location === 'HOSPITAL' ? '병원' : '자택'}${contract.careRequest.hospitalName ? ' · ' + contract.careRequest.hospitalName : ''}`);
+    drawTableRow('주소', contract.careRequest.address || '-');
+    drawTableRow('간병 기간', `${new Date(contract.startDate).toLocaleDateString('ko-KR')} ~ ${new Date(contract.endDate).toLocaleDateString('ko-KR')}`);
+    drawTableRow('일당', `${contract.dailyRate.toLocaleString()}원`);
+    drawTableRow('총 금액', `${contract.totalAmount.toLocaleString()}원 (VAT 별도)`);
+    drawTableRow('플랫폼 수수료', `${contract.platformFee}%`);
+    drawTableRow('세율 (원천징수)', `${contract.taxRate}%`);
+    y += 20;
+
+    // 주요 조항
+    if (y + 200 > 780) { doc.addPage(); y = MARGIN; }
+    doc.font('KorBold').fontSize(11).fillColor(COLOR_PRIMARY).text('Ⅲ. 주요 조항', MARGIN, y);
+    y += 18;
+
+    const clauses = [
+      {
+        t: '제1조 (의료행위 금지)',
+        b: '본 플랫폼의 간병인은 「의료법」상 의료인이 아니므로 의료행위(석션, 도뇨관 삽입·교체 등)를 수행할 수 없습니다. 보호자(갑)가 의료행위를 요청하거나 간병인(을)이 이를 수행할 경우, 관련 법령에 따라 법적 책임이 발생할 수 있으며, 모든 책임은 요청자 또는 행위자 본인에게 귀속됩니다. 의료행위는 반드시 의료기관 또는 의료인을 통해 진행해야 합니다.',
+      },
+      {
+        t: '제2조 (결제 및 정산)',
+        b: '보호자(갑)는 계약 체결과 동시에 케어매치 에스크로를 통해 선결제하며, 간병 종료 익일 간병인(을)에게 정산금(총액 - 플랫폼 수수료 - 원천징수 세액 3.3%)이 지급됩니다.',
+      },
+      {
+        t: '제3조 (취소 및 연장)',
+        b: '매칭 확정 후 간병인(을)의 일방 취소는 취소 패널티가 부과되며, 노쇼 3회 누적 시 활동이 자동 정지됩니다. 간병 연장은 보호자(갑)의 요청에 따라 간병인(을) 수락 시 자동 처리됩니다.',
+      },
+      {
+        t: '제4조 (분쟁 해결)',
+        b: '본 계약과 관련된 분쟁은 케어매치 고객센터를 통한 조정으로 우선 해결하며, 미해결 시 관련 법령에 따라 처리됩니다.',
+      },
+    ];
+
+    clauses.forEach((c) => {
+      doc.font('KorBold').fontSize(10).fillColor(COLOR_PRIMARY).text(c.t, MARGIN, y);
+      y += 15;
+      doc.font('Kor').fontSize(9).fillColor('#333');
+      const textH = doc.heightOfString(c.b, { width: CONTENT_W });
+      if (y + textH > 760) { doc.addPage(); y = MARGIN; }
+      doc.text(c.b, MARGIN, y, { width: CONTENT_W, align: 'justify' });
+      y += textH + 14;
+    });
+
+    // 서명
+    if (y + 120 > 780) { doc.addPage(); y = MARGIN + 20; }
+    y += 20;
+    doc.font('KorBold').fontSize(11).fillColor(COLOR_PRIMARY)
+      .text('상기 내용에 동의하며 본 계약을 체결합니다.', MARGIN, y, { width: CONTENT_W, align: 'center' });
+    y += 30;
+
+    const boxW = (CONTENT_W - 20) / 2;
+    const boxH = 80;
+    doc.lineWidth(0.6).strokeColor(COLOR_BORDER);
+    doc.rect(MARGIN, y, boxW, boxH).stroke();
+    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB).text('갑 (보호자)', MARGIN + 10, y + 10);
+    doc.font('KorBold').fontSize(11).fillColor('#1A202C').text(contract.guardian.user?.name || '', MARGIN + 10, y + 28);
+    doc.font('Kor').fontSize(10).fillColor(COLOR_SUB).text('(서명 / 인)', MARGIN + 10, y + 58);
+
+    doc.rect(MARGIN + boxW + 20, y, boxW, boxH).stroke();
+    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB).text('을 (간병인)', MARGIN + boxW + 30, y + 10);
+    doc.font('KorBold').fontSize(11).fillColor('#1A202C').text(contract.caregiver.user?.name || '', MARGIN + boxW + 30, y + 28);
+    doc.font('Kor').fontSize(10).fillColor(COLOR_SUB).text('(서명 / 인)', MARGIN + boxW + 30, y + 58);
+
+    y += boxH + 16;
+    doc.font('Kor').fontSize(9).fillColor(COLOR_SUB)
+      .text(`계약일: ${new Date(contract.createdAt || new Date()).toLocaleDateString('ko-KR')}`, MARGIN, y, { width: CONTENT_W, align: 'center' });
+    y += 14;
+    doc.fontSize(8)
+      .text('주관 | 케어매치 주식회사 · 사업자등록번호 173-81-03376', MARGIN, y, { width: CONTENT_W, align: 'center' });
+
+    doc.end();
+  } catch (error) {
+    next(error);
+  }
+};

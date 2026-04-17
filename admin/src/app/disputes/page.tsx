@@ -62,6 +62,7 @@ export default function DisputesPage() {
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [selectedDispute, setSelectedDispute] = useState<Dispute | null>(null);
   const [resolution, setResolution] = useState("");
+  const [transitionStatus, setTransitionStatus] = useState<"processing" | "resolved" | "escalated" | "rejected">("resolved");
 
   const limit = 10;
 
@@ -360,12 +361,25 @@ export default function DisputesPage() {
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">해결 내용</label>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">상태 전이</label>
+                <select
+                  value={transitionStatus}
+                  onChange={(e) => setTransitionStatus(e.target.value as any)}
+                  className="input-field"
+                >
+                  <option value="processing">처리중</option>
+                  <option value="resolved">해결됨</option>
+                  <option value="escalated">에스컬레이션</option>
+                  <option value="rejected">기각</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">처리 내용</label>
                 <textarea
                   value={resolution}
                   onChange={(e) => setResolution(e.target.value)}
                   className="input-field min-h-[120px] resize-y"
-                  placeholder="분쟁 해결 내용을 상세히 기록하세요..."
+                  placeholder="분쟁 처리 내용을 상세히 기록하세요..."
                 />
               </div>
             </div>
@@ -378,24 +392,28 @@ export default function DisputesPage() {
                   const disputeId = selectedDispute.contractId || selectedDispute.id;
                   setActionLoading(selectedDispute.id);
                   try {
-                    // 분쟁 해결 처리: 로컬 상태 업데이트
                     setDisputes((prev) =>
                       prev.map((d) =>
                         d.id === selectedDispute.id
-                          ? { ...d, status: "resolved", resolution }
+                          ? { ...d, status: transitionStatus, resolution }
                           : d
                       )
                     );
                     setShowResolveModal(false);
                     setResolution("");
                   } catch (err: unknown) {
-                    alert(err instanceof Error ? err.message : `분쟁 ${disputeId} 해결 처리 중 오류가 발생했습니다.`);
+                    alert(err instanceof Error ? err.message : `분쟁 ${disputeId} 처리 중 오류가 발생했습니다.`);
                   } finally {
                     setActionLoading(null);
                   }
                 }}
               >
-                {actionLoading === selectedDispute.id ? "처리 중..." : "해결 완료"}
+                {actionLoading === selectedDispute.id ? "처리 중..." : `${
+                  transitionStatus === 'processing' ? '처리중으로 전환' :
+                  transitionStatus === 'escalated' ? '에스컬레이션' :
+                  transitionStatus === 'rejected' ? '기각' :
+                  '해결 완료'
+                }`}
               </button>
             </div>
           </div>

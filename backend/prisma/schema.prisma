@@ -50,7 +50,8 @@ model User {
   socialId      String?      // 소셜 로그인 ID
   profileImage  String?
   fcmToken      String?      // Firebase Cloud Messaging 토큰
-  pushEnabled   Boolean      @default(true) // 푸시 알림 수신 여부
+  pushEnabled   Boolean      @default(true) // 전체 푸시 알림 ON/OFF
+  notificationPrefs Json?     // 카테고리별 ON/OFF: { MATCHING: true, PAYMENT: false, ... }
   isActive      Boolean      @default(true)
   deletedAt     DateTime?    // 회원 탈퇴 시각 (soft delete)
   referralCode  String       @unique // 추천인 코드

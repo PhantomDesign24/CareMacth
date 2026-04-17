@@ -6,6 +6,7 @@ import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { config } from '../config';
 import { generateOrderId } from '../utils/generateCode';
+import { sendEmail, emailPaymentCompleted } from '../services/emailService';
 
 // POST / - 결제 생성
 export const createPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -263,6 +264,24 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
           }
         });
 
+        // 이메일 통지 (보호자)
+        try {
+          const guardianWithUser = await prisma.guardian.findUnique({
+            where: { id: payment.guardianId },
+            include: { user: { select: { email: true } }, patients: false },
+          });
+          const patient = await prisma.patient.findFirst({
+            where: { careRequests: { some: { contract: { id: payment.contractId! } } } },
+          });
+          if (guardianWithUser?.user?.email) {
+            sendEmail(
+              guardianWithUser.user.email,
+              '결제 완료 안내',
+              emailPaymentCompleted(patient?.name || '환자', payment.totalAmount),
+            ).catch(() => {});
+          }
+        } catch {}
+
         res.json({
           success: true,
           data: {
@@ -473,6 +492,114 @@ export const getPaymentHistory = async (req: AuthRequest, res: Response, next: N
         },
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /:id/receipt - 결제 영수증 PDF
+const FONT_REGULAR = '/usr/share/fonts/truetype/nanum/NanumGothic.ttf';
+const FONT_BOLD = '/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf';
+
+export const generatePaymentReceipt = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const fs = require('fs');
+    const { id } = req.params;
+
+    const payment = await prisma.payment.findUnique({
+      where: { id },
+      include: {
+        contract: {
+          include: {
+            careRequest: { include: { patient: true } },
+            caregiver: { include: { user: { select: { name: true } } } },
+            guardian: { include: { user: { select: { name: true, email: true, phone: true } } } },
+          },
+        },
+      },
+    });
+    if (!payment) throw new AppError('결제를 찾을 수 없습니다.', 404);
+
+    const userId = req.user!.id;
+    const role = req.user!.role;
+    const isRelated =
+      role === 'ADMIN' ||
+      payment.contract?.guardian.userId === userId ||
+      payment.contract?.caregiver.userId === userId;
+    if (!isRelated) throw new AppError('조회 권한이 없습니다.', 403);
+    if (payment.status !== 'COMPLETED' && payment.status !== 'ESCROW') {
+      throw new AppError('완료된 결제만 영수증 발급 가능합니다.', 400);
+    }
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="receipt-${payment.tossOrderId}.pdf"`);
+    doc.pipe(res);
+
+    if (fs.existsSync(FONT_REGULAR)) doc.registerFont('Kor', FONT_REGULAR);
+    if (fs.existsSync(FONT_BOLD)) doc.registerFont('KorBold', FONT_BOLD);
+
+    const PAGE_W = 595.28;
+    const COLOR_PRIMARY = '#1E3A5F';
+    const COLOR_SUB = '#4A5568';
+    const COLOR_BORDER = '#CBD5E0';
+
+    // 헤더
+    doc.font('KorBold').fontSize(11).fillColor(COLOR_PRIMARY).text('CAREMATCH', 50, 50);
+    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB).text('케어매치 주식회사', 50, 64);
+    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB)
+      .text(`영수증 번호  ${payment.tossOrderId}`, 50, 50, { width: PAGE_W - 100, align: 'right' });
+    doc.text(`발행일  ${new Date().toISOString().slice(0, 10)}`, 50, 64, { width: PAGE_W - 100, align: 'right' });
+
+    // 타이틀
+    doc.font('KorBold').fontSize(24).fillColor(COLOR_PRIMARY)
+      .text('결제 영수증', 50, 100, { width: PAGE_W - 100, align: 'center', characterSpacing: 2 });
+    doc.font('Kor').fontSize(9).fillColor(COLOR_SUB)
+      .text('Payment Receipt', 50, 130, { width: PAGE_W - 100, align: 'center' });
+    doc.lineWidth(1.5).strokeColor(COLOR_PRIMARY).moveTo(50, 150).lineTo(PAGE_W - 50, 150).stroke();
+
+    // 내용
+    let y = 170;
+    const rowH = 26;
+    const labelW = 110;
+    const valueX = 50 + labelW;
+    const valueW = PAGE_W - 100 - labelW;
+
+    const drawRow = (label: string, value: string, isBold = false) => {
+      doc.lineWidth(0.5).strokeColor(COLOR_BORDER).moveTo(50, y + rowH).lineTo(PAGE_W - 50, y + rowH).stroke();
+      doc.font('KorBold').fontSize(10).fillColor(COLOR_PRIMARY).text(label, 50, y + 8, { width: labelW });
+      doc.font(isBold ? 'KorBold' : 'Kor').fontSize(isBold ? 14 : 11).fillColor('#1A202C')
+        .text(value, valueX, y + 8, { width: valueW });
+      y += rowH;
+    };
+
+    const guardian = payment.contract?.guardian.user;
+    const patient = payment.contract?.careRequest.patient;
+    const caregiver = payment.contract?.caregiver.user;
+
+    drawRow('결제자', guardian?.name || '-');
+    drawRow('연락처', guardian?.phone || '-');
+    drawRow('이메일', guardian?.email || '-');
+    drawRow('환자명', patient?.name || '-');
+    drawRow('간병인', caregiver?.name || '-');
+    drawRow('결제 방법', ({ CARD: '카드', BANK_TRANSFER: '무통장입금', DIRECT: '직접결제' } as any)[payment.method] || payment.method);
+    drawRow('서비스 금액', `${payment.amount.toLocaleString()}원`);
+    drawRow('VAT', `${payment.vatAmount.toLocaleString()}원`);
+    if (payment.pointsUsed > 0) drawRow('포인트 사용', `-${payment.pointsUsed.toLocaleString()}원`);
+    drawRow('결제일시', payment.paidAt ? new Date(payment.paidAt).toLocaleString('ko-KR') : new Date(payment.createdAt).toLocaleString('ko-KR'));
+    y += 10;
+    drawRow('총 결제 금액', `${payment.totalAmount.toLocaleString()}원`, true);
+
+    // 푸터
+    y += 30;
+    doc.font('Kor').fontSize(9).fillColor(COLOR_SUB)
+      .text('본 영수증은 전자적으로 발행된 문서입니다.', 50, y, { width: PAGE_W - 100, align: 'center' });
+    y += 16;
+    doc.fontSize(8)
+      .text('케어매치 주식회사 | 사업자등록번호 173-81-03376', 50, y, { width: PAGE_W - 100, align: 'center' });
+
+    doc.end();
   } catch (error) {
     next(error);
   }

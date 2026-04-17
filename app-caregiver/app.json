@@ -21,7 +21,8 @@
         "NSCameraUsageDescription": "간병 일지 사진 업로드를 위해 카메라 접근이 필요합니다.",
         "NSPhotoLibraryUsageDescription": "간병 일지 사진 조회를 위해 사진 접근이 필요합니다.",
         "NSPhotoLibraryAddOnlyUsageDescription": "간병 일지 사진 저장을 위해 권한이 필요합니다.",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": ["remote-notification"],
+        "LSApplicationQueriesSchemes": ["kakaotalk", "supertoss", "tmap"]
       },
       "entitlements": {
         "aps-environment": "production"
@@ -57,7 +58,8 @@
           "icon": "./assets/notification-icon.png",
           "color": "#2ECC71"
         }
-      ]
+      ],
+      "./plugins/withAndroidQueries.js"
     ],
     "scheme": "carematch-caregiver",
     "extra": {

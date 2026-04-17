@@ -816,3 +816,37 @@ export const getRegionStats = async (req: AuthRequest, res: Response, next: Next
     next(error);
   }
 };
+
+// DELETE /:id/apply - 간병인 본인 지원 취소 (보호자가 선택 전까지만)
+export const cancelApplication = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id: careRequestId } = req.params;
+
+    const caregiver = await prisma.caregiver.findUnique({
+      where: { userId: req.user!.id },
+    });
+    if (!caregiver) throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+
+    const application = await prisma.careApplication.findUnique({
+      where: {
+        careRequestId_caregiverId: {
+          careRequestId,
+          caregiverId: caregiver.id,
+        },
+      },
+    });
+    if (!application) throw new AppError('지원 내역을 찾을 수 없습니다.', 404);
+    if (application.status !== 'PENDING') {
+      throw new AppError('보호자가 이미 처리한 지원은 취소할 수 없습니다.', 400);
+    }
+
+    await prisma.careApplication.update({
+      where: { id: application.id },
+      data: { status: 'CANCELLED' },
+    });
+
+    res.json({ success: true, message: '지원이 취소되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};

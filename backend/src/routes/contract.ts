@@ -1,11 +1,26 @@
 import { Router } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { body } from 'express-validator';
 import { authenticate, authorize } from '../middlewares/auth';
 import * as contractController from '../controllers/contractController';
 
 const router = Router();
 
-// 모든 계약 라우트에 인증 필요
+// GET /:id/pdf - 계약서 PDF (쿼리스트링 토큰 허용, authenticate 전에 위치)
+router.get(
+  '/:id/pdf',
+  (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.headers.authorization && req.query.token) {
+      req.headers.authorization = `Bearer ${req.query.token}`;
+    }
+    next();
+  },
+  authenticate,
+  authorize('GUARDIAN', 'CAREGIVER', 'ADMIN'),
+  contractController.generateContractPdf,
+);
+
+// 나머지 라우트는 인증 필요
 router.use(authenticate);
 
 // POST / - 계약 생성 (보호자만)

@@ -1,10 +1,24 @@
 import { Router } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { body } from 'express-validator';
 import { authenticate } from '../middlewares/auth';
 import { paymentLimiter } from '../middlewares/rateLimiter';
 import * as paymentController from '../controllers/paymentController';
 
 const router = Router();
+
+// PDF 영수증: 쿼리스트링 토큰 허용 (새 탭 다운로드)
+router.get(
+  '/:id/receipt',
+  (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.headers.authorization && req.query.token) {
+      req.headers.authorization = `Bearer ${req.query.token}`;
+    }
+    next();
+  },
+  authenticate,
+  paymentController.generatePaymentReceipt,
+);
 
 // 모든 결제 라우트에 인증 필요
 router.use(authenticate);

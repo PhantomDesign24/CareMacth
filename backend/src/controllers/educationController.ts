@@ -321,3 +321,82 @@ export const downloadCertificate = async (req: AuthRequest, res: Response, next:
     next(error);
   }
 };
+
+// GET /certificate/:id/pdf - 실제 PDF 생성 (pdfkit)
+export const downloadCertificatePdf = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const fs = require('fs');
+    const { id } = req.params;
+
+    const caregiver = await prisma.caregiver.findUnique({
+      where: { userId: req.user!.id },
+      include: { user: { select: { name: true, referralCode: true } } },
+    });
+    if (!caregiver) throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+
+    const record = await prisma.educationRecord.findFirst({
+      where: { educationId: id, caregiverId: caregiver.id },
+      include: { education: true },
+    });
+    if (!record || !record.completed) {
+      throw new AppError('수료증 발급 대상이 아닙니다.', 400);
+    }
+
+    const FONT_REGULAR = '/usr/share/fonts/truetype/nanum/NanumGothic.ttf';
+    const FONT_BOLD = '/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf';
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 0 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="certificate-${record.id.slice(0, 8)}.pdf"`);
+    doc.pipe(res);
+
+    if (fs.existsSync(FONT_REGULAR)) doc.registerFont('Kor', FONT_REGULAR);
+    if (fs.existsSync(FONT_BOLD)) doc.registerFont('KorBold', FONT_BOLD);
+
+    const W = 841.89, H = 595.28;
+    // 외곽 박스
+    doc.rect(0, 0, W, H).fill('#FFFFFF');
+    doc.lineWidth(12).strokeColor('#1E3A5F').rect(18, 18, W - 36, H - 36).stroke();
+    doc.lineWidth(1).strokeColor('#93A5BE').rect(34, 34, W - 68, H - 68).stroke();
+
+    // 타이틀
+    doc.font('KorBold').fontSize(48).fillColor('#1E3A5F')
+      .text('수 료 증', 0, 90, { width: W, align: 'center', characterSpacing: 10 });
+    doc.font('Kor').fontSize(12).fillColor('#5A6B80')
+      .text('CERTIFICATE OF COMPLETION', 0, 150, { width: W, align: 'center', characterSpacing: 6 });
+
+    // 구분선
+    doc.lineWidth(1).strokeColor('#D0D5DD')
+      .moveTo(W / 2 - 60, 180).lineTo(W / 2 + 60, 180).stroke();
+
+    // 증 번호
+    const certNo = `CM-${record.id.slice(0, 8).toUpperCase()}`;
+    doc.font('Kor').fontSize(11).fillColor('#666')
+      .text(`증 제 ${certNo} 호`, 0, 210, { width: W, align: 'center' });
+
+    // 성명
+    doc.font('KorBold').fontSize(32).fillColor('#1A202C')
+      .text(`성 명  ${caregiver.user.name}`, 0, 245, { width: W, align: 'center' });
+
+    // 내용
+    doc.font('Kor').fontSize(16).fillColor('#333')
+      .text('위 사람은 케어매치 간병인 전문 교육과정', 0, 315, { width: W, align: 'center' });
+    doc.font('KorBold').fontSize(20).fillColor('#1E3A5F')
+      .text(`『 ${record.education.title} 』`, 0, 345, { width: W, align: 'center' });
+    doc.font('Kor').fontSize(16).fillColor('#333')
+      .text('을(를) 이수하였으므로 이 증서를 수여합니다.', 0, 380, { width: W, align: 'center' });
+
+    // 발행일 + 발행처
+    const completedAt = record.completedAt ? new Date(record.completedAt).toLocaleDateString('ko-KR') : '-';
+    doc.font('Kor').fontSize(13).fillColor('#333')
+      .text(completedAt, 0, 460, { width: W, align: 'center' });
+    doc.font('KorBold').fontSize(16).fillColor('#1A202C')
+      .text('케어매치 주식회사', 0, 485, { width: W, align: 'center' });
+    doc.font('Kor').fontSize(10).fillColor('#666')
+      .text('사업자등록번호 173-81-03376', 0, 510, { width: W, align: 'center' });
+
+    doc.end();
+  } catch (error) {
+    next(error);
+  }
+};

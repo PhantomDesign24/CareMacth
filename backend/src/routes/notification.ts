@@ -34,4 +34,7 @@ router.put('/push-setting', notificationController.updatePushSetting);
 // GET /push-setting - 푸시 설정 조회
 router.get('/push-setting', notificationController.getPushSetting);
 
+// PUT /category-prefs - 카테고리별 알림 ON/OFF
+router.put('/category-prefs', notificationController.updateCategoryPrefs);
+
 export default router;
