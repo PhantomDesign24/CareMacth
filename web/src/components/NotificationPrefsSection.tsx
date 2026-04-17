@@ -20,6 +20,13 @@ export default function NotificationPrefsSection() {
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // 앱 내부에서 실행 중인지 (WebView의 injectedJS가 window.IS_CAREMATCH_APP 설정)
+  const [isApp, setIsApp] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined" && (window as any).IS_CAREMATCH_APP) {
+      setIsApp(true);
+    }
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -70,26 +77,33 @@ export default function NotificationPrefsSection() {
         받고 싶은 알림 카테고리를 선택하세요.
       </p>
 
-      {/* 전체 푸시 on/off */}
-      <div className="flex items-center justify-between py-3 border-b border-gray-100">
-        <div>
-          <div className="text-sm font-semibold text-gray-900">전체 푸시 알림</div>
-          <div className="text-xs text-gray-500 mt-0.5">모든 푸시를 한 번에 차단합니다.</div>
+      {/* 전체 푸시 on/off — 앱 전용 */}
+      {isApp && (
+        <div className="flex items-center justify-between py-3 border-b border-gray-100">
+          <div>
+            <div className="text-sm font-semibold text-gray-900">전체 푸시 알림</div>
+            <div className="text-xs text-gray-500 mt-0.5">모든 푸시를 한 번에 차단합니다.</div>
+          </div>
+          <button
+            type="button"
+            onClick={togglePush}
+            disabled={saving}
+            className={`relative w-11 h-6 rounded-full transition-colors ${pushEnabled ? "bg-orange-500" : "bg-gray-300"}`}
+          >
+            <span
+              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${pushEnabled ? "left-5" : "left-0.5"}`}
+            />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={togglePush}
-          disabled={saving}
-          className={`relative w-11 h-6 rounded-full transition-colors ${pushEnabled ? "bg-orange-500" : "bg-gray-300"}`}
-        >
-          <span
-            className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${pushEnabled ? "left-5" : "left-0.5"}`}
-          />
-        </button>
-      </div>
+      )}
+      {!isApp && (
+        <p className="text-xs text-gray-400 mb-3">
+          ※ 푸시 알림은 모바일 앱에서만 받을 수 있습니다. 아래 카테고리 설정은 인앱 알림에도 적용됩니다.
+        </p>
+      )}
 
       {/* 카테고리별 */}
-      <div className={`${pushEnabled ? "" : "opacity-40 pointer-events-none"} mt-2`}>
+      <div className={`${isApp && !pushEnabled ? "opacity-40 pointer-events-none" : ""} mt-2`}>
         {CATEGORIES.map((c) => {
           const enabled = prefs[c.key] !== false;
           return (

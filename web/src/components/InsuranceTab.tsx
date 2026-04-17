@@ -16,8 +16,10 @@ interface Req {
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  REQUESTED: { label: "접수됨", color: "bg-gray-100 text-gray-700" },
   PENDING: { label: "접수됨", color: "bg-gray-100 text-gray-700" },
   PROCESSING: { label: "처리중", color: "bg-amber-100 text-amber-700" },
+  IN_PROGRESS: { label: "처리중", color: "bg-amber-100 text-amber-700" },
   COMPLETED: { label: "완료", color: "bg-green-100 text-green-700" },
   REJECTED: { label: "거절", color: "bg-red-100 text-red-700" },
 };

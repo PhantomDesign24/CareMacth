@@ -121,3 +121,65 @@ export const getMyInsuranceRequests = async (req: AuthRequest, res: Response, ne
     next(error);
   }
 };
+
+// GET /admin - 관리자 전체 보험서류 신청 목록
+export const adminListInsurance = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { status } = req.query;
+    const where: any = {};
+    if (status) where.status = status;
+    const requests = await prisma.insuranceDocRequest.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+    // 신청자 정보 연결
+    const enriched = await Promise.all(requests.map(async (r) => {
+      const user = await prisma.user.findUnique({
+        where: { id: r.requestedBy },
+        select: { id: true, name: true, email: true, phone: true },
+      }).catch(() => null);
+      return { ...r, requester: user };
+    }));
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PATCH /admin/:id - 관리자 상태 업데이트
+export const adminUpdateInsurance = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { status, documentUrl, adminNote } = req.body;
+    const req_ = await prisma.insuranceDocRequest.findUnique({ where: { id } });
+    if (!req_) throw new AppError('신청을 찾을 수 없습니다.', 404);
+
+    const updated = await prisma.insuranceDocRequest.update({
+      where: { id },
+      data: {
+        ...(status && { status }),
+        ...(documentUrl !== undefined && { documentUrl: documentUrl || null }),
+        processedBy: req.user!.id,
+      },
+    });
+
+    // 완료/거절 시 신청자에게 알림
+    if (status === 'COMPLETED' || status === 'REJECTED') {
+      await prisma.notification.create({
+        data: {
+          userId: req_.requestedBy,
+          type: 'SYSTEM',
+          title: status === 'COMPLETED' ? '보험서류 발급 완료' : '보험서류 신청 거절',
+          body: status === 'COMPLETED'
+            ? `${req_.patientName} 환자 ${req_.documentType}이(가) 발급되었습니다.`
+            : `보험서류 신청이 거절되었습니다. ${adminNote || ''}`,
+          data: { insuranceId: id },
+        },
+      }).catch(() => {});
+    }
+
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    next(error);
+  }
+};

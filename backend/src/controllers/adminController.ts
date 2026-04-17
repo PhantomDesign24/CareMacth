@@ -2460,3 +2460,111 @@ export const deletePatientByAdmin = async (req: AuthRequest, res: Response, next
     next(error);
   }
 };
+
+// POST /admin/emergency-rematch/:contractId/revert - 긴급 재매칭 되돌리기
+// 조건: 해당 CareRequest에 아직 새 활성 계약이 없는 경우에만 원 계약 복구 가능
+export const revertEmergencyRematch = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { contractId } = req.params;
+
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId },
+      include: {
+        careRequest: true,
+        caregiver: { include: { user: true } },
+        guardian: { include: { user: true } },
+      },
+    });
+    if (!contract) throw new AppError('계약을 찾을 수 없습니다.', 404);
+    if (contract.status !== 'CANCELLED') {
+      throw new AppError('취소된 계약만 되돌릴 수 있습니다.', 400);
+    }
+    if (!contract.cancellationReason?.includes('긴급 재매칭')) {
+      throw new AppError('긴급 재매칭으로 취소된 계약만 복구 가능합니다.', 400);
+    }
+
+    // 새 활성 계약이 이미 있으면 복구 불가
+    const newActiveContract = await prisma.contract.findFirst({
+      where: {
+        careRequestId: contract.careRequestId,
+        status: { in: ['ACTIVE', 'EXTENDED'] },
+        id: { not: contractId },
+      },
+    });
+    if (newActiveContract) {
+      throw new AppError('이미 새 계약이 매칭되어 있어 되돌릴 수 없습니다.', 400);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 계약 복구
+      await tx.contract.update({
+        where: { id: contractId },
+        data: {
+          status: 'ACTIVE',
+          cancelledAt: null,
+          cancelledBy: null,
+          cancellationReason: null,
+          cancellationPolicy: null,
+        },
+      });
+
+      // 간병 요청 상태 복구
+      await tx.careRequest.update({
+        where: { id: contract.careRequestId },
+        data: { status: 'IN_PROGRESS' },
+      });
+
+      // 간병인 근무 상태 복구
+      await tx.caregiver.update({
+        where: { id: contract.caregiverId },
+        data: { workStatus: 'WORKING' },
+      });
+
+      // 원 간병인의 CareApplication ACCEPTED로 복구
+      await tx.careApplication.updateMany({
+        where: {
+          careRequestId: contract.careRequestId,
+          caregiverId: contract.caregiverId,
+          status: 'CANCELLED',
+        },
+        data: { status: 'ACCEPTED' },
+      });
+
+      // 관련 분쟁 PROCESSING로 복귀
+      await tx.dispute.updateMany({
+        where: {
+          contractId,
+          status: 'RESOLVED',
+          resolution: { contains: '긴급 재매칭' },
+        },
+        data: { status: 'PROCESSING', resolution: '긴급 재매칭 취소로 되돌림', handledAt: new Date() },
+      });
+
+      // 간병인에게 알림
+      await tx.notification.create({
+        data: {
+          userId: contract.caregiver.userId,
+          type: 'CONTRACT',
+          title: '계약이 복구되었습니다',
+          body: '관리자에 의해 긴급 재매칭이 취소되어 기존 계약이 다시 활성화되었습니다.',
+          data: { contractId },
+        },
+      }).catch(() => {});
+
+      // 보호자에게 알림
+      await tx.notification.create({
+        data: {
+          userId: contract.guardian.userId,
+          type: 'CONTRACT',
+          title: '계약이 복구되었습니다',
+          body: '긴급 재매칭이 취소되어 기존 간병인과의 계약이 다시 활성화되었습니다.',
+          data: { contractId },
+        },
+      }).catch(() => {});
+    });
+
+    res.json({ success: true, message: '긴급 재매칭이 되돌려졌습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};

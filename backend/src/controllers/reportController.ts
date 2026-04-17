@@ -199,7 +199,7 @@ export const adminGetReports = async (req: AuthRequest, res: Response, next: Nex
 export const adminUpdateReport = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const { status, adminNote, hideReview } = req.body;
+    const { status, adminNote, hideReview, unhideReview } = req.body;
 
     const report = await prisma.report.findUnique({ where: { id } });
     if (!report) throw new AppError('신고를 찾을 수 없습니다.', 404);
@@ -222,9 +222,46 @@ export const adminUpdateReport = async (req: AuthRequest, res: Response, next: N
           data: { isHidden: true },
         });
       }
+      // 리뷰 가림 해제 (되돌리기)
+      if (unhideReview && report.reviewId) {
+        await tx.review.update({
+          where: { id: report.reviewId },
+          data: { isHidden: false },
+        });
+      }
     });
 
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /admin/reviews/:id/unhide - 리뷰 숨김 해제 (단독 엔드포인트)
+export const adminUnhideReview = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const review = await prisma.review.findUnique({ where: { id } });
+    if (!review) throw new AppError('리뷰를 찾을 수 없습니다.', 404);
+    await prisma.review.update({ where: { id }, data: { isHidden: false } });
+    res.json({ success: true, message: '리뷰 숨김이 해제되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /admin/reviews/hidden - 숨김 처리된 리뷰 목록
+export const adminGetHiddenReviews = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const reviews = await prisma.review.findMany({
+      where: { isHidden: true },
+      include: {
+        guardian: { include: { user: { select: { name: true } } } },
+        caregiver: { include: { user: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ success: true, data: reviews });
   } catch (error) {
     next(error);
   }

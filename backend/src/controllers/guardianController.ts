@@ -304,7 +304,13 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
 
     // 기존 contract 기반 응답 형식에 맞춰 매핑 (프론트 호환)
     const contracts = careRequests.map((cr: any) => {
-      if (cr.contract) {
+      // 계약이 취소됐는데 CareRequest는 OPEN/MATCHING이면 → 재매칭 중 (공고 중)
+      // virtualContract로 반환하여 "공고 중"으로 표시되게 함
+      const contractCancelledButReopened =
+        cr.contract?.status === 'CANCELLED' &&
+        ['OPEN', 'MATCHING'].includes(cr.status);
+
+      if (cr.contract && !contractCancelledButReopened) {
         // 계약 있는 경우 — 기존 contract 형식 + careRequest 정보
         return {
           ...cr.contract,

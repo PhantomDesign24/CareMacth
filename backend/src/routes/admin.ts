@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import { authenticate, authorize } from '../middlewares/auth';
 import * as adminController from '../controllers/adminController';
+import * as reportController from '../controllers/reportController';
 
 const router = Router();
 
@@ -57,6 +58,20 @@ router.get('/disputes', adminController.getDisputes);
 router.post('/emergency-rematch/:contractId', [
   body('reason').optional().trim().isLength({ max: 500 }).withMessage('사유는 500자 이내여야 합니다.'),
 ], adminController.emergencyRematch);
+
+// 긴급 재매칭 되돌리기 (새 매칭 없을 때만 가능)
+router.post('/emergency-rematch/:contractId/revert', adminController.revertEmergencyRematch);
+
+// 리뷰 숨김 해제
+router.post('/reviews/:id/unhide', reportController.adminUnhideReview);
+
+// 숨김 처리된 리뷰 목록
+router.get('/reviews/hidden', reportController.adminGetHiddenReviews);
+
+// 보험서류 신청 관리
+import * as insuranceController from '../controllers/insuranceController';
+router.get('/insurance', insuranceController.adminListInsurance);
+router.patch('/insurance/:id', insuranceController.adminUpdateInsurance);
 
 // 결제/정산 관리
 router.get('/payments', adminController.getPayments);
