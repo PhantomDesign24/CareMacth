@@ -71,7 +71,7 @@ export default function Header() {
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled
           ? "bg-white/95 backdrop-blur-xl shadow-[0_2px_20px_rgba(0,0,0,0.06)]"
-          : "bg-white"
+          : "bg-white border-b border-[#dcdcdc]"
       }`}
     >
       {/* Top bar with phone */}
