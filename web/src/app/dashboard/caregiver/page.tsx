@@ -141,13 +141,21 @@ export default function CaregiverDashboard() {
     setLoading(true);
     setError("");
     try {
-      const [summaryRes, earningsRes, penaltiesRes, requestsRes, activityRes] = await Promise.all([
+      const [summaryRes, earningsRes, penaltiesRes, requestsRes, activityRes, applicationsRes] = await Promise.all([
         dashboardAPI.caregiverSummary(),
         caregiverAPI.getEarnings(),
         caregiverAPI.getPenalties(),
         careRequestAPI.list({ status: "open" }),
         caregiverAPI.getActivity(),
+        caregiverAPI.getMyApplications().catch(() => ({ data: { data: [] } })),
       ]);
+      // 내가 이미 지원한 요청 ID 목록 (PENDING/ACCEPTED 상태만)
+      const myApps: { careRequestId: string; status: string }[] = applicationsRes.data?.data || [];
+      const activeAppIds = new Set(
+        myApps
+          .filter((a) => a.status === 'PENDING' || a.status === 'ACCEPTED')
+          .map((a) => a.careRequestId)
+      );
       // API 응답 파싱: { success, data: { ... } }
       const profile = summaryRes.data?.data || summaryRes.data || {};
       const user = profile.user || {};
@@ -191,7 +199,9 @@ export default function CaregiverDashboard() {
 
       const reqData = requestsRes.data?.data || requestsRes.data || {};
       const reqList = reqData.careRequests || [];
-      setOpenRequests(reqList.map((r: any) => {
+      // 이미 지원한 요청은 목록에서 제외
+      const filteredList = reqList.filter((r: any) => !activeAppIds.has(r.id));
+      setOpenRequests(filteredList.map((r: any) => {
         // 생년월일로 나이 계산
         let age = 0;
         if (r.patient?.birthDate) {
@@ -264,6 +274,8 @@ export default function CaregiverDashboard() {
       const target = openRequests.find((r) => r.id === requestId);
       showToast(`${target?.patientName || '환자'}님 간병 요청에 지원 완료. 보호자 확인을 기다려주세요.`, "success");
       setOpenRequests((prev) => prev.filter((r) => r.id !== requestId));
+      // 백그라운드 동기화 (지원 이력 갱신)
+      fetchData();
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || "지원 중 오류가 발생했습니다.";
       showToast(msg, "error");
@@ -298,6 +310,7 @@ export default function CaregiverDashboard() {
       showToast(`${proposalTarget.patientName}님께 ${rate.toLocaleString()}원 역제안 전송 완료`, "success");
       setOpenRequests((prev) => prev.filter((r) => r.id !== proposalTarget.id));
       setProposalTarget(null);
+      fetchData();
     } catch (err: any) {
       const msg = err?.response?.data?.message || "역제안 전송 실패";
       showToast(msg, "error");
