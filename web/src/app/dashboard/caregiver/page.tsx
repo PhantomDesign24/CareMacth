@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useState, useEffect, useCallback } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, reportAPI } from "@/lib/api";
 import { formatDate, formatContractStatus, formatCareType, formatLocation, formatPenaltyType } from "@/lib/format";
@@ -64,10 +64,21 @@ interface CaregiverSummary {
 
 type Status = "working" | "available" | "immediately";
 
-export default function CaregiverDashboard() {
-  const [activeTab, setActiveTab] = useState<
-    "earnings" | "activity" | "applications" | "penalties" | "requests" | "reviews" | "referral" | "settings"
-  >("earnings");
+type TabKey = "earnings" | "activity" | "applications" | "journal" | "penalties" | "requests" | "reviews" | "referral" | "settings";
+
+export default function CaregiverDashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <CaregiverDashboard />
+    </Suspense>
+  );
+}
+
+function CaregiverDashboard() {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const tabFromUrl = searchParams.get("tab") as TabKey | null;
+  const [activeTab, setActiveTab] = useState<TabKey>(tabFromUrl || "earnings");
 
   // 리뷰 + 신고
   const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
@@ -250,6 +261,20 @@ export default function CaregiverDashboard() {
 
   const router = useRouter();
 
+  // URL ↔ 탭 동기화
+  useEffect(() => {
+    const t = searchParams.get("tab") as TabKey | null;
+    if (t && t !== activeTab) setActiveTab(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const handleTabChange = (tab: TabKey) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tab);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('cm_access_token') : null;
     if (!token) {
@@ -384,6 +409,7 @@ export default function CaregiverDashboard() {
     { key: "requests" as const, label: "공고 확인" },
     { key: "applications" as const, label: "내 지원" },
     { key: "activity" as const, label: "활동 이력" },
+    { key: "journal" as const, label: "간병일지" },
     { key: "reviews" as const, label: "받은 리뷰" },
     { key: "penalties" as const, label: "패널티" },
     { key: "referral" as const, label: "추천인 코드" },
@@ -529,7 +555,7 @@ export default function CaregiverDashboard() {
             <button
               key={tab.key}
               type="button"
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => handleTabChange(tab.key)}
               className={`flex-1 min-w-[80px] px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                 activeTab === tab.key
                   ? "bg-primary-500 text-white shadow-sm"
@@ -770,6 +796,49 @@ export default function CaregiverDashboard() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Journal (간병일지 바로가기) */}
+          {activeTab === "journal" && (
+            <div className="divide-y divide-gray-100">
+              <div className="p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-2">간병일지 작성</h3>
+                <p className="text-sm text-gray-500">진행 중인 간병 건을 선택해 일지를 작성하세요.</p>
+              </div>
+              {activityHistory.filter((a) => a.contractStatus === 'ACTIVE' || a.contractStatus === 'EXTENDED').length === 0 && (
+                <div className="p-12 text-center text-gray-400">
+                  진행 중인 간병이 없습니다.
+                </div>
+              )}
+              {activityHistory
+                .filter((a) => a.contractStatus === 'ACTIVE' || a.contractStatus === 'EXTENDED')
+                .map((a) => (
+                  <Link
+                    key={a.id}
+                    href={`/dashboard/caregiver/journal/${a.id}`}
+                    className="block p-6 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-semibold text-gray-900 truncate">
+                            {a.patientName} 환자
+                          </h4>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                            진행 중
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {a.careType} · {a.location} · {a.startDate} ~ {a.endDate}
+                        </div>
+                      </div>
+                      <div className="inline-flex items-center gap-1 text-sm font-medium text-orange-600 shrink-0">
+                        📝 일지 작성 →
+                      </div>
+                    </div>
+                  </Link>
+                ))}
             </div>
           )}
 

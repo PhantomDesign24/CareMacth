@@ -1,0 +1,1 @@
+ALTER TABLE "CareRecord" ADD COLUMN "careHoursManual" DOUBLE PRECISION;

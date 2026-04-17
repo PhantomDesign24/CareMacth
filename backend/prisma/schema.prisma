@@ -509,7 +509,8 @@ model CareRecord {
   checkInLng   Float?
 
   // 간병 일지 (케어매치 공식 양식)
-  careHours       Float?   // 간병시간 (자동 계산 또는 수동 입력)
+  careHours       Float?   // 간병시간 (출퇴근 체크 기반 자동 계산)
+  careHoursManual Float?   // 간병시간 (간병인이 직접 입력한 값, 선택)
   mealCare        Boolean  @default(false)  // 식사보조
   activityCare    Boolean  @default(false)  // 활동보조
   excretionCare   Boolean  @default(false)  // 배변보조

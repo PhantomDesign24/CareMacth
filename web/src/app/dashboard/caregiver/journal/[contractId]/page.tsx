@@ -11,7 +11,8 @@ interface CareRecord {
   date: string;
   checkInTime: string | null;
   checkOutTime: string | null;
-  careHours: number | null;
+  careHours: number | null;         // 자동 계산
+  careHoursManual: number | null;   // 수동 입력
   mealCare: boolean;
   activityCare: boolean;
   excretionCare: boolean;
@@ -20,6 +21,12 @@ interface CareRecord {
   otherCareNote: string | null;
   notes: string | null;
   photos: string[];
+}
+
+// 로컬 날짜 기준 YYYY-MM-DD (타임존 버그 방지)
+function localDateStr(d: Date | string): string {
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
 export default function JournalPage() {
@@ -33,7 +40,7 @@ export default function JournalPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    careHours: "",
+    careHoursManual: "",
     mealCare: false,
     activityCare: false,
     excretionCare: false,
@@ -52,13 +59,14 @@ export default function JournalPage() {
       ]);
       setContract(contractRes.data?.data || contractRes.data);
       const records: CareRecord[] = recordsRes.data?.data?.records || recordsRes.data?.data || [];
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const t = records.find((r) => r.date?.slice(0, 10) === todayStr) || null;
+      // 로컬 날짜 기준 비교 (타임존 버그 방지)
+      const todayStr = localDateStr(new Date());
+      const t = records.find((r) => r.date && localDateStr(r.date) === todayStr) || null;
       setToday(t);
       setHistory(records);
       if (t) {
         setForm({
-          careHours: t.careHours?.toString() || "",
+          careHoursManual: t.careHoursManual?.toString() || "",
           mealCare: !!t.mealCare,
           activityCare: !!t.activityCare,
           excretionCare: !!t.excretionCare,
@@ -69,7 +77,7 @@ export default function JournalPage() {
         });
       } else {
         setForm({
-          careHours: "",
+          careHoursManual: "",
           mealCare: false,
           activityCare: false,
           excretionCare: false,
@@ -129,8 +137,8 @@ export default function JournalPage() {
       setSaving(true);
       await careRecordAPI.saveDailyLog({
         contractId,
-        date: new Date().toISOString().slice(0, 10),
-        careHours: form.careHours ? parseFloat(form.careHours) : null,
+        date: localDateStr(new Date()),
+        careHoursManual: form.careHoursManual ? parseFloat(form.careHoursManual) : null,
         mealCare: form.mealCare,
         activityCare: form.activityCare,
         excretionCare: form.excretionCare,
@@ -174,8 +182,8 @@ export default function JournalPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="bg-white border-b border-gray-200">
+    <div className="min-h-screen bg-gray-50 pb-20 pt-14 md:pt-0">
+      <div className="bg-white border-b border-gray-200 sticky top-14 md:top-16 z-10">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
           <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600">
             <FiArrowLeft className="w-5 h-5" />
@@ -260,21 +268,35 @@ export default function JournalPage() {
         {/* 간병시간 */}
         <div className="bg-white rounded-xl p-4 border border-gray-100">
           <h2 className="text-sm font-bold text-gray-900 mb-3">간병시간</h2>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="bg-blue-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-blue-600 mb-1">자동 (출퇴근 기반)</div>
+              <div className="text-lg font-bold text-blue-700">
+                {today?.careHours ?? autoHours ?? '-'}{(today?.careHours || autoHours) ? '시간' : ''}
+              </div>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-orange-600 mb-1">수동 입력</div>
+              <div className="text-lg font-bold text-orange-700">
+                {today?.careHoursManual ?? '-'}{today?.careHoursManual ? '시간' : ''}
+              </div>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <input
               type="number"
               step="0.5"
               min={0}
               max={24}
-              value={form.careHours}
-              onChange={(e) => setForm({ ...form, careHours: e.target.value })}
-              placeholder={autoHours ? `자동: ${autoHours}` : "직접 입력 (예: 9)"}
+              value={form.careHoursManual}
+              onChange={(e) => setForm({ ...form, careHoursManual: e.target.value })}
+              placeholder="수동 간병시간 (선택, 예: 9)"
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
             />
             <span className="text-sm text-gray-600">시간</span>
           </div>
           <p className="text-xs text-gray-400 mt-2">
-            출퇴근 체크 시 자동 계산됩니다. 직접 입력하면 자동 계산값을 덮어씁니다.
+            자동 시간은 출퇴근 체크로 계산되며 출퇴근 할 때마다 갱신됩니다. 수동 입력값은 별도 보관되며 PDF에선 수동값이 우선 사용됩니다.
           </p>
         </div>
 

@@ -171,8 +171,8 @@ export const checkOut = async (req: AuthRequest, res: Response, next: NextFuncti
       where: { id: record.id },
       data: {
         checkOutTime: now,
-        // 수동 입력한 간병시간 없을 때만 자동 설정
-        ...(record.careHours == null && autoHours != null ? { careHours: autoHours } : {}),
+        // 자동 계산값은 매번 덮어씀 (수동 입력값은 careHoursManual로 별도 보관)
+        ...(autoHours != null ? { careHours: autoHours } : {}),
       },
     });
 
@@ -226,7 +226,7 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
 
     const {
       contractId,
-      careHours,
+      careHoursManual,
       mealCare,
       activityCare,
       excretionCare,
@@ -270,9 +270,11 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
     });
 
     const logData = {
-      careHours: careHours !== undefined && careHours !== null && careHours !== ''
-        ? parseFloat(careHours)
-        : null,
+      // careHours는 checkOut 시점에 자동 계산되므로 여기선 건드리지 않음
+      careHoursManual:
+        careHoursManual !== undefined && careHoursManual !== null && careHoursManual !== ''
+          ? parseFloat(careHoursManual)
+          : null,
       mealCare: !!mealCare,
       activityCare: !!activityCare,
       excretionCare: !!excretionCare,
@@ -496,8 +498,8 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
       orderBy: { date: 'asc' },
     });
 
-    // PDF 생성
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    // PDF 생성 (A4, 여백 45pt)
+    const doc = new PDFDocument({ size: 'A4', margin: 45 });
     const filename = `care-journal-${contract.careRequest.patient.name}-${new Date().toISOString().slice(0, 10)}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
@@ -508,115 +510,209 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
     if (fs.existsSync(FONT_BOLD)) doc.registerFont('KorBold', FONT_BOLD);
     doc.font('Kor');
 
-    // ============ 제목 ============
-    doc.fontSize(22).font('KorBold').text('간 병 일 지', { align: 'center' });
-    doc.moveDown(0.5);
+    // ============ 디자인 상수 ============
+    const PAGE_W = 595.28;
+    const PAGE_H = 841.89;
+    const MARGIN = 45;
+    const TABLE_LEFT = MARGIN;
+    const TABLE_WIDTH = PAGE_W - MARGIN * 2;
+    // 전문적인 다크 네이비 + 그레이 팔레트
+    const COLOR_PRIMARY = '#1E3A5F';     // 짙은 네이비 (신뢰감)
+    const COLOR_ACCENT = '#2C5282';      // 밝은 네이비
+    const COLOR_BORDER = '#CBD5E0';      // 연한 그레이
+    const COLOR_HEADER_BG = '#EDF2F7';   // 아주 연한 그레이
+    const COLOR_SUB_TEXT = '#4A5568';    // 중간 그레이
+    const COLOR_ALT_ROW = '#F7FAFC';     // 얇은 교차 배경
 
-    // ============ 환자/간병인 상단 정보 ============
-    const startY = doc.y + 10;
-    const tableLeft = 40;
-    const tableWidth = 515;
-    const col1W = 90, col2W = 170, col3W = 90, col4W = 165;
-    const rowH = 24;
-
-    const drawCell = (x: number, y: number, w: number, h: number, text: string, opts: { bold?: boolean; bg?: string; align?: 'center' | 'left' } = {}) => {
-      if (opts.bg) doc.rect(x, y, w, h).fill(opts.bg).stroke('#d0d0d0');
-      else doc.rect(x, y, w, h).stroke('#d0d0d0');
-      doc.fillColor('#000').font(opts.bold ? 'KorBold' : 'Kor').fontSize(10)
-        .text(text, x + 5, y + 7, { width: w - 10, align: opts.align || 'left' });
+    // 헬퍼: 얇은 테두리 셀
+    const drawCell = (
+      x: number, y: number, w: number, h: number, text: string,
+      opts: { bold?: boolean; bg?: string; align?: 'center' | 'left' | 'right'; size?: number; color?: string; padLeft?: number } = {}
+    ) => {
+      const bg = opts.bg;
+      doc.lineWidth(0.6).strokeColor(COLOR_BORDER);
+      if (bg) {
+        doc.rect(x, y, w, h).fillAndStroke(bg, COLOR_BORDER);
+      } else {
+        doc.rect(x, y, w, h).stroke();
+      }
+      doc.fillColor(opts.color || '#1A202C')
+        .font(opts.bold ? 'KorBold' : 'Kor')
+        .fontSize(opts.size || 10);
+      const pad = opts.padLeft ?? 8;
+      const textY = y + (h - (opts.size || 10)) / 2 - 1;
+      doc.text(text, x + pad, textY, {
+        width: w - pad * 2,
+        align: opts.align || 'left',
+        lineBreak: false,
+      });
     };
 
     const patient = contract.careRequest.patient;
     const caregiver = contract.caregiver;
     const caregiverUser = caregiver.user;
 
+    // ============ 헤더: 로고/제목/구분선 ============
+    // 좌측: 케어매치 브랜드 마크
+    doc.font('KorBold').fontSize(11).fillColor(COLOR_PRIMARY)
+      .text('CAREMATCH', MARGIN, 50, { continued: false });
+    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB_TEXT)
+      .text('케어매치 주식회사', MARGIN, 64);
+
+    // 우측: 문서 ID
+    const docId = `DOC-${contractId.slice(0, 8).toUpperCase()}`;
+    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB_TEXT)
+      .text(`문서번호  ${docId}`, MARGIN, 50, { width: TABLE_WIDTH, align: 'right' });
+    doc.fontSize(8).fillColor(COLOR_SUB_TEXT)
+      .text(`발행일  ${new Date().toISOString().slice(0, 10)}`, MARGIN, 64, { width: TABLE_WIDTH, align: 'right' });
+
+    // 중앙 타이틀
+    doc.font('KorBold').fontSize(26).fillColor(COLOR_PRIMARY)
+      .text('간 병 일 지', MARGIN, 100, { width: TABLE_WIDTH, align: 'center', characterSpacing: 3 });
+    doc.font('Kor').fontSize(9).fillColor(COLOR_SUB_TEXT)
+      .text('Care Record / Nursing Log', MARGIN, 132, { width: TABLE_WIDTH, align: 'center' });
+
+    // 구분선 (그라데이션 느낌의 두 줄)
+    doc.lineWidth(1.5).strokeColor(COLOR_PRIMARY)
+      .moveTo(MARGIN, 152).lineTo(PAGE_W - MARGIN, 152).stroke();
+    doc.lineWidth(0.4).strokeColor(COLOR_ACCENT)
+      .moveTo(MARGIN, 156).lineTo(PAGE_W - MARGIN, 156).stroke();
+
+    // ============ 환자/간병인 정보 섹션 ============
+    let y = 172;
+    // 섹션 타이틀
+    doc.font('KorBold').fontSize(10).fillColor(COLOR_PRIMARY)
+      .text('Ⅰ. 기본 정보', MARGIN, y);
+    y += 18;
+
+    const col1W = 100, col2W = 170, col3W = 85, col4W = TABLE_WIDTH - col1W - col2W - col3W;
+    const rowH = 26;
+
     const info = [
       ['환자명', patient.name || '-', '성별', patient.gender === 'M' ? '남' : (patient.gender === 'F' ? '여' : '-')],
       ['생년월일', patient.birthDate ? new Date(patient.birthDate).toISOString().slice(0, 10) : '-', '병원명', contract.careRequest.hospitalName || contract.careRequest.address || '-'],
-      ['간병시작일자', contract.startDate ? new Date(contract.startDate).toISOString().slice(0, 10) : '-', '간병기간', contract.careRequest.durationDays ? `${contract.careRequest.durationDays}일` : '-'],
+      ['간병 시작일', contract.startDate ? new Date(contract.startDate).toISOString().slice(0, 10) : '-', '간병 기간', contract.careRequest.durationDays ? `${contract.careRequest.durationDays}일` : '-'],
       ['간병인 성명', caregiverUser?.name || '-', '간병인 연락처', caregiverUser?.phone || '-'],
-      ['간병인 사용 법인명', '케어매치 주식회사', '사업자등록번호', '173-81-03376'],
+      ['간병인 사용 법인명', '', '', ''],
     ];
 
-    let y = startY;
-    info.forEach((row) => {
-      drawCell(tableLeft, y, col1W, rowH, row[0], { bold: true, bg: '#fbe4cd' });
-      drawCell(tableLeft + col1W, y, col2W, rowH, row[1]);
-      drawCell(tableLeft + col1W + col2W, y, col3W, rowH, row[2], { bold: true, bg: '#fbe4cd' });
-      drawCell(tableLeft + col1W + col2W + col3W, y, col4W, rowH, row[3]);
+    info.forEach((row, idx) => {
+      const isLast = idx === info.length - 1 && !row[2];
+      drawCell(TABLE_LEFT, y, col1W, rowH, row[0], {
+        bold: true, bg: COLOR_HEADER_BG, size: 9, color: COLOR_PRIMARY,
+      });
+      if (isLast) {
+        drawCell(TABLE_LEFT + col1W, y, col2W + col3W + col4W, rowH, row[1], { size: 10 });
+      } else {
+        drawCell(TABLE_LEFT + col1W, y, col2W, rowH, row[1], { size: 10 });
+        drawCell(TABLE_LEFT + col1W + col2W, y, col3W, rowH, row[2], {
+          bold: true, bg: COLOR_HEADER_BG, size: 9, color: COLOR_PRIMARY,
+        });
+        drawCell(TABLE_LEFT + col1W + col2W + col3W, y, col4W, rowH, row[3], { size: 10 });
+      }
       y += rowH;
     });
 
-    // 안내문
-    y += 15;
-    doc.font('Kor').fontSize(9).fillColor('#555')
-      .text('※ 본 간병일지 양식은 케어매치㈜ 자사 양식으로, 보험사에 따라 자사양식으로 대체가 불가능할 수 있음을 알려드립니다.',
-        tableLeft, y, { width: tableWidth, align: 'center' });
-    y += 25;
+    // 고지 안내문
+    y += 14;
+    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB_TEXT)
+      .text(
+        '※ 본 간병일지 양식은 케어매치㈜ 자사 양식으로, 보험사에 따라 자사 양식으로 대체가 불가능할 수 있음을 알려드립니다.',
+        MARGIN, y, { width: TABLE_WIDTH, align: 'center' },
+      );
+    y += 22;
 
-    // ============ 일자별 테이블 ============
-    const dateW = 80, timeW = 90, taskW = tableWidth - dateW - timeW;
+    // ============ 간병 업무 일자별 기록 ============
+    doc.font('KorBold').fontSize(10).fillColor(COLOR_PRIMARY)
+      .text('Ⅱ. 간병 업무 기록', MARGIN, y);
+    y += 18;
+
+    const dateW = 80, timeW = 85, taskW = TABLE_WIDTH - dateW - timeW;
 
     // 헤더
-    drawCell(tableLeft, y, dateW, rowH, '간병일자', { bold: true, bg: '#fbe4cd', align: 'center' });
-    drawCell(tableLeft + dateW, y, timeW, rowH, '간병시간', { bold: true, bg: '#fbe4cd', align: 'center' });
-    drawCell(tableLeft + dateW + timeW, y, taskW, rowH, '간병 업무', { bold: true, bg: '#fbe4cd', align: 'center' });
+    drawCell(TABLE_LEFT, y, dateW, rowH, '간병일자', { bold: true, bg: COLOR_PRIMARY, color: '#FFFFFF', size: 10, align: 'center' });
+    drawCell(TABLE_LEFT + dateW, y, timeW, rowH, '간병시간', { bold: true, bg: COLOR_PRIMARY, color: '#FFFFFF', size: 10, align: 'center' });
+    drawCell(TABLE_LEFT + dateW + timeW, y, taskW, rowH, '간병 업무', { bold: true, bg: COLOR_PRIMARY, color: '#FFFFFF', size: 10, align: 'center' });
     y += rowH;
 
-    // 데이터 행 (최대 10일치, 빈 행도 포함)
+    // 데이터 행 (최소 10행 보장)
     const displayRows = Math.max(records.length, 10);
     for (let i = 0; i < displayRows; i++) {
       const r = records[i];
-
-      // 페이지 넘김
-      if (y + rowH > 800) {
+      if (y + rowH > PAGE_H - MARGIN - 160) {
+        // 페이지 넘김 (하단 서명 공간 확보)
         doc.addPage();
-        y = 50;
+        y = MARGIN;
+        // 헤더 재인쇄
+        drawCell(TABLE_LEFT, y, dateW, rowH, '간병일자', { bold: true, bg: COLOR_PRIMARY, color: '#FFFFFF', size: 10, align: 'center' });
+        drawCell(TABLE_LEFT + dateW, y, timeW, rowH, '간병시간', { bold: true, bg: COLOR_PRIMARY, color: '#FFFFFF', size: 10, align: 'center' });
+        drawCell(TABLE_LEFT + dateW + timeW, y, taskW, rowH, '간병 업무', { bold: true, bg: COLOR_PRIMARY, color: '#FFFFFF', size: 10, align: 'center' });
+        y += rowH;
       }
 
-      const dateStr = r?.date ? new Date(r.date).toISOString().slice(5, 10).replace('-', '/') : '';
-      const hoursStr = r?.careHours ? `${r.careHours} 시간` : (r ? '       시간' : '       시간');
+      const rowBg = i % 2 === 1 ? COLOR_ALT_ROW : undefined;
+      const dateStr = r?.date ? new Date(r.date).toISOString().slice(5, 10).replace('-', '. ') : '';
+      const hrs = r?.careHoursManual ?? r?.careHours ?? null;
+      const hoursStr = hrs ? `${hrs} 시간` : '';
 
-      drawCell(tableLeft, y, dateW, rowH, dateStr, { align: 'center' });
-      drawCell(tableLeft + dateW, y, timeW, rowH, hoursStr, { align: 'center' });
+      drawCell(TABLE_LEFT, y, dateW, rowH, dateStr, { size: 10, align: 'center', bg: rowBg });
+      drawCell(TABLE_LEFT + dateW, y, timeW, rowH, hoursStr, { size: 10, align: 'center', bg: rowBg });
 
-      // 업무 체크박스 표시
-      let taskText = '';
-      if (r) {
-        const mark = (v: boolean) => (v ? '☑' : '☐');
-        taskText = `${mark(r.mealCare)} 식사보조  ${mark(r.activityCare)} 활동보조  ${mark(r.excretionCare)} 배변보조  ${mark(r.hygieneCare)} 위생보조  ${mark(r.otherCare)} 기타`;
-      } else {
-        taskText = '☐ 식사보조  ☐ 활동보조  ☐ 배변보조  ☐ 위생보조  ☐ 기타';
-      }
-      drawCell(tableLeft + dateW + timeW, y, taskW, rowH, taskText);
+      const mark = (v: boolean) => (v ? '■' : '□');
+      const taskText = r
+        ? `${mark(r.mealCare)} 식사보조   ${mark(r.activityCare)} 활동보조   ${mark(r.excretionCare)} 배변보조   ${mark(r.hygieneCare)} 위생보조   ${mark(r.otherCare)} 기타`
+        : '□ 식사보조   □ 활동보조   □ 배변보조   □ 위생보조   □ 기타';
+      drawCell(TABLE_LEFT + dateW + timeW, y, taskW, rowH, taskText, { size: 9, bg: rowBg, align: 'center' });
       y += rowH;
     }
 
-    // ============ 하단 서명 ============
-    y += 20;
-    if (y + 80 > 800) {
+    // ============ 하단 확인/서명 ============
+    y += 22;
+    if (y + 130 > PAGE_H - MARGIN) {
       doc.addPage();
-      y = 50;
+      y = MARGIN + 20;
     }
-    doc.font('KorBold').fontSize(11).fillColor('#000')
-      .text('상기와 같이 간병인을 사용하였음을 확인합니다.', tableLeft, y);
-    y += 20;
 
-    const signColW = [100, 160, 100, 155];
-    const signRowH = 28;
+    // 확인 문구 강조
+    doc.font('KorBold').fontSize(11).fillColor(COLOR_PRIMARY)
+      .text('상기와 같이 간병인을 사용하였음을 확인합니다.', MARGIN, y, { align: 'center', width: TABLE_WIDTH });
+    y += 26;
 
-    drawCell(tableLeft, y, signColW[0], signRowH, '간병인명', { bold: true, bg: '#fbe4cd', align: 'center' });
-    drawCell(tableLeft + signColW[0], y, signColW[1], signRowH, `${caregiverUser?.name || ''}          (인)`);
-    drawCell(tableLeft + signColW[0] + signColW[1], y, signColW[2], signRowH, '소송회사명', { bold: true, bg: '#fbe4cd', align: 'center' });
-    drawCell(tableLeft + signColW[0] + signColW[1] + signColW[2], y, signColW[3], signRowH, '케어매치 주식회사', { align: 'center' });
-    y += signRowH;
+    // 서명 박스 (좌/우 2분할)
+    const boxW = (TABLE_WIDTH - 20) / 2;
+    const boxH = 90;
 
+    // 왼쪽: 간병인 서명 박스
+    doc.lineWidth(0.6).strokeColor(COLOR_BORDER).rect(MARGIN, y, boxW, boxH).stroke();
+    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB_TEXT).text('간병인 확인', MARGIN + 10, y + 10);
+    doc.font('KorBold').fontSize(11).fillColor('#1A202C')
+      .text(caregiverUser?.name || '', MARGIN + 10, y + 30);
+    doc.font('Kor').fontSize(10).fillColor(COLOR_SUB_TEXT)
+      .text('(서명 / 인)', MARGIN + 10, y + 66);
+    // 서명선
+    doc.lineWidth(0.4).strokeColor(COLOR_BORDER)
+      .moveTo(MARGIN + 10, y + 60).lineTo(MARGIN + boxW - 10, y + 60).stroke();
+
+    // 오른쪽: 회사 확인 박스
+    const rightX = MARGIN + boxW + 20;
+    doc.lineWidth(0.6).strokeColor(COLOR_BORDER).rect(rightX, y, boxW, boxH).stroke();
+    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB_TEXT).text('소송회사 / 발행처', rightX + 10, y + 10);
+    doc.font('KorBold').fontSize(11).fillColor('#1A202C')
+      .text('케어매치 주식회사', rightX + 10, y + 30);
+    doc.font('Kor').fontSize(9).fillColor(COLOR_SUB_TEXT)
+      .text('사업자등록번호  173-81-03376', rightX + 10, y + 50);
     const today = new Date();
-    drawCell(tableLeft, y, signColW[0], signRowH, '사업자등록번호', { bold: true, bg: '#fbe4cd', align: 'center' });
-    drawCell(tableLeft + signColW[0], y, signColW[1], signRowH, '173-81-03376', { align: 'center' });
-    drawCell(tableLeft + signColW[0] + signColW[1], y, signColW[2], signRowH, '작성일', { bold: true, bg: '#fbe4cd', align: 'center' });
-    drawCell(tableLeft + signColW[0] + signColW[1] + signColW[2], y, signColW[3], signRowH,
-      `${today.getFullYear()}년  ${today.getMonth() + 1}월  ${today.getDate()}일`, { align: 'center' });
+    doc.font('Kor').fontSize(9).fillColor(COLOR_SUB_TEXT)
+      .text(`작성일  ${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`,
+        rightX + 10, y + 66);
+
+    // ============ 푸터 ============
+    const footerY = PAGE_H - MARGIN + 8;
+    doc.lineWidth(0.3).strokeColor(COLOR_BORDER)
+      .moveTo(MARGIN, footerY - 10).lineTo(PAGE_W - MARGIN, footerY - 10).stroke();
+    doc.font('Kor').fontSize(7).fillColor(COLOR_SUB_TEXT)
+      .text('CareMatch Co., Ltd.  |  Business Reg. 173-81-03376  |  carematch.co.kr',
+        MARGIN, footerY, { width: TABLE_WIDTH, align: 'center' });
 
     doc.end();
   } catch (error) {

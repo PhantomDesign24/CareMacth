@@ -39,7 +39,7 @@ router.post('/check-out', [
 // POST /daily-log - 간병 일지 작성 (케어매치 공식 양식)
 router.post('/daily-log', [
   body('contractId').notEmpty().withMessage('계약 ID가 필요합니다.'),
-  body('careHours').optional({ nullable: true, checkFalsy: true }).isFloat({ min: 0, max: 24 }).withMessage('간병시간은 0~24 사이여야 합니다.'),
+  body('careHoursManual').optional({ nullable: true, checkFalsy: true }).isFloat({ min: 0, max: 24 }).withMessage('간병시간은 0~24 사이여야 합니다.'),
   body('notes').optional({ nullable: true }).isLength({ max: 2000 }).withMessage('메모는 2000자 이내여야 합니다.'),
   body('otherCareNote').optional({ nullable: true }).isLength({ max: 500 }).withMessage('기타 내용은 500자 이내여야 합니다.'),
 ], careRecordController.createDailyLog);
