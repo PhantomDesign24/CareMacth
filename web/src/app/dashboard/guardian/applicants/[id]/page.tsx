@@ -708,7 +708,7 @@ export default function ApplicantsPage() {
                   }
                   className="flex-1 text-sm px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-medium rounded-xl transition-colors"
                 >
-                  {raisingRate ? "처리 중..." : "인상 후 재공고"}
+                  {raisingRate ? "처리 중..." : "재공고"}
                 </button>
               </div>
             </div>

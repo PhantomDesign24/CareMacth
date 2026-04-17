@@ -47,11 +47,11 @@ export default function ToastContainer() {
   };
 
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 w-[90vw] max-w-md pointer-events-none">
+    <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 w-[90vw] max-w-md pointer-events-none">
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`${colors[t.type]} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-slide-down pointer-events-auto`}
+          className={`${colors[t.type]} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-slide-up pointer-events-auto`}
         >
           <span className="text-lg font-bold shrink-0">{icons[t.type]}</span>
           <span className="text-sm font-medium leading-snug">{t.message}</span>
