@@ -3,25 +3,23 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { careRecordAPI, contractAPI } from "@/lib/api";
-import { FiClock, FiLogOut, FiLogIn, FiCamera, FiSave, FiArrowLeft } from "react-icons/fi";
+import { showToast } from "@/components/Toast";
+import { FiClock, FiLogOut, FiLogIn, FiSave, FiArrowLeft, FiDownload } from "react-icons/fi";
 
 interface CareRecord {
   id: string;
   date: string;
   checkInTime: string | null;
   checkOutTime: string | null;
-  bodyTemp: number | null;
-  bloodPressure: string | null;
-  pulse: number | null;
-  meals: string | null;
-  medication: string | null;
-  excretion: string | null;
-  sleep: string | null;
-  mobility: string | null;
-  mentalState: string | null;
-  skinState: string | null;
-  photos: string[];
+  careHours: number | null;
+  mealCare: boolean;
+  activityCare: boolean;
+  excretionCare: boolean;
+  hygieneCare: boolean;
+  otherCare: boolean;
+  otherCareNote: string | null;
   notes: string | null;
+  photos: string[];
 }
 
 export default function JournalPage() {
@@ -35,19 +33,15 @@ export default function JournalPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    bodyTemp: "",
-    bloodPressure: "",
-    pulse: "",
-    meals: "",
-    medication: "",
-    excretion: "",
-    sleep: "",
-    mobility: "",
-    mentalState: "",
-    skinState: "",
+    careHours: "",
+    mealCare: false,
+    activityCare: false,
+    excretionCare: false,
+    hygieneCare: false,
+    otherCare: false,
+    otherCareNote: "",
     notes: "",
   });
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -64,17 +58,25 @@ export default function JournalPage() {
       setHistory(records);
       if (t) {
         setForm({
-          bodyTemp: t.bodyTemp?.toString() || "",
-          bloodPressure: t.bloodPressure || "",
-          pulse: t.pulse?.toString() || "",
-          meals: t.meals || "",
-          medication: t.medication || "",
-          excretion: t.excretion || "",
-          sleep: t.sleep || "",
-          mobility: t.mobility || "",
-          mentalState: t.mentalState || "",
-          skinState: t.skinState || "",
+          careHours: t.careHours?.toString() || "",
+          mealCare: !!t.mealCare,
+          activityCare: !!t.activityCare,
+          excretionCare: !!t.excretionCare,
+          hygieneCare: !!t.hygieneCare,
+          otherCare: !!t.otherCare,
+          otherCareNote: t.otherCareNote || "",
           notes: t.notes || "",
+        });
+      } else {
+        setForm({
+          careHours: "",
+          mealCare: false,
+          activityCare: false,
+          excretionCare: false,
+          hygieneCare: false,
+          otherCare: false,
+          otherCareNote: "",
+          notes: "",
         });
       }
     } catch (e) {
@@ -106,9 +108,9 @@ export default function JournalPage() {
         pos?.coords.longitude
       );
       await loadData();
-      alert("출근 체크 완료");
+      showToast("출근 체크 완료", "success");
     } catch (e: any) {
-      alert(e?.response?.data?.message || "출근 체크 실패");
+      showToast(e?.response?.data?.message || "출근 체크 실패", "error");
     }
   };
 
@@ -116,9 +118,9 @@ export default function JournalPage() {
     try {
       await careRecordAPI.checkOut(contractId);
       await loadData();
-      alert("퇴근 체크 완료");
+      showToast("퇴근 체크 완료 (간병시간 자동 기록)", "success");
     } catch (e: any) {
-      alert(e?.response?.data?.message || "퇴근 체크 실패");
+      showToast(e?.response?.data?.message || "퇴근 체크 실패", "error");
     }
   };
 
@@ -128,45 +130,29 @@ export default function JournalPage() {
       await careRecordAPI.saveDailyLog({
         contractId,
         date: new Date().toISOString().slice(0, 10),
-        bodyTemp: form.bodyTemp ? parseFloat(form.bodyTemp) : null,
-        bloodPressure: form.bloodPressure || null,
-        pulse: form.pulse ? parseInt(form.pulse) : null,
-        meals: form.meals || null,
-        medication: form.medication || null,
-        excretion: form.excretion || null,
-        sleep: form.sleep || null,
-        mobility: form.mobility || null,
-        mentalState: form.mentalState || null,
-        skinState: form.skinState || null,
+        careHours: form.careHours ? parseFloat(form.careHours) : null,
+        mealCare: form.mealCare,
+        activityCare: form.activityCare,
+        excretionCare: form.excretionCare,
+        hygieneCare: form.hygieneCare,
+        otherCare: form.otherCare,
+        otherCareNote: form.otherCare ? (form.otherCareNote || null) : null,
         notes: form.notes || null,
       });
       await loadData();
-      alert("간병 일지 저장 완료");
+      showToast("간병 일지 저장 완료", "success");
     } catch (e: any) {
-      alert(e?.response?.data?.message || "저장 실패");
+      showToast(e?.response?.data?.message || "저장 실패", "error");
     } finally {
       setSaving(false);
     }
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    setUploadingPhoto(true);
-    try {
-      const fd = new FormData();
-      fd.append("contractId", contractId);
-      fd.append("date", new Date().toISOString().slice(0, 10));
-      files.forEach((f) => fd.append("photos", f));
-      await careRecordAPI.uploadPhotos(fd);
-      await loadData();
-      alert(`${files.length}장 업로드 완료`);
-    } catch (e: any) {
-      alert(e?.response?.data?.message || "업로드 실패");
-    } finally {
-      setUploadingPhoto(false);
-      e.target.value = "";
-    }
+  const handleDownloadPdf = () => {
+    // 백엔드 PDF 생성 엔드포인트로 이동 (새 탭)
+    const token = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
+    const url = `/api/care-records/${contractId}/pdf?token=${encodeURIComponent(token || "")}`;
+    window.open(url, "_blank");
   };
 
   if (loading) {
@@ -182,6 +168,10 @@ export default function JournalPage() {
 
   const checkedIn = !!today?.checkInTime;
   const checkedOut = !!today?.checkOutTime;
+  // 자동 계산된 간병시간 (표시용)
+  const autoHours = today?.checkInTime && today?.checkOutTime
+    ? Math.round(((new Date(today.checkOutTime).getTime() - new Date(today.checkInTime).getTime()) / 3600000) * 10) / 10
+    : null;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -190,7 +180,7 @@ export default function JournalPage() {
           <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600">
             <FiArrowLeft className="w-5 h-5" />
           </button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-lg font-bold text-gray-900">간병 일지</h1>
             {contract && (
               <p className="text-xs text-gray-500">
@@ -198,16 +188,36 @@ export default function JournalPage() {
               </p>
             )}
           </div>
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+            title="보험사 제출용 PDF"
+          >
+            <FiDownload className="w-3.5 h-3.5" /> PDF
+          </button>
         </div>
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-5 space-y-4">
+        {/* 환자/간병인 정보 */}
+        {contract && (
+          <div className="bg-white rounded-xl p-4 border border-gray-100 text-sm">
+            <div className="grid grid-cols-2 gap-2">
+              <InfoRow label="환자명" value={contract.careRequest?.patient?.name || "-"} />
+              <InfoRow label="병원명" value={contract.careRequest?.hospitalName || contract.careRequest?.address || "-"} />
+              <InfoRow label="간병 시작일" value={contract.startDate ? new Date(contract.startDate).toLocaleDateString("ko-KR") : "-"} />
+              <InfoRow label="간병 종료일" value={contract.endDate ? new Date(contract.endDate).toLocaleDateString("ko-KR") : "-"} />
+            </div>
+          </div>
+        )}
+
         {/* 출퇴근 */}
         <div className="bg-white rounded-xl p-4 border border-gray-100">
           <h2 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
             <FiClock className="w-4 h-4 text-orange-500" /> 출퇴근 체크
           </h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <div className="text-xs text-gray-400">출근</div>
               <div className={`text-base font-bold ${checkedIn ? "text-green-600" : "text-gray-300"}`}>
@@ -218,6 +228,12 @@ export default function JournalPage() {
               <div className="text-xs text-gray-400">퇴근</div>
               <div className={`text-base font-bold ${checkedOut ? "text-orange-600" : "text-gray-300"}`}>
                 {today?.checkOutTime ? new Date(today.checkOutTime).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400">간병시간</div>
+              <div className={`text-base font-bold ${autoHours ? "text-blue-600" : "text-gray-300"}`}>
+                {autoHours ? `${autoHours}h` : "-"}
               </div>
             </div>
           </div>
@@ -241,64 +257,63 @@ export default function JournalPage() {
           </div>
         </div>
 
-        {/* 건강 체크 */}
+        {/* 간병시간 */}
         <div className="bg-white rounded-xl p-4 border border-gray-100">
-          <h2 className="text-sm font-bold text-gray-900 mb-3">건강 상태</h2>
-          <div className="grid grid-cols-3 gap-2">
-            <LabeledInput label="체온(℃)" value={form.bodyTemp} onChange={(v) => setForm({ ...form, bodyTemp: v })} type="number" step="0.1" />
-            <LabeledInput label="혈압" value={form.bloodPressure} onChange={(v) => setForm({ ...form, bloodPressure: v })} placeholder="120/80" />
-            <LabeledInput label="맥박" value={form.pulse} onChange={(v) => setForm({ ...form, pulse: v })} type="number" />
-          </div>
-        </div>
-
-        {/* 일상 기록 */}
-        <div className="bg-white rounded-xl p-4 border border-gray-100">
-          <h2 className="text-sm font-bold text-gray-900 mb-3">일상 기록</h2>
-          <div className="space-y-2.5">
-            <LabeledTextarea label="식사" value={form.meals} onChange={(v) => setForm({ ...form, meals: v })} placeholder="아침/점심/저녁 및 섭취량" />
-            <LabeledTextarea label="투약" value={form.medication} onChange={(v) => setForm({ ...form, medication: v })} placeholder="복용 약물 및 시간" />
-            <LabeledTextarea label="배변/배뇨" value={form.excretion} onChange={(v) => setForm({ ...form, excretion: v })} />
-            <LabeledTextarea label="수면 상태" value={form.sleep} onChange={(v) => setForm({ ...form, sleep: v })} />
-            <LabeledTextarea label="거동 상태" value={form.mobility} onChange={(v) => setForm({ ...form, mobility: v })} />
-            <LabeledTextarea label="정신 상태" value={form.mentalState} onChange={(v) => setForm({ ...form, mentalState: v })} />
-            <LabeledTextarea label="피부 상태" value={form.skinState} onChange={(v) => setForm({ ...form, skinState: v })} />
-            <LabeledTextarea label="기타 메모" value={form.notes} onChange={(v) => setForm({ ...form, notes: v })} rows={3} />
-          </div>
-        </div>
-
-        {/* 사진 업로드 */}
-        <div className="bg-white rounded-xl p-4 border border-gray-100">
-          <h2 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-            <FiCamera className="w-4 h-4 text-orange-500" /> 사진 ({today?.photos?.length || 0})
-          </h2>
-          {today?.photos && today.photos.length > 0 && (
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              {today.photos.map((url, i) => (
-                <img
-                  key={i}
-                  src={url.startsWith("http") ? url : `https://cm.phantomdesign.kr${url}`}
-                  alt={`간병 사진 ${i + 1}`}
-                  className="w-full aspect-square object-cover rounded-lg"
-                />
-              ))}
-            </div>
-          )}
-          <label className="block">
+          <h2 className="text-sm font-bold text-gray-900 mb-3">간병시간</h2>
+          <div className="flex items-center gap-2">
             <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handlePhotoUpload}
-              disabled={uploadingPhoto}
-              className="hidden"
+              type="number"
+              step="0.5"
+              min={0}
+              max={24}
+              value={form.careHours}
+              onChange={(e) => setForm({ ...form, careHours: e.target.value })}
+              placeholder={autoHours ? `자동: ${autoHours}` : "직접 입력 (예: 9)"}
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
             />
-            <span className="block w-full text-center py-3 bg-orange-50 text-orange-600 font-bold rounded-lg border-2 border-dashed border-orange-200 cursor-pointer hover:bg-orange-100">
-              {uploadingPhoto ? "업로드 중..." : "+ 사진 추가"}
-            </span>
-          </label>
+            <span className="text-sm text-gray-600">시간</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            출퇴근 체크 시 자동 계산됩니다. 직접 입력하면 자동 계산값을 덮어씁니다.
+          </p>
         </div>
 
-        {/* 저장 버튼 */}
+        {/* 간병 업무 체크 */}
+        <div className="bg-white rounded-xl p-4 border border-gray-100">
+          <h2 className="text-sm font-bold text-gray-900 mb-3">간병 업무 (해당 항목 모두 체크)</h2>
+          <div className="grid grid-cols-2 gap-2">
+            <CheckboxItem label="식사보조" checked={form.mealCare} onChange={(v) => setForm({ ...form, mealCare: v })} />
+            <CheckboxItem label="활동보조" checked={form.activityCare} onChange={(v) => setForm({ ...form, activityCare: v })} />
+            <CheckboxItem label="배변보조" checked={form.excretionCare} onChange={(v) => setForm({ ...form, excretionCare: v })} />
+            <CheckboxItem label="위생보조" checked={form.hygieneCare} onChange={(v) => setForm({ ...form, hygieneCare: v })} />
+            <div className="col-span-2">
+              <CheckboxItem label="기타" checked={form.otherCare} onChange={(v) => setForm({ ...form, otherCare: v })} />
+              {form.otherCare && (
+                <input
+                  type="text"
+                  value={form.otherCareNote}
+                  onChange={(e) => setForm({ ...form, otherCareNote: e.target.value })}
+                  placeholder="기타 업무 내용 입력"
+                  className="w-full mt-2 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 특이사항 (선택) */}
+        <div className="bg-white rounded-xl p-4 border border-gray-100">
+          <h2 className="text-sm font-bold text-gray-900 mb-3">특이사항 (선택)</h2>
+          <textarea
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            placeholder="특별히 기록할 내용이 있으면 입력"
+            rows={3}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400 resize-none"
+          />
+        </div>
+
+        {/* 저장 */}
         <button
           type="button"
           onClick={handleSave}
@@ -308,20 +323,28 @@ export default function JournalPage() {
           <FiSave className="w-5 h-5" /> {saving ? "저장 중..." : "간병 일지 저장"}
         </button>
 
-        {/* 과거 이력 */}
+        {/* 과거 일지 이력 */}
         {history.length > 0 && (
           <div className="bg-white rounded-xl p-4 border border-gray-100 mt-4">
-            <h2 className="text-sm font-bold text-gray-900 mb-3">최근 일지</h2>
-            <div className="space-y-2">
-              {history.slice(0, 7).map((r) => (
-                <div key={r.id} className="flex items-center justify-between py-2 border-b border-gray-50 text-sm last:border-0">
-                  <span className="text-gray-700">{new Date(r.date).toLocaleDateString("ko-KR")}</span>
-                  <span className="text-xs text-gray-400">
-                    {r.checkInTime ? "✓ 출근" : ""} {r.checkOutTime ? "· 퇴근" : ""}
-                    {r.photos?.length > 0 && ` · 사진 ${r.photos.length}장`}
-                  </span>
-                </div>
-              ))}
+            <h2 className="text-sm font-bold text-gray-900 mb-3">최근 일지 ({history.length}건)</h2>
+            <div className="divide-y divide-gray-50">
+              {history.slice(0, 10).map((r) => {
+                const tasks: string[] = [];
+                if (r.mealCare) tasks.push("식사");
+                if (r.activityCare) tasks.push("활동");
+                if (r.excretionCare) tasks.push("배변");
+                if (r.hygieneCare) tasks.push("위생");
+                if (r.otherCare) tasks.push("기타");
+                return (
+                  <div key={r.id} className="py-2 text-sm flex items-center justify-between gap-2">
+                    <span className="text-gray-700 shrink-0">{new Date(r.date).toLocaleDateString("ko-KR")}</span>
+                    <span className="text-xs text-gray-500 flex-1 text-right truncate">
+                      {r.careHours ? `${r.careHours}h` : "-"}
+                      {tasks.length > 0 && ` · ${tasks.join("/")}`}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -330,37 +353,25 @@ export default function JournalPage() {
   );
 }
 
-function LabeledInput({
-  label, value, onChange, type = "text", placeholder, step,
-}: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; step?: string; }) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <label className="block text-xs text-gray-500 mb-1">{label}</label>
-      <input
-        type={type}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-orange-400"
-      />
+      <div className="text-xs text-gray-400">{label}</div>
+      <div className="text-sm font-medium text-gray-900 truncate">{value}</div>
     </div>
   );
 }
 
-function LabeledTextarea({
-  label, value, onChange, placeholder, rows = 2,
-}: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; rows?: number; }) {
+function CheckboxItem({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div>
-      <label className="block text-xs text-gray-500 mb-1">{label}</label>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        rows={rows}
-        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-orange-400 resize-none"
+    <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${checked ? "bg-orange-50 border-orange-300" : "bg-white border-gray-200"}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="w-4 h-4 accent-orange-500"
       />
-    </div>
+      <span className={`text-sm font-medium ${checked ? "text-orange-700" : "text-gray-700"}`}>{label}</span>
+    </label>
   );
 }

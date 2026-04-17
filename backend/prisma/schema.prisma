@@ -508,21 +508,18 @@ model CareRecord {
   checkInLat   Float?
   checkInLng   Float?
 
-  // 간병 일지
-  bodyTemp     Float?     // 체온
-  bloodPressure String?   // 혈압
-  pulse        Int?       // 맥박
-  meals        String?    // 식사
-  medication   String?    // 투약
-  excretion    String?    // 배변/배뇨
-  sleep        String?    // 수면
-  mobility     String?    // 활동/이동
-  mentalState  String?    // 정서/정신상태
-  skinState    String?    // 피부 상태
-  notes        String?    // 특이사항
+  // 간병 일지 (케어매치 공식 양식)
+  careHours       Float?   // 간병시간 (자동 계산 또는 수동 입력)
+  mealCare        Boolean  @default(false)  // 식사보조
+  activityCare    Boolean  @default(false)  // 활동보조
+  excretionCare   Boolean  @default(false)  // 배변보조
+  hygieneCare     Boolean  @default(false)  // 위생보조
+  otherCare       Boolean  @default(false)  // 기타
+  otherCareNote   String?  // 기타 선택 시 상세 내용
+  notes           String?  // 특이사항 (선택)
 
-  // 사진
-  photos       String[]   // 사진 URLs
+  // 사진 (선택 첨부)
+  photos       String[]
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
