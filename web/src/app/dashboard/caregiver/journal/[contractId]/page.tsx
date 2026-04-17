@@ -66,7 +66,10 @@ export default function JournalPage() {
       ]);
       const loadedContract = contractRes.data?.data || contractRes.data;
       setContract(loadedContract);
-      setContractCorporateName(loadedContract?.corporateName || "");
+      // 계약별 값 우선, 없으면 간병인 프로필 기본값
+      setContractCorporateName(
+        loadedContract?.corporateName || loadedContract?.caregiver?.corporateName || ""
+      );
       const records: CareRecord[] = recordsRes.data?.data?.records || recordsRes.data?.data || [];
       // 선택된 날짜에 해당하는 기록 찾기 (기본: 오늘)
       const t = records.find((r) => r.date && localDateStr(r.date) === selectedDate) || null;
