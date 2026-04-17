@@ -669,36 +669,31 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
       y += rowH;
     }
 
-    // ============ 기타 상세 (otherCareNote가 있는 경우에만) ============
-    const otherNotes = records.filter((r) => r.otherCare && r.otherCareNote);
-    if (otherNotes.length > 0) {
+    // ============ 상세 비고 섹션 헬퍼 ============
+    const drawNotesSection = (title: string, rows: { date: Date; text: string }[]) => {
+      if (rows.length === 0) return;
       y += 20;
-      // 페이지 넘김 체크
-      if (y + 30 + otherNotes.length * 20 > PAGE_H - MARGIN - 140) {
+      if (y + 30 + rows.length * 22 > PAGE_H - MARGIN - 140) {
         doc.addPage();
         y = MARGIN;
       }
       doc.font('KorBold').fontSize(10).fillColor(COLOR_PRIMARY)
-        .text('Ⅲ. 기타 업무 상세', MARGIN, y);
+        .text(title, MARGIN, y);
       y += 18;
 
-      // 헤더
       const noteDateW = 80;
       const noteContentW = TABLE_WIDTH - noteDateW;
       drawCell(TABLE_LEFT, y, noteDateW, rowH, '일자', {
         bold: true, bg: COLOR_HEADER_BG, size: 9, color: COLOR_PRIMARY, align: 'center',
       });
-      drawCell(TABLE_LEFT + noteDateW, y, noteContentW, rowH, '기타 업무 내용', {
+      drawCell(TABLE_LEFT + noteDateW, y, noteContentW, rowH, '내용', {
         bold: true, bg: COLOR_HEADER_BG, size: 9, color: COLOR_PRIMARY, align: 'center',
       });
       y += rowH;
 
-      // 각 기타 내용 행
-      otherNotes.forEach((r, i) => {
-        const noteText = r.otherCareNote || '';
-        // 긴 내용은 PDFKit이 자동 줄바꿈하므로 높이 동적 계산
+      rows.forEach((r, i) => {
         doc.font('Kor').fontSize(9);
-        const textHeight = doc.heightOfString(noteText, { width: noteContentW - 16 });
+        const textHeight = doc.heightOfString(r.text, { width: noteContentW - 16 });
         const dynamicRowH = Math.max(rowH, textHeight + 12);
 
         if (y + dynamicRowH > PAGE_H - MARGIN - 140) {
@@ -707,9 +702,8 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
         }
 
         const rowBg = i % 2 === 1 ? COLOR_ALT_ROW : undefined;
-        const dateStr = new Date(r.date).toISOString().slice(5, 10).replace('-', '. ');
+        const dateStr = r.date.toISOString().slice(5, 10).replace('-', '. ');
 
-        // 셀 테두리 + 배경
         doc.lineWidth(0.6).strokeColor(COLOR_BORDER);
         if (rowBg) {
           doc.rect(TABLE_LEFT, y, noteDateW, dynamicRowH).fillAndStroke(rowBg, COLOR_BORDER);
@@ -719,18 +713,32 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
           doc.rect(TABLE_LEFT + noteDateW, y, noteContentW, dynamicRowH).stroke();
         }
 
-        // 텍스트 (세로 중앙)
         doc.fillColor('#1A202C').font('Kor').fontSize(10);
         doc.text(dateStr, TABLE_LEFT, y + (dynamicRowH - 10) / 2, {
           width: noteDateW, align: 'center',
         });
         doc.fontSize(9);
-        doc.text(noteText, TABLE_LEFT + noteDateW + 8, y + 6, {
+        doc.text(r.text, TABLE_LEFT + noteDateW + 8, y + 6, {
           width: noteContentW - 16, align: 'left',
         });
         y += dynamicRowH;
       });
-    }
+    };
+
+    // 기타 상세 (otherCare + otherCareNote)
+    const otherNotes = records
+      .filter((r) => r.otherCare && r.otherCareNote)
+      .map((r) => ({ date: new Date(r.date), text: r.otherCareNote! }));
+    drawNotesSection('Ⅲ. 기타 업무 상세', otherNotes);
+
+    // 특이사항 (notes)
+    const specialNotes = records
+      .filter((r) => r.notes && r.notes.trim())
+      .map((r) => ({ date: new Date(r.date), text: r.notes! }));
+    drawNotesSection(
+      otherNotes.length > 0 ? 'Ⅳ. 특이사항' : 'Ⅲ. 특이사항',
+      specialNotes,
+    );
 
     // ============ 하단 확인/서명 ============
     y += 22;
