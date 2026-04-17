@@ -20,18 +20,32 @@ function formatDate(dateStr?: string | null): string {
 
 function formatStatus(status?: string): string {
   switch (status) {
-    case "CANCELLED": return "취소됨";
-    case "ACTIVE": return "활성";
-    case "COMPLETED": return "완료";
+    case "PENDING": return "접수";
+    case "PROCESSING": return "처리중";
+    case "RESOLVED": return "해결";
+    case "ESCALATED": return "에스컬레이션";
+    case "REJECTED": return "기각";
+    // 레거시 소문자/한글 코드 호환
     case "resolved": return "해결";
-    case "해결": return "해결";
     case "in_progress":
-    case "처리중": return "처리중";
-    case "escalated":
-    case "에스컬레이션": return "에스컬레이션";
+    case "processing": return "처리중";
+    case "escalated": return "에스컬레이션";
+    case "rejected": return "기각";
     case "open":
-    case "접수": return "접수";
+    case "pending": return "접수";
     default: return status || "-";
+  }
+}
+
+function formatCategory(cat?: string): string {
+  switch (cat) {
+    case "CARE_QUALITY": return "간병 품질";
+    case "CANCELLATION": return "취소 관련";
+    case "PAYMENT": return "결제 관련";
+    case "ABUSE": return "욕설·폭언";
+    case "NO_SHOW": return "노쇼";
+    case "OTHER": return "기타";
+    default: return cat || "-";
   }
 }
 
@@ -163,8 +177,13 @@ export default function DisputesPage() {
       render: (v) => <span className="text-sm text-gray-700">{(v as string) || "-"}</span>,
     },
     {
+      key: "type",
+      label: "분류",
+      render: (v) => <span className="text-sm text-gray-700">{formatCategory(v as string)}</span>,
+    },
+    {
       key: "description",
-      label: "취소 사유",
+      label: "분쟁 내용",
       render: (v) => (
         <p className="max-w-[250px] truncate text-sm text-gray-600">{(v as string) || "-"}</p>
       ),

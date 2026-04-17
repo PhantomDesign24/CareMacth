@@ -1162,6 +1162,28 @@ export const emergencyRematch = async (req: AuthRequest, res: Response, next: Ne
         data: { status: 'OPEN' },
       });
 
+      // 기존 간병인의 지원 취소 + 다른 지원자들은 PENDING으로 리셋
+      // (긴급 재매칭은 새 간병인이 필요한 상황이므로 모든 기존 지원 초기화)
+      await tx.careApplication.updateMany({
+        where: { careRequestId: contract.careRequestId, caregiverId: contract.caregiverId },
+        data: { status: 'CANCELLED' },
+      });
+      // 다른 간병인들 중 ACCEPTED였던 건은 아직 대기(PENDING)로 되돌림
+      await tx.careApplication.updateMany({
+        where: {
+          careRequestId: contract.careRequestId,
+          caregiverId: { not: contract.caregiverId },
+          status: 'ACCEPTED',
+        },
+        data: { status: 'PENDING' },
+      });
+
+      // 해당 계약 관련 분쟁 자동 해결 처리
+      await tx.dispute.updateMany({
+        where: { contractId, status: { in: ['PENDING', 'PROCESSING'] } },
+        data: { status: 'RESOLVED', resolution: `긴급 재매칭으로 처리됨: ${reason || '관리자 요청'}`, handledBy: req.user!.id, handledAt: new Date() },
+      });
+
       // 기존 간병인에게 알림
       await tx.notification.create({
         data: {

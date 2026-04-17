@@ -253,6 +253,7 @@ export const insuranceAPI = {
     documentType: string;
   }) => api.post("/insurance", data),
   getStatus: (id: string) => api.get(`/insurance/${id}/status`),
+  list: () => api.get("/insurance"),
 };
 
 export const notificationAPI = {

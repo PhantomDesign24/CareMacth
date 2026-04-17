@@ -358,6 +358,19 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
         data: { status: 'CANCELLED' },
       });
 
+      // 해당 careRequest의 모든 CareApplication 상태 CANCELLED로 동기화
+      // (간병인이 "수락됨" 상태로 계속 보이던 문제 해결)
+      await tx.careApplication.updateMany({
+        where: { careRequestId: contract.careRequestId, status: { in: ['PENDING', 'ACCEPTED'] } },
+        data: { status: 'CANCELLED' },
+      });
+
+      // 해당 계약 관련 분쟁 자동 처리 (취소로 인한 분쟁 해결)
+      await tx.dispute.updateMany({
+        where: { contractId: id, status: { in: ['PENDING', 'PROCESSING'] } },
+        data: { status: 'RESOLVED', resolution: '계약 취소로 처리됨', handledAt: new Date() },
+      });
+
       // 간병인 근무 상태 변경
       await tx.caregiver.update({
         where: { id: contract.caregiverId },

@@ -108,3 +108,16 @@ export const getInsuranceDocStatus = async (req: AuthRequest, res: Response, nex
     next(error);
   }
 };
+
+// GET / - 내 보험서류 신청 목록
+export const getMyInsuranceRequests = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const requests = await prisma.insuranceDocRequest.findMany({
+      where: { requestedBy: req.user!.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ success: true, data: requests });
+  } catch (error) {
+    next(error);
+  }
+};

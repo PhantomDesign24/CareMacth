@@ -17,6 +17,9 @@ router.post('/', [
   body('documentType').notEmpty().isIn(['간병확인서', '영수증', '간병일지', '진단서']).withMessage('유효한 서류 종류를 선택해주세요. (간병확인서, 영수증, 간병일지, 진단서)'),
 ], insuranceController.createInsuranceDocRequest);
 
+// GET / - 내 신청 목록
+router.get('/', insuranceController.getMyInsuranceRequests);
+
 // GET /:id/status - 진행 상황 확인
 router.get('/:id/status', insuranceController.getInsuranceDocStatus);
 

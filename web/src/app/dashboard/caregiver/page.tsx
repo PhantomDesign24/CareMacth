@@ -666,6 +666,17 @@ function CaregiverDashboard() {
               <div className="p-6">
                 <h3 className="text-lg font-bold text-gray-900 mb-2">매칭 가능 공고</h3>
                 <p className="text-sm text-gray-500">조건에 맞는 간병 요청 목록입니다.</p>
+                {currentStatus === 'working' && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 flex items-start gap-2">
+                    <span className="text-base">⚠</span>
+                    <div>
+                      <div className="font-semibold">현재 간병 진행 중입니다.</div>
+                      <div className="text-xs text-amber-700 mt-0.5">
+                        진행 중 상태에서는 새로운 지원을 할 수 없습니다. 현재 간병 종료 후 상단 상태를 &apos;근무 가능&apos;으로 변경하시면 지원할 수 있습니다.
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               {openRequests.map((req) => (
                 <div key={req.id} className="p-6">
@@ -741,21 +752,29 @@ function CaregiverDashboard() {
                         </div>
                       </div>
                       <div className="flex flex-col gap-2">
-                        <button
-                          type="button"
-                          className="btn-primary text-sm px-4 py-2.5 shrink-0"
-                          disabled={applyingId === req.id}
-                          onClick={() => handleApply(req.id)}
-                        >
-                          {applyingId === req.id ? "지원 중..." : "수락하고 지원"}
-                        </button>
-                        <button
-                          type="button"
-                          className="text-sm px-4 py-2.5 border border-orange-300 text-orange-600 rounded-xl hover:bg-orange-50"
-                          onClick={() => openProposalModal(req)}
-                        >
-                          역제안
-                        </button>
+                        {currentStatus === 'working' ? (
+                          <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2 text-center">
+                            ⚠ 진행 중 간병이 있어<br />지원할 수 없습니다
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-primary text-sm px-4 py-2.5 shrink-0 disabled:opacity-50"
+                              disabled={applyingId === req.id}
+                              onClick={() => handleApply(req.id)}
+                            >
+                              {applyingId === req.id ? "지원 중..." : "수락하고 지원"}
+                            </button>
+                            <button
+                              type="button"
+                              className="text-sm px-4 py-2.5 border border-orange-300 text-orange-600 rounded-xl hover:bg-orange-50"
+                              onClick={() => openProposalModal(req)}
+                            >
+                              역제안
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

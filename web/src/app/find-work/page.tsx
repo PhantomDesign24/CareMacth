@@ -96,8 +96,10 @@ export default function FindWorkPage() {
 
   // Quick accept state
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [myWorkStatus, setMyWorkStatus] = useState<string>("AVAILABLE");
 
   const isCaregiver = userRole === "CAREGIVER";
+  const isWorking = isCaregiver && myWorkStatus === "WORKING";
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -132,8 +134,10 @@ export default function FindWorkPage() {
     if (!isLoggedIn || !isCaregiver) return;
     caregiverAPI.list()
       .then((res) => {
-        const preferred: string[] = res.data?.data?.preferredRegions || [];
+        const data = res.data?.data || {};
+        const preferred: string[] = data.preferredRegions || [];
         if (preferred.length > 0) setRegionFilter(preferred);
+        if (data.workStatus) setMyWorkStatus(data.workStatus);
       })
       .catch(() => {});
     caregiverAPI.getMyApplications()
@@ -636,6 +640,13 @@ export default function FindWorkPage() {
                             </div>
                           );
                         })()
+                      ) : isWorking ? (
+                        <div className="w-full p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 text-center">
+                          <div className="font-semibold">⚠ 진행 중인 간병이 있습니다</div>
+                          <div className="text-xs text-red-600 mt-1">
+                            현재 간병 종료 후 지원 가능합니다
+                          </div>
+                        </div>
                       ) : (
                         <>
                           <button

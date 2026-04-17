@@ -1155,10 +1155,20 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
         ) : (
           <button
             type="submit"
-            disabled={!form.disclaimerChecked}
-            className="btn-primary"
+            disabled={!form.disclaimerChecked || submitting}
+            className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            간병 요청 제출
+            {submitting ? (
+              <span className="inline-flex items-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                제출 중...
+              </span>
+            ) : (
+              "간병 요청 제출"
+            )}
           </button>
         )}
       </div>

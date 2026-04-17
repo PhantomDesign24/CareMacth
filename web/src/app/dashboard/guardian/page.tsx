@@ -7,6 +7,7 @@ import { dashboardAPI, careRequestAPI, paymentAPI, guardianAPI, contractAPI, ext
 import { formatDate, formatMoney, formatCareStatus, formatContractStatus, formatPaymentStatus, formatPaymentMethod, formatCareType, formatLocation, formatMobility } from "@/lib/format";
 import { showToast } from "@/components/Toast";
 import NotificationPrefsSection from "@/components/NotificationPrefsSection";
+import InsuranceTab from "@/components/InsuranceTab";
 import { SITE } from "@/config/site";
 
 interface CareHistory {
@@ -138,7 +139,7 @@ export default function GuardianDashboardPage() {
 function GuardianDashboard() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const validTabs = ["history", "payments", "patients", "referral", "settings"] as const;
+  const validTabs = ["history", "payments", "patients", "insurance", "referral", "settings"] as const;
   type TabKey = typeof validTabs[number];
   const tabFromUrl = searchParams.get("tab") as TabKey | null;
   const [activeTab, setActiveTab] = useState<TabKey>(validTabs.includes(tabFromUrl as TabKey) ? (tabFromUrl as TabKey) : "history");
@@ -594,6 +595,7 @@ function GuardianDashboard() {
     { key: "history" as const, label: "간병 이력" },
     { key: "payments" as const, label: "결제 내역" },
     { key: "patients" as const, label: "환자 정보" },
+    { key: "insurance" as const, label: "보험서류" },
     { key: "referral" as const, label: "추천인 코드" },
     { key: "settings" as const, label: "계정 설정" },
   ];
@@ -1162,6 +1164,9 @@ function GuardianDashboard() {
               </div>
             </div>
           )}
+
+          {/* 보험서류 신청 이력 */}
+          {activeTab === "insurance" && <InsuranceTab />}
 
           {/* Referral code */}
           {activeTab === "referral" && (
