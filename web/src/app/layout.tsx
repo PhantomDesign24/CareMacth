@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import ToastContainer from "@/components/Toast";
 import { SITE } from "@/config/site";
 import "./globals.css";
 
@@ -143,6 +144,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen flex flex-col font-sans">
         <Header />
+        <ToastContainer />
         <main className="flex-1 pt-16 md:pt-20">{children}</main>
         <Footer />
 

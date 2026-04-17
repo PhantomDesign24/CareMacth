@@ -113,14 +113,6 @@ export default function Footer() {
                   방문요양
                 </Link>
               </li>
-              <li>
-                <Link
-                  href="/community"
-                  className="text-sm text-gray-400 hover:text-primary-400 transition-colors"
-                >
-                  커뮤니티
-                </Link>
-              </li>
             </ul>
           </div>
 

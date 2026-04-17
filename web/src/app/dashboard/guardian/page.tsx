@@ -5,6 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { dashboardAPI, careRequestAPI, paymentAPI, guardianAPI, contractAPI, extensionAPI, authAPI } from "@/lib/api";
 import { formatDate, formatMoney, formatCareStatus, formatContractStatus, formatPaymentStatus, formatPaymentMethod, formatCareType, formatLocation, formatMobility } from "@/lib/format";
+import { showToast } from "@/components/Toast";
 import { SITE } from "@/config/site";
 
 interface CareHistory {
@@ -753,7 +754,42 @@ function GuardianDashboard() {
                             💳 결제하기
                           </Link>
                         )}
-                        {care.careRequestId && care.applicantCount > 0 && (
+                        {/* OPEN 상태: 공고 관리 (지원자 유무 관계없이 접근 가능) */}
+                        {care.isVirtual && care.requestStatus === 'OPEN' && care.careRequestId && (
+                          <>
+                            <Link
+                              href={`/dashboard/guardian/applicants/${care.careRequestId}`}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
+                            >
+                              {care.applicantCount > 0 ? '지원자 보기' : '공고 관리'}
+                              {care.applicantCount > 0 && (
+                                <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-primary-500 text-white rounded-full">
+                                  {care.applicantCount}
+                                </span>
+                              )}
+                            </Link>
+                            {care.applicantCount === 0 && (
+                              <button
+                                type="button"
+                                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                                onClick={async () => {
+                                  if (!confirm('이 공고를 취소하시겠습니까?')) return;
+                                  try {
+                                    await careRequestAPI.cancel(care.careRequestId!);
+                                    showToast('공고가 취소되었습니다.', 'success');
+                                    fetchData();
+                                  } catch {
+                                    showToast('공고 취소에 실패했습니다.', 'error');
+                                  }
+                                }}
+                              >
+                                공고 취소
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {/* 매칭 이후: 지원자 보기 */}
+                        {care.careRequestId && !care.isVirtual && care.applicantCount > 0 && (
                           <Link
                             href={`/dashboard/guardian/applicants/${care.careRequestId}`}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"

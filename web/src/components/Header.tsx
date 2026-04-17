@@ -63,7 +63,6 @@ export default function Header() {
     { href: "/care-request", label: "간병인 찾기" },
     { href: "/find-work", label: "간병 일감 찾기" },
     { href: "/business", label: "병원·기업회원" },
-    { href: "/community", label: "커뮤니티" },
     { href: "/home-care", label: "방문요양" },
   ];
 

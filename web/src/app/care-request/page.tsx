@@ -6,6 +6,7 @@ import CareRequestForm from "@/components/CareRequestForm";
 import { FiInfo, FiSearch } from "react-icons/fi";
 import { careRequestAPI, guardianAPI } from "@/lib/api";
 import { AxiosError } from "axios";
+import { showToast } from "@/components/Toast";
 import { SITE } from "@/config/site";
 
 export default function CareRequestPage() {
@@ -96,18 +97,20 @@ export default function CareRequestPage() {
 
       await careRequestAPI.create(requestPayload);
       setSubmitSuccess(true);
-      // Redirect to dashboard after brief delay so user sees success message
+      showToast("간병 요청이 접수되었습니다. 매칭을 시작합니다.", "success");
       setTimeout(() => {
         router.push("/dashboard/guardian");
       }, 2000);
     } catch (err: unknown) {
       if (err instanceof AxiosError && err.response) {
         const respData = err.response.data;
-        setSubmitError(
-          respData?.message || respData?.error || "간병 요청 중 오류가 발생했습니다."
-        );
+        const msg = respData?.message || respData?.error || "간병 요청 중 오류가 발생했습니다.";
+        setSubmitError(msg);
+        showToast(msg, "error");
       } else {
-        setSubmitError("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+        const msg = "서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.";
+        setSubmitError(msg);
+        showToast(msg, "error");
       }
     } finally {
       setSubmitting(false);
