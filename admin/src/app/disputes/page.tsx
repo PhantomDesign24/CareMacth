@@ -103,6 +103,10 @@ export default function DisputesPage() {
         id: d.id,
         contractId: d.contractId,
         patientName: d.contract?.careRequest?.patient?.name || "-",
+        // 분쟁 시점의 간병인(원 계약의 간병인)
+        caregiverName: d.contract?.caregiver?.user?.name || "-",
+        caregiverPhone: d.contract?.caregiver?.user?.phone || "",
+        guardianName: d.contract?.guardian?.user?.name || "-",
         reporterName: d.reporter?.name || "-",
         targetName: d.target?.name || "-",
         type: d.category || "",
@@ -111,6 +115,9 @@ export default function DisputesPage() {
         status: d.status || "PENDING",
         resolution: d.resolution || "",
         createdAt: d.createdAt || "",
+        // 현재 긴급재매칭 진행 중 여부
+        rematchActiveContractId: d.rematchActiveContractId || null,
+        rematchCaregiverName: d.rematchCaregiverName || null,
       }));
 
       setDisputes(flattened);
@@ -209,12 +216,21 @@ export default function DisputesPage() {
       label: "액션",
       align: "center",
       render: (_v, row) => {
-        const isResolved = row.status === "해결" || row.status === "resolved" || row.status === "COMPLETED";
+        const isResolved = ["해결", "resolved", "RESOLVED", "REJECTED", "기각"].includes(row.status || "");
         const disabled = actionLoading === row.id;
+        const hasRematch = !!(row as any).rematchActiveContractId;
         return (
-          <div className="flex items-center justify-center gap-1.5">
-            {!isResolved && (
-              <>
+          <div className="flex flex-col items-stretch gap-1">
+            {hasRematch && (
+              <div className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 text-center">
+                🔄 재매칭 진행 중
+                {(row as any).rematchCaregiverName && (
+                  <div className="font-semibold">{(row as any).rematchCaregiverName}</div>
+                )}
+              </div>
+            )}
+            <div className="flex items-center justify-center gap-1.5">
+              {!isResolved && !hasRematch && (
                 <button
                   className="btn-danger btn-sm"
                   disabled={disabled}
@@ -225,6 +241,17 @@ export default function DisputesPage() {
                 >
                   {disabled ? "..." : "긴급 재매칭"}
                 </button>
+              )}
+              {hasRematch && (
+                <a
+                  href={`/admin/caregivers?contractId=${(row as any).rematchActiveContractId}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                >
+                  재매칭 보기
+                </a>
+              )}
+              {!isResolved && (
                 <button
                   className="btn-success btn-sm"
                   onClick={(e) => {
@@ -233,13 +260,13 @@ export default function DisputesPage() {
                     setShowResolveModal(true);
                   }}
                 >
-                  해결
+                  {hasRematch ? '처리' : '해결'}
                 </button>
-              </>
-            )}
-            {isResolved && (
-              <span className="text-xs text-gray-400">해결 완료</span>
-            )}
+              )}
+              {isResolved && (
+                <span className="text-xs text-gray-400">처리 완료</span>
+              )}
+            </div>
           </div>
         );
       },
@@ -404,10 +431,10 @@ export default function DisputesPage() {
                     };
                     await apiRequest(`/disputes/admin/${selectedDispute.id}`, {
                       method: "PATCH",
-                      body: JSON.stringify({
+                      body: {
                         status: statusMap[transitionStatus] || "RESOLVED",
                         resolution,
-                      }),
+                      },
                     });
                     alert("처리가 완료되었습니다.");
                     setShowResolveModal(false);

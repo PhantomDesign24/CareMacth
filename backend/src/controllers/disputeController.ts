@@ -112,12 +112,30 @@ export const adminGetDisputes = async (req: AuthRequest, res: Response, next: Ne
         contract: {
           include: {
             careRequest: { include: { patient: { select: { name: true } } } },
+            caregiver: { include: { user: { select: { name: true, phone: true } } } },
+            guardian: { include: { user: { select: { name: true, phone: true } } } },
           },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ success: true, data: disputes });
+
+    // 각 분쟁에 대해 현재 진행 중인 긴급재매칭(=새 활성 계약) 여부 확인
+    const withRematchInfo = await Promise.all(disputes.map(async (d) => {
+      if (!d.contract) return { ...d, rematchActiveContractId: null };
+      // 동일 CareRequest의 현재 ACTIVE/EXTENDED 계약 (원 계약 제외)
+      const rematch = await prisma.contract.findFirst({
+        where: {
+          careRequestId: d.contract.careRequestId,
+          status: { in: ['ACTIVE', 'EXTENDED'] },
+          id: { not: d.contractId || undefined },
+        },
+        select: { id: true, status: true, caregiver: { include: { user: { select: { name: true } } } } },
+      });
+      return { ...d, rematchActiveContractId: rematch?.id || null, rematchCaregiverName: rematch?.caregiver?.user?.name || null };
+    }));
+
+    res.json({ success: true, data: withRematchInfo });
   } catch (error) {
     next(error);
   }
