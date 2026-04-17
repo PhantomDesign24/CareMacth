@@ -153,14 +153,13 @@ export default function DisputesPage() {
     }
   };
 
-  const openCount = disputes.filter(
-    (d) => d.status !== "해결" && d.status !== "resolved" && d.status !== "COMPLETED"
-  ).length;
+  const CLOSED_STATUSES = ["RESOLVED", "REJECTED", "해결", "resolved", "기각", "COMPLETED"];
+  const openCount = disputes.filter((d) => !CLOSED_STATUSES.includes(d.status || "")).length;
   const cancelledCount = disputes.filter(
-    (d) => d.status === "CANCELLED" || d.status === "취소됨"
+    (d) => d.status === "CANCELLED" || d.status === "취소됨" || d.status === "REJECTED" || d.status === "기각"
   ).length;
   const resolvedCount = disputes.filter(
-    (d) => d.status === "해결" || d.status === "resolved" || d.status === "COMPLETED"
+    (d) => d.status === "RESOLVED" || d.status === "해결" || d.status === "resolved" || d.status === "COMPLETED"
   ).length;
 
   const columns: Column<Dispute>[] = [
