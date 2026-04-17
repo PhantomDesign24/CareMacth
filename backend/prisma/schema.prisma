@@ -824,7 +824,7 @@ model PlatformConfig {
   referralPoints        Int    @default(10000) // 추천인 포인트
   noShowPenaltyThreshold Int   @default(3)     // 노쇼 패널티 임계값
   badgeThreshold        Int    @default(10)    // 우수 간병사 뱃지 매칭 횟수
-  associationFeeDefault Int    @default(30000) // 협회비 기본 금액(원)
+  associationFeeDefault Int    @default(120000) // 협회비 기본 금액(원) - 일률 12만원
   cancellationFee       Int    @default(0)     // 기본 취소 수수료(원) - 향후 확장
 
   updatedAt             DateTime @updatedAt

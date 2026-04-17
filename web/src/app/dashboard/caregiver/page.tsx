@@ -6,7 +6,6 @@ import Link from "next/link";
 import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, reportAPI } from "@/lib/api";
 import { formatDate, formatContractStatus, formatCareType, formatLocation, formatPenaltyType } from "@/lib/format";
 import { showToast } from "@/components/Toast";
-import ScheduleCalendar from "@/components/ScheduleCalendar";
 
 interface Earnings {
   thisMonth: number;
@@ -20,11 +19,31 @@ interface ActivityHistory {
   patientName: string;
   startDate: string;
   endDate: string;
+  startDateRaw?: string;  // ISO 원본 (date 비교용)
+  endDateRaw?: string;
   status: string;
   contractStatus: string;
   careType: string;
   location: string;
   earnings: number;
+  hasTodayRecord?: boolean; // 오늘 간병일지 작성 여부
+}
+
+// 로컬 날짜 YYYY-MM-DD
+function localYMD(d: Date | string): string {
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+// 오늘 일지 작성 필요 여부: ACTIVE/EXTENDED + 오늘이 시작~종료일 안 + hasTodayRecord=false
+function needsJournalToday(a: ActivityHistory): boolean {
+  if (a.contractStatus !== 'ACTIVE' && a.contractStatus !== 'EXTENDED') return false;
+  const today = localYMD(new Date());
+  const startStr = a.startDateRaw ? localYMD(a.startDateRaw) : '';
+  const endStr = a.endDateRaw ? localYMD(a.endDateRaw) : '';
+  if (startStr && today < startStr) return false;
+  if (endStr && today > endStr) return false;
+  return !a.hasTodayRecord;
 }
 
 interface Penalty {
@@ -195,17 +214,29 @@ function CaregiverDashboard() {
       // 활동 이력 (계약 기반)
       const activityData = activityRes.data?.data || activityRes.data || {};
       const contracts = activityData.contracts || [];
-      setActivityHistory(contracts.map((c: any) => ({
-        id: c.id,
-        patientName: c.careRequest?.patient?.name || '-',
-        startDate: formatDate(c.startDate),
-        endDate: formatDate(c.endDate),
-        status: formatContractStatus(c.status),
-        contractStatus: c.status || '',
-        careType: formatCareType(c.careRequest?.careType || ''),
-        location: formatLocation(c.careRequest?.location || ''),
-        earnings: c.totalAmount || 0,
-      })));
+      const todayYMD = localYMD(new Date());
+      setActivityHistory(contracts.map((c: any) => {
+        // 오늘 간병일지 작성 여부: careRecords 중 date가 오늘인 것
+        const records = Array.isArray(c.careRecords) ? c.careRecords : [];
+        const hasTodayRecord = records.some((r: any) => {
+          if (!r.date) return false;
+          return localYMD(r.date) === todayYMD;
+        });
+        return {
+          id: c.id,
+          patientName: c.careRequest?.patient?.name || '-',
+          startDate: formatDate(c.startDate),
+          endDate: formatDate(c.endDate),
+          startDateRaw: c.startDate,
+          endDateRaw: c.endDate,
+          status: formatContractStatus(c.status),
+          contractStatus: c.status || '',
+          careType: formatCareType(c.careRequest?.careType || ''),
+          location: formatLocation(c.careRequest?.location || ''),
+          earnings: c.totalAmount || 0,
+          hasTodayRecord,
+        };
+      }));
 
       const penaltyData = penaltiesRes.data?.data || penaltiesRes.data || {};
       const penaltyList = penaltyData.penalties || [];
@@ -554,20 +585,27 @@ function CaregiverDashboard() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-100 mb-6 overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => handleTabChange(tab.key)}
-              className={`flex-1 min-w-[80px] px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
-                activeTab === tab.key
-                  ? "bg-primary-500 text-white shadow-sm"
-                  : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {tabs.map((tab) => {
+            // 간병일지 탭: 오늘 미작성 계약이 1건이라도 있으면 빨간 점
+            const showJournalAlert = tab.key === 'journal' && activityHistory.some(needsJournalToday);
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => handleTabChange(tab.key)}
+                className={`relative flex-1 min-w-[80px] px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                  activeTab === tab.key
+                    ? "bg-primary-500 text-white shadow-sm"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {tab.label}
+                {showJournalAlert && (
+                  <span className="absolute top-1.5 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Tab content */}
@@ -827,11 +865,6 @@ function CaregiverDashboard() {
                 <h3 className="text-lg font-bold text-gray-900 mb-2">간병일지 작성</h3>
                 <p className="text-sm text-gray-500">진행 중인 간병 건을 선택해 일지를 작성하세요.</p>
               </div>
-              {/* 월간 스케줄 달력 */}
-              <ScheduleCalendar contracts={activityHistory} />
-              <div className="p-6 pb-2">
-                <h4 className="text-sm font-bold text-gray-900">진행 중인 간병</h4>
-              </div>
               {activityHistory.filter((a) => a.contractStatus === 'ACTIVE' || a.contractStatus === 'EXTENDED').length === 0 && (
                 <div className="p-12 text-center text-gray-400">
                   진행 중인 간병이 없습니다.
@@ -839,32 +872,41 @@ function CaregiverDashboard() {
               )}
               {activityHistory
                 .filter((a) => a.contractStatus === 'ACTIVE' || a.contractStatus === 'EXTENDED')
-                .map((a) => (
-                  <Link
-                    key={a.id}
-                    href={`/dashboard/caregiver/journal/${a.id}`}
-                    className="block p-6 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold text-gray-900 truncate">
-                            {a.patientName} 환자
-                          </h4>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
-                            진행 중
-                          </span>
+                .map((a) => {
+                  const missingToday = needsJournalToday(a);
+                  return (
+                    <Link
+                      key={a.id}
+                      href={`/dashboard/caregiver/journal/${a.id}`}
+                      className="block p-6 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <h4 className="font-semibold text-gray-900 truncate">
+                              {a.patientName} 환자
+                            </h4>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                              진행 중
+                            </span>
+                            {missingToday && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 animate-pulse">
+                                <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                                오늘 일지 미작성
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {a.careType} · {a.location} · {a.startDate} ~ {a.endDate}
+                          </div>
                         </div>
-                        <div className="text-sm text-gray-500">
-                          {a.careType} · {a.location} · {a.startDate} ~ {a.endDate}
+                        <div className="inline-flex items-center gap-1 text-sm font-medium text-orange-600 shrink-0">
+                          📝 일지 작성 →
                         </div>
                       </div>
-                      <div className="inline-flex items-center gap-1 text-sm font-medium text-orange-600 shrink-0">
-                        📝 일지 작성 →
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
             </div>
           )}
 

@@ -1272,7 +1272,7 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
         referralPoints: referralPoints ?? 10000,
         noShowPenaltyThreshold: noShowPenaltyThreshold ?? 3,
         badgeThreshold: badgeThreshold ?? 10,
-        associationFeeDefault: associationFeeDefault ?? 30000,
+        associationFeeDefault: associationFeeDefault ?? 120000,
         cancellationFee: cancellationFee ?? 0,
       },
     });

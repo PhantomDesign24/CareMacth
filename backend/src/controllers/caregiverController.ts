@@ -331,6 +331,11 @@ export const getActivity = async (req: AuthRequest, res: Response, next: NextFun
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
 
+    // 오늘(KST) 간병일지 작성 여부 확인을 위해 오늘 날짜 범위 계산
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(todayStart.getTime() + 86400000);
+
     const [contracts, totalContracts] = await Promise.all([
       prisma.contract.findMany({
         where: { caregiverId: caregiver.id },
@@ -348,6 +353,12 @@ export const getActivity = async (req: AuthRequest, res: Response, next: NextFun
                 select: { name: true },
               },
             },
+          },
+          // 오늘 날짜의 간병기록만 include (프론트가 hasTodayRecord 판별용)
+          careRecords: {
+            where: { date: { gte: todayStart, lt: tomorrow } },
+            select: { id: true, date: true },
+            take: 1,
           },
         },
         orderBy: { createdAt: 'desc' },
