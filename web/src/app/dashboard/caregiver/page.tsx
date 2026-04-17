@@ -66,7 +66,7 @@ type Status = "working" | "available" | "immediately";
 
 export default function CaregiverDashboard() {
   const [activeTab, setActiveTab] = useState<
-    "earnings" | "activity" | "penalties" | "requests" | "reviews" | "referral" | "settings"
+    "earnings" | "activity" | "applications" | "penalties" | "requests" | "reviews" | "referral" | "settings"
   >("earnings");
 
   // 리뷰 + 신고
@@ -136,6 +136,7 @@ export default function CaregiverDashboard() {
   const [activityHistory, setActivityHistory] = useState<ActivityHistory[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
   const [openRequests, setOpenRequests] = useState<OpenRequest[]>([]);
+  const [myApplications, setMyApplications] = useState<any[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -150,11 +151,12 @@ export default function CaregiverDashboard() {
         caregiverAPI.getMyApplications().catch(() => ({ data: { data: [] } })),
       ]);
       // 내가 이미 지원한 요청 ID 목록 (PENDING/ACCEPTED 상태만)
-      const myApps: { careRequestId: string; status: string }[] = applicationsRes.data?.data || [];
+      const myApps: any[] = applicationsRes.data?.data || [];
+      setMyApplications(myApps);
       const activeAppIds = new Set(
         myApps
-          .filter((a) => a.status === 'PENDING' || a.status === 'ACCEPTED')
-          .map((a) => a.careRequestId)
+          .filter((a: any) => a.status === 'PENDING' || a.status === 'ACCEPTED')
+          .map((a: any) => a.careRequestId)
       );
       // API 응답 파싱: { success, data: { ... } }
       const profile = summaryRes.data?.data || summaryRes.data || {};
@@ -380,6 +382,7 @@ export default function CaregiverDashboard() {
   const tabs = [
     { key: "earnings" as const, label: "수익" },
     { key: "requests" as const, label: "공고 확인" },
+    { key: "applications" as const, label: "내 지원" },
     { key: "activity" as const, label: "활동 이력" },
     { key: "reviews" as const, label: "받은 리뷰" },
     { key: "penalties" as const, label: "패널티" },
@@ -689,6 +692,84 @@ export default function CaregiverDashboard() {
                   현재 매칭 가능한 공고가 없습니다.
                 </div>
               )}
+            </div>
+          )}
+
+          {/* My applications (내 지원) */}
+          {activeTab === "applications" && (
+            <div className="divide-y divide-gray-100">
+              <div className="p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-2">내 지원 내역</h3>
+                <p className="text-sm text-gray-500">지원한 간병 요청과 처리 상태입니다.</p>
+              </div>
+              {myApplications.length === 0 && (
+                <div className="p-12 text-center text-gray-400">
+                  지원한 공고가 없습니다.
+                </div>
+              )}
+              {myApplications.map((app) => {
+                const status = app.status;
+                const cr = app.careRequest || {};
+                const patient = cr.patient || {};
+                let statusColor = "bg-gray-100 text-gray-600";
+                let statusLabel = "대기";
+                if (status === 'PENDING') { statusColor = "bg-orange-100 text-orange-700"; statusLabel = "대기 중"; }
+                else if (status === 'ACCEPTED') { statusColor = "bg-green-100 text-green-700"; statusLabel = "수락됨"; }
+                else if (status === 'REJECTED') { statusColor = "bg-gray-100 text-gray-500"; statusLabel = "미선택"; }
+                else if (status === 'CANCELLED') { statusColor = "bg-gray-100 text-gray-500"; statusLabel = "취소됨"; }
+                return (
+                  <div key={app.id} className="p-6">
+                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${statusColor}`}>
+                            {statusLabel}
+                          </span>
+                          {app.isAccepted === false && app.proposedRate ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
+                              역제안 {app.proposedRate.toLocaleString()}원
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-600">
+                              금액 수락 지원
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="font-semibold text-gray-900">
+                          {patient.name || '-'} 환자
+                        </h4>
+                        <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-500">
+                          <span>간병 유형: {cr.careType === 'INDIVIDUAL' ? '1:1' : cr.careType === 'FAMILY' ? '가족' : '-'}</span>
+                          <span>장소: {cr.location === 'HOSPITAL' ? '병원' : '자택'}{cr.hospitalName ? ` · ${cr.hospitalName}` : ''}</span>
+                          <span>시작일: {cr.startDate ? formatDate(cr.startDate) : '-'}</span>
+                          {cr.durationDays && <span>기간: {cr.durationDays}일</span>}
+                        </div>
+                        {app.message && (
+                          <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-2 py-1.5">
+                            내 메시지: {app.message}
+                          </p>
+                        )}
+                        <div className="text-xs text-gray-400">
+                          지원일: {formatDate(app.createdAt)}
+                        </div>
+                      </div>
+                      <div className="flex items-center md:items-end gap-3 shrink-0">
+                        <div className="text-right">
+                          <div className="text-xs text-gray-400">보호자 제시 일당</div>
+                          <div className="text-base font-bold text-gray-900">
+                            {cr.dailyRate ? `${cr.dailyRate.toLocaleString()}원` : '-'}
+                          </div>
+                          {app.proposedRate && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              내 제안: {app.proposedRate.toLocaleString()}원
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
