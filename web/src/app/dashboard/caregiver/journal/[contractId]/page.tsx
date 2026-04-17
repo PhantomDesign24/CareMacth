@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { Suspense, useState, useEffect, useCallback } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { careRecordAPI, contractAPI } from "@/lib/api";
 import { showToast } from "@/components/Toast";
 import { FiClock, FiLogOut, FiLogIn, FiSave, FiArrowLeft, FiDownload } from "react-icons/fi";
@@ -32,18 +32,28 @@ function localDateStrFromToday(): string {
   return localDateStr(new Date());
 }
 
-export default function JournalPage() {
+export default function JournalPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <JournalPage />
+    </Suspense>
+  );
+}
+
+function JournalPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const contractId = params.contractId as string;
+  const dateFromQuery = searchParams.get("date");
 
   const [contract, setContract] = useState<any>(null);
   const [today, setToday] = useState<CareRecord | null>(null);
   const [history, setHistory] = useState<CareRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  // 선택된 일자 (기본: 오늘)
-  const [selectedDate, setSelectedDate] = useState<string>(() => localDateStrFromToday());
+  // 선택된 일자 (쿼리스트링 ?date= 우선, 없으면 오늘)
+  const [selectedDate, setSelectedDate] = useState<string>(() => dateFromQuery || localDateStrFromToday());
   // 이 계약 한정 법인명
   const [contractCorporateName, setContractCorporateName] = useState<string>("");
   const [form, setForm] = useState({
