@@ -120,6 +120,12 @@ export default function CaregiverDashboard() {
   const [error, setError] = useState("");
   const [applyingId, setApplyingId] = useState<string | null>(null);
 
+  // Proposal modal state (역제안)
+  const [proposalTarget, setProposalTarget] = useState<OpenRequest | null>(null);
+  const [proposedRate, setProposedRate] = useState("");
+  const [proposalMessage, setProposalMessage] = useState("");
+  const [submittingProposal, setSubmittingProposal] = useState(false);
+
   // Cancel contract modal state
   const [cancelContractId, setCancelContractId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
@@ -250,10 +256,11 @@ export default function CaregiverDashboard() {
     }
   };
 
+  // 제시 금액 수락하고 지원
   const handleApply = async (requestId: string) => {
     setApplyingId(requestId);
     try {
-      await caregiverAPI.apply(requestId);
+      await caregiverAPI.applyWithProposal(requestId, { isAccepted: true });
       const target = openRequests.find((r) => r.id === requestId);
       showToast(`${target?.patientName || '환자'}님 간병 요청에 지원 완료. 보호자 확인을 기다려주세요.`, "success");
       setOpenRequests((prev) => prev.filter((r) => r.id !== requestId));
@@ -263,6 +270,39 @@ export default function CaregiverDashboard() {
       console.error('지원 실패:', err?.response?.data || err);
     } finally {
       setApplyingId(null);
+    }
+  };
+
+  // 역제안 모달 열기
+  const openProposalModal = (req: OpenRequest) => {
+    setProposalTarget(req);
+    setProposedRate(req.dailyRate ? String(req.dailyRate) : "");
+    setProposalMessage("");
+  };
+
+  // 역제안 제출
+  const handleSubmitProposal = async () => {
+    if (!proposalTarget) return;
+    const rate = parseInt(proposedRate);
+    if (!rate || rate <= 0) {
+      showToast("제안 금액을 입력해주세요.", "error");
+      return;
+    }
+    setSubmittingProposal(true);
+    try {
+      await caregiverAPI.applyWithProposal(proposalTarget.id, {
+        isAccepted: false,
+        proposedRate: rate,
+        message: proposalMessage,
+      });
+      showToast(`${proposalTarget.patientName}님께 ${rate.toLocaleString()}원 역제안 전송 완료`, "success");
+      setOpenRequests((prev) => prev.filter((r) => r.id !== proposalTarget.id));
+      setProposalTarget(null);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || "역제안 전송 실패";
+      showToast(msg, "error");
+    } finally {
+      setSubmittingProposal(false);
     }
   };
 
@@ -610,14 +650,23 @@ export default function CaregiverDashboard() {
                           총 {req.estimatedEarnings.toLocaleString()}원
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="btn-primary text-sm px-5 py-2.5 shrink-0"
-                        disabled={applyingId === req.id}
-                        onClick={() => handleApply(req.id)}
-                      >
-                        {applyingId === req.id ? "지원 중..." : "지원하기"}
-                      </button>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          type="button"
+                          className="btn-primary text-sm px-4 py-2.5 shrink-0"
+                          disabled={applyingId === req.id}
+                          onClick={() => handleApply(req.id)}
+                        >
+                          {applyingId === req.id ? "지원 중..." : "수락하고 지원"}
+                        </button>
+                        <button
+                          type="button"
+                          className="text-sm px-4 py-2.5 border border-orange-300 text-orange-600 rounded-xl hover:bg-orange-50"
+                          onClick={() => openProposalModal(req)}
+                        >
+                          역제안
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -916,6 +965,80 @@ export default function CaregiverDashboard() {
               <button type="button" onClick={() => { setDeleteModalOpen(false); setDeletePassword(""); setDeleteReason(""); setDeleteConfirmText(""); setDeleteError(""); }} disabled={deleteLoading} className="btn-secondary flex-1">취소</button>
               <button type="button" onClick={handleDeleteAccount} disabled={deleteLoading || !deletePassword || deleteConfirmText !== "탈퇴합니다"} className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-gray-300 text-white font-medium rounded-xl transition-colors">
                 {deleteLoading ? "처리 중..." : "탈퇴 확정"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 역제안 모달 */}
+      {proposalTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-1">역제안 하기</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {proposalTarget.patientName}님 간병 요청에 다른 일당을 제안합니다.
+            </p>
+            <div className="space-y-3">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">보호자 제시 일당</span>
+                  <span className="font-semibold text-gray-900">
+                    {proposalTarget.dailyRate?.toLocaleString() || 0}원
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  제안 일당 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  value={proposedRate}
+                  onChange={(e) => setProposedRate(e.target.value)}
+                  placeholder="예: 180000"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                />
+                {proposedRate && parseInt(proposedRate) > (proposalTarget.dailyRate || 0) && (
+                  <p className="text-xs text-green-600 mt-1">
+                    +{(parseInt(proposedRate) - (proposalTarget.dailyRate || 0)).toLocaleString()}원 인상 제안
+                  </p>
+                )}
+                {proposedRate && parseInt(proposedRate) < (proposalTarget.dailyRate || 0) && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    -{((proposalTarget.dailyRate || 0) - parseInt(proposedRate)).toLocaleString()}원 할인 제안
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  메시지 (선택)
+                </label>
+                <textarea
+                  value={proposalMessage}
+                  onChange={(e) => setProposalMessage(e.target.value)}
+                  placeholder="보호자에게 전달할 메시지"
+                  rows={3}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400 resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setProposalTarget(null)}
+                disabled={submittingProposal}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitProposal}
+                disabled={submittingProposal || !proposedRate || parseInt(proposedRate) <= 0}
+                className="flex-1 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 disabled:opacity-50"
+              >
+                {submittingProposal ? "전송 중..." : "역제안 전송"}
               </button>
             </div>
           </div>
