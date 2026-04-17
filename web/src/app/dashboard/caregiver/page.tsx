@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, reportAPI } from "@/lib/api";
 import { formatDate, formatContractStatus, formatCareType, formatLocation, formatPenaltyType } from "@/lib/format";
+import { showToast } from "@/components/Toast";
 
 interface Earnings {
   thisMonth: number;
@@ -35,14 +36,24 @@ interface Penalty {
 
 interface OpenRequest {
   id: string;
+  patientName: string;
   patientAge: number;
   patientGender: string;
   careType: string;
   location: string;
+  hospitalName: string;
+  address: string;
+  region: string;
   startDate: string;
   duration: string;
+  dailyRate: number;
   estimatedEarnings: number;
   urgency: string;
+  mobilityStatus: string;
+  hasDementia: boolean;
+  hasInfection: boolean;
+  diagnosis: string;
+  specialRequirements: string;
 }
 
 interface CaregiverSummary {
@@ -174,17 +185,42 @@ export default function CaregiverDashboard() {
 
       const reqData = requestsRes.data?.data || requestsRes.data || {};
       const reqList = reqData.careRequests || [];
-      setOpenRequests(reqList.map((r: any) => ({
-        id: r.id,
-        patientAge: 0,
-        patientGender: r.patient?.gender === 'F' ? '여' : '남',
-        careType: r.careType === 'INDIVIDUAL' ? '1:1' : '가족',
-        location: r.location === 'HOSPITAL' ? '병원' : '자택',
-        startDate: formatDate(r.startDate),
-        duration: r.durationDays ? `${r.durationDays}일` : '-',
-        estimatedEarnings: (r.dailyRate || 0) * (r.durationDays || 30),
-        urgency: '일반',
-      })));
+      setOpenRequests(reqList.map((r: any) => {
+        // 생년월일로 나이 계산
+        let age = 0;
+        if (r.patient?.birthDate) {
+          const b = new Date(r.patient.birthDate);
+          const now = new Date();
+          age = now.getFullYear() - b.getFullYear();
+          const m = now.getMonth() - b.getMonth();
+          if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+        }
+        // 긴급 판단: 시작일이 3일 이내
+        const daysUntilStart = r.startDate
+          ? Math.ceil((new Date(r.startDate).getTime() - Date.now()) / 86400000)
+          : 999;
+        return {
+          id: r.id,
+          patientName: r.patient?.name || '-',
+          patientAge: age,
+          patientGender: r.patient?.gender === 'F' ? '여' : '남',
+          careType: r.careType === 'INDIVIDUAL' ? '1:1' : '가족',
+          location: r.location === 'HOSPITAL' ? '병원' : '자택',
+          hospitalName: r.hospitalName || '',
+          address: r.address || '',
+          region: r.region || '',
+          startDate: formatDate(r.startDate),
+          duration: r.durationDays ? `${r.durationDays}일` : '-',
+          dailyRate: r.dailyRate || 0,
+          estimatedEarnings: (r.dailyRate || 0) * (r.durationDays || 30),
+          urgency: daysUntilStart <= 3 ? '급구' : '일반',
+          mobilityStatus: r.patient?.mobilityStatus || '',
+          hasDementia: !!r.patient?.hasDementia,
+          hasInfection: !!r.patient?.hasInfection,
+          diagnosis: r.patient?.diagnosis || '',
+          specialRequirements: r.specialRequirements || '',
+        };
+      }));
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "데이터를 불러오는 중 오류가 발생했습니다.";
@@ -218,11 +254,13 @@ export default function CaregiverDashboard() {
     setApplyingId(requestId);
     try {
       await caregiverAPI.apply(requestId);
-      alert(`${requestId}에 지원이 완료되었습니다.`);
-      // Remove from open requests list after successful application
+      const target = openRequests.find((r) => r.id === requestId);
+      showToast(`${target?.patientName || '환자'}님 간병 요청에 지원 완료. 보호자 확인을 기다려주세요.`, "success");
       setOpenRequests((prev) => prev.filter((r) => r.id !== requestId));
-    } catch {
-      alert("지원 중 오류가 발생했습니다. 다시 시도해 주세요.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "지원 중 오류가 발생했습니다.";
+      showToast(msg, "error");
+      console.error('지원 실패:', err?.response?.data || err);
     } finally {
       setApplyingId(null);
     }
@@ -501,32 +539,80 @@ export default function CaregiverDashboard() {
               </div>
               {openRequests.map((req) => (
                 <div key={req.id} className="p-6">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-xs text-gray-400">{req.id}</span>
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div className="flex-1 space-y-2 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-semibold text-gray-900">
+                          {req.patientName} 환자
+                        </h4>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-600">
+                          {req.careType}
+                        </span>
                         {req.urgency === "급구" && (
-                          <span className="badge-danger">급구</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-600">급구</span>
+                        )}
+                        {req.hasInfection && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">감염</span>
+                        )}
+                        {req.hasDementia && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">치매</span>
                         )}
                       </div>
-                      <h4 className="font-semibold text-gray-900">{req.careType}</h4>
-                      <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-500">
-                        <span>환자: {req.patientAge}세 {req.patientGender}</span>
-                        <span>장소: {req.location}</span>
-                        <span>시작일: {req.startDate}</span>
-                        <span>기간: {req.duration}</span>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                        <div>
+                          <span className="text-gray-400 text-xs">환자</span>
+                          <p className="text-gray-700 font-medium">{req.patientAge}세 {req.patientGender}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 text-xs">거동 상태</span>
+                          <p className="text-gray-700 font-medium">
+                            {req.mobilityStatus === "DEPENDENT" ? "완전의존" : req.mobilityStatus === "PARTIAL" ? "부분도움" : "독립보행"}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 text-xs">장소</span>
+                          <p className="text-gray-700 font-medium truncate">
+                            {req.location}{req.hospitalName ? ` · ${req.hospitalName}` : ''}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 text-xs">지역</span>
+                          <p className="text-gray-700 font-medium">{req.region || '-'}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 text-xs">시작일</span>
+                          <p className="text-gray-700 font-medium">{req.startDate}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 text-xs">기간</span>
+                          <p className="text-gray-700 font-medium">{req.duration}</p>
+                        </div>
+                        {req.diagnosis && (
+                          <div className="col-span-2">
+                            <span className="text-gray-400 text-xs">진단명</span>
+                            <p className="text-gray-700 font-medium truncate">{req.diagnosis}</p>
+                          </div>
+                        )}
                       </div>
+                      {req.specialRequirements && (
+                        <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-2 py-1.5 line-clamp-2">
+                          요청사항: {req.specialRequirements}
+                        </p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-4 shrink-0">
-                      <div className="text-right">
-                        <div className="text-xs text-gray-400">예상 수익</div>
-                        <div className="text-lg font-bold text-primary-600">
-                          {req.estimatedEarnings.toLocaleString()}원
+                    <div className="flex md:flex-col items-center md:items-stretch gap-3 shrink-0 md:w-44">
+                      <div className="flex-1 md:flex-none bg-orange-50 rounded-xl px-4 py-3 text-center">
+                        <div className="text-xs text-orange-600">일당</div>
+                        <div className="text-base font-bold text-orange-600">
+                          {req.dailyRate ? `${req.dailyRate.toLocaleString()}원` : "협의"}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          총 {req.estimatedEarnings.toLocaleString()}원
                         </div>
                       </div>
                       <button
                         type="button"
-                        className="btn-primary text-sm px-5 py-2.5"
+                        className="btn-primary text-sm px-5 py-2.5 shrink-0"
                         disabled={applyingId === req.id}
                         onClick={() => handleApply(req.id)}
                       >
