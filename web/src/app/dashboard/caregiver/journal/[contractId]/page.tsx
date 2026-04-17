@@ -182,8 +182,8 @@ export default function JournalPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 pt-14 md:pt-0">
-      <div className="bg-white border-b border-gray-200 sticky top-14 md:top-16 z-10">
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="bg-white border-b border-gray-200 sticky top-16 md:top-20 z-10">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
           <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600">
             <FiArrowLeft className="w-5 h-5" />
