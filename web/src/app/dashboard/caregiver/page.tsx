@@ -781,7 +781,6 @@ export default function CaregiverDashboard() {
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
-                        <span className="font-mono text-xs text-gray-400">{activity.id}</span>
                         {statusBadge(activity.status)}
                       </div>
                       <h4 className="font-semibold text-gray-900">
@@ -800,17 +799,25 @@ export default function CaregiverDashboard() {
                           {activity.earnings.toLocaleString()}원
                         </div>
                       </div>
-                      {activity.contractStatus === 'ACTIVE' && (
-                        <button
-                          type="button"
-                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                          onClick={() => {
-                            setCancelContractId(activity.id);
-                            setCancelReason("");
-                          }}
-                        >
-                          취소
-                        </button>
+                      {(activity.contractStatus === 'ACTIVE' || activity.contractStatus === 'EXTENDED') && (
+                        <>
+                          <Link
+                            href={`/dashboard/caregiver/journal/${activity.id}`}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors"
+                          >
+                            📝 간병일지
+                          </Link>
+                          <button
+                            type="button"
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                            onClick={() => {
+                              setCancelContractId(activity.id);
+                              setCancelReason("");
+                            }}
+                          >
+                            취소
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>

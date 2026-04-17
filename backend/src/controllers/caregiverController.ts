@@ -398,10 +398,14 @@ export const getMyApplications = async (req: AuthRequest, res: Response, next: N
 
     const applications = await prisma.careApplication.findMany({
       where: { caregiverId: caregiver.id },
-      select: {
-        careRequestId: true,
-        status: true,
+      include: {
+        careRequest: {
+          include: {
+            patient: true,
+          },
+        },
       },
+      orderBy: { createdAt: 'desc' },
     });
 
     res.json({
