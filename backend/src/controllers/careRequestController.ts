@@ -136,7 +136,11 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
         region: req.body.region || (Array.isArray(req.body.regions) && req.body.regions[0]) || null,
         regions: Array.isArray(req.body.regions) ? req.body.regions : (req.body.region ? [req.body.region] : []),
         startDate: new Date(startDate),
-        endDate: endDate ? new Date(endDate) : null,
+        endDate: endDate
+          ? new Date(endDate)
+          : durationDays
+            ? new Date(new Date(startDate).getTime() + parseInt(durationDays) * 24 * 60 * 60 * 1000)
+            : null,
         durationDays: durationDays ? parseInt(durationDays) : null,
         preferredGender: resolvedPreferredGender,
         preferredNationality,

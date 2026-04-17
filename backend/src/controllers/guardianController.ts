@@ -322,7 +322,8 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
         virtualContract: true, // 플래그: 실제 contract 없음
         careRequestId: cr.id,
         startDate: cr.startDate,
-        endDate: cr.endDate,
+        endDate: cr.endDate
+          || (cr.durationDays ? new Date(new Date(cr.startDate).getTime() + cr.durationDays * 24 * 60 * 60 * 1000) : null),
         dailyRate: cr.dailyRate || 0,
         totalAmount: (cr.dailyRate || 0) * (cr.durationDays || 1),
         status: cr.status, // CareRequest 상태 그대로 (OPEN/MATCHING/MATCHED/CANCELLED)

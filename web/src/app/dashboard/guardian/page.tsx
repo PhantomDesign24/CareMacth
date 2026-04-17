@@ -741,8 +741,11 @@ function GuardianDashboard() {
                     <div className="flex flex-col items-end gap-2 shrink-0">
                       <div className="text-right">
                         <div className="text-lg font-bold text-gray-900">
-                          {care.amount.toLocaleString()}원
+                          {care.dailyRate > 0 ? `${care.dailyRate.toLocaleString()}원/일` : `${care.amount.toLocaleString()}원`}
                         </div>
+                        {care.dailyRate > 0 && care.amount > care.dailyRate && (
+                          <div className="text-xs text-gray-400">총 {care.amount.toLocaleString()}원</div>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {/* 결제 대기 중이면 결제 버튼 최우선 표시 */}
