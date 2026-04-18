@@ -218,3 +218,33 @@ export const getMyReceivedReviews = async (req: AuthRequest, res: Response, next
     next(error);
   }
 };
+
+// GET /reviews/written - 보호자가 작성한 리뷰 목록
+export const getMyWrittenReviews = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
+    if (!guardian) {
+      return res.json({ success: true, data: { reviews: [] } });
+    }
+
+    const reviews = await prisma.review.findMany({
+      where: { guardianId: guardian.id },
+      include: {
+        caregiver: { include: { user: { select: { name: true, profileImage: true } } } },
+        contract: {
+          select: {
+            id: true,
+            startDate: true,
+            endDate: true,
+            careRequest: { select: { patient: { select: { name: true } } } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({ success: true, data: { reviews } });
+  } catch (error) {
+    next(error);
+  }
+};

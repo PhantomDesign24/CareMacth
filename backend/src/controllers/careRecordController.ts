@@ -271,7 +271,7 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
       },
     });
 
-    const logData = {
+    const logData: any = {
       // careHours는 checkOut 시점에 자동 계산되므로 여기선 건드리지 않음
       careHoursManual:
         careHoursManual !== undefined && careHoursManual !== null && careHoursManual !== ''
@@ -284,8 +284,11 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
       otherCare: !!otherCare,
       otherCareNote: otherCare ? (otherCareNote || null) : null,
       notes: notes || null,
-      photos: photos || [],
     };
+    // photos는 명시적으로 전달된 경우에만 업데이트 — 업로드된 사진이 덮어써지는 것 방지
+    if (photos !== undefined) {
+      logData.photos = Array.isArray(photos) ? photos : [];
+    }
 
     if (record) {
       record = await prisma.careRecord.update({
@@ -329,21 +332,19 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
-// POST /photos - 간병 기록 사진 업로드
+// POST /photos - 간병 기록 사진 업로드 (일지 없으면 자동 생성)
 export const uploadPhotos = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { contractId, recordId } = req.body;
+    const { contractId, recordId, date } = req.body;
     const files = req.files as Express.Multer.File[];
 
     if (!files || files.length === 0) {
       throw new AppError('업로드할 사진이 없습니다.', 400);
     }
-
-    if (!contractId || !recordId) {
-      throw new AppError('계약 ID와 기록 ID가 필요합니다.', 400);
+    if (!contractId) {
+      throw new AppError('계약 ID가 필요합니다.', 400);
     }
 
-    // 간병인 본인 계약 확인
     const caregiver = await prisma.caregiver.findUnique({
       where: { userId: req.user!.id },
     });
@@ -351,25 +352,54 @@ export const uploadPhotos = async (req: AuthRequest, res: Response, next: NextFu
       throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
     }
 
-    const record = await prisma.careRecord.findFirst({
-      where: { id: recordId, contractId, caregiverId: caregiver.id },
+    // 본인 계약 확인
+    const contract = await prisma.contract.findFirst({
+      where: { id: contractId, caregiverId: caregiver.id },
     });
-    if (!record) {
-      throw new AppError('간병 기록을 찾을 수 없습니다.', 404);
+    if (!contract) {
+      throw new AppError('계약을 찾을 수 없거나 권한이 없습니다.', 404);
     }
 
-    // 파일 경로를 photos 배열에 추가
+    // 대상 기록 찾기/생성 — recordId 있으면 그걸 사용, 없으면 해당 날짜(기본: 오늘)의 기록을 findOrCreate
+    let record;
+    if (recordId) {
+      record = await prisma.careRecord.findFirst({
+        where: { id: recordId, contractId, caregiverId: caregiver.id },
+      });
+      if (!record) throw new AppError('간병 기록을 찾을 수 없습니다.', 404);
+    } else {
+      const targetDate = date ? new Date(date) : new Date();
+      const dayStart = new Date(targetDate); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(targetDate); dayEnd.setHours(23, 59, 59, 999);
+      record = await prisma.careRecord.findFirst({
+        where: {
+          contractId,
+          caregiverId: caregiver.id,
+          date: { gte: dayStart, lte: dayEnd },
+        },
+      });
+      if (!record) {
+        record = await prisma.careRecord.create({
+          data: {
+            contractId,
+            caregiverId: caregiver.id,
+            date: dayStart,
+          },
+        });
+      }
+    }
+
     const photoUrls = files.map((f) => `/uploads/${f.filename}`);
     const updatedPhotos = [...record.photos, ...photoUrls];
 
     await prisma.careRecord.update({
-      where: { id: recordId },
+      where: { id: record.id },
       data: { photos: updatedPhotos },
     });
 
     res.json({
       success: true,
-      data: { photos: updatedPhotos },
+      data: { recordId: record.id, photos: updatedPhotos },
     });
   } catch (error) {
     next(error);

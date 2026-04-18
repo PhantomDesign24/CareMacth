@@ -250,6 +250,19 @@ export const adminUnhideReview = async (req: AuthRequest, res: Response, next: N
   }
 };
 
+// POST /admin/reviews/:id/hide - 리뷰 숨김 처리 (단독 엔드포인트)
+export const adminHideReview = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const review = await prisma.review.findUnique({ where: { id } });
+    if (!review) throw new AppError('리뷰를 찾을 수 없습니다.', 404);
+    await prisma.review.update({ where: { id }, data: { isHidden: true } });
+    res.json({ success: true, message: '리뷰가 숨김 처리되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // GET /admin/reviews/hidden - 숨김 처리된 리뷰 목록
 export const adminGetHiddenReviews = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

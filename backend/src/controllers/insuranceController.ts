@@ -116,7 +116,24 @@ export const getMyInsuranceRequests = async (req: AuthRequest, res: Response, ne
       where: { requestedBy: req.user!.id },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ success: true, data: requests });
+    // 거절 사유는 최근 알림에서 추출해 합성
+    const enriched = await Promise.all(requests.map(async (r) => {
+      let rejectReason: string | null = null;
+      if (r.status === 'REJECTED') {
+        const notif = await prisma.notification.findFirst({
+          where: {
+            userId: r.requestedBy,
+            type: 'SYSTEM',
+            data: { path: ['insuranceId'], equals: r.id },
+          } as any,
+          orderBy: { createdAt: 'desc' },
+        });
+        const d = notif?.data as any;
+        rejectReason = d?.rejectReason || null;
+      }
+      return { ...r, rejectReason };
+    }));
+    res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
   }
@@ -146,13 +163,31 @@ export const adminListInsurance = async (req: AuthRequest, res: Response, next: 
   }
 };
 
-// PATCH /admin/:id - 관리자 상태 업데이트
+// PATCH /admin/:id - 관리자 상태 업데이트 (multipart 지원 — 파일 업로드 또는 JSON)
 export const adminUpdateInsurance = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const { status, documentUrl, adminNote } = req.body;
+    let { status, documentUrl, adminNote, rejectReason } = req.body;
+
+    // 프론트 레거시 호환: IN_PROGRESS → PROCESSING
+    if (status === 'IN_PROGRESS') status = 'PROCESSING';
+
+    const validStatuses = ['REQUESTED', 'PROCESSING', 'COMPLETED', 'REJECTED'];
+    if (status && !validStatuses.includes(status)) {
+      throw new AppError(`유효하지 않은 상태: ${status}`, 400);
+    }
+
     const req_ = await prisma.insuranceDocRequest.findUnique({ where: { id } });
     if (!req_) throw new AppError('신청을 찾을 수 없습니다.', 404);
+
+    // 파일 업로드로 서류 등록된 경우 documentUrl 자동 세팅
+    if (req.file) {
+      documentUrl = `/uploads/${req.file.filename}`;
+    }
+
+    if (status === 'REJECTED' && !(rejectReason || adminNote)) {
+      throw new AppError('거절 사유를 입력해주세요.', 400);
+    }
 
     const updated = await prisma.insuranceDocRequest.update({
       where: { id },
@@ -163,17 +198,36 @@ export const adminUpdateInsurance = async (req: AuthRequest, res: Response, next
       },
     });
 
-    // 완료/거절 시 신청자에게 알림
-    if (status === 'COMPLETED' || status === 'REJECTED') {
+    // 상태 변경 시 신청자에게 알림 (REQUESTED 되돌리기는 알림 없음)
+    const docLabel = `보험청구용 ${req_.documentType}`;
+    const reasonText = rejectReason || adminNote || '';
+    const notifMap: Record<string, { title: string; body: string } | null> = {
+      PROCESSING: {
+        title: '보험서류 처리 시작',
+        body: `${req_.patientName} 환자분 ${docLabel} 신청이 접수되어 관리자가 처리 중입니다.`,
+      },
+      COMPLETED: {
+        title: '보험서류 발급 완료',
+        body: `${req_.patientName} 환자분 ${docLabel} 발급이 완료되었습니다. 마이페이지 → 보험서류 탭에서 다운로드하실 수 있습니다.`,
+      },
+      REJECTED: {
+        title: '보험서류 신청 거절',
+        body: `${req_.patientName} 환자분 ${docLabel} 신청이 거절되었습니다. 사유: ${reasonText}`,
+      },
+      REQUESTED: {
+        title: '보험서류 재심사 접수',
+        body: `${req_.patientName} 환자분 ${docLabel} 신청이 관리자에 의해 재심사 대기 상태로 전환되었습니다.`,
+      },
+    };
+    const notif = status ? notifMap[status] : null;
+    if (notif && status !== req_.status) {
       await prisma.notification.create({
         data: {
           userId: req_.requestedBy,
           type: 'SYSTEM',
-          title: status === 'COMPLETED' ? '보험서류 발급 완료' : '보험서류 신청 거절',
-          body: status === 'COMPLETED'
-            ? `${req_.patientName} 환자 ${req_.documentType}이(가) 발급되었습니다.`
-            : `보험서류 신청이 거절되었습니다. ${adminNote || ''}`,
-          data: { insuranceId: id },
+          title: notif.title,
+          body: notif.body,
+          data: { insuranceId: id, documentUrl: updated.documentUrl, rejectReason: reasonText },
         },
       }).catch(() => {});
     }

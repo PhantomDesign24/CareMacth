@@ -65,17 +65,46 @@ router.post('/emergency-rematch/:contractId/revert', adminController.revertEmerg
 // 리뷰 숨김 해제
 router.post('/reviews/:id/unhide', reportController.adminUnhideReview);
 
+// 리뷰 숨김 처리 (재숨김)
+router.post('/reviews/:id/hide', reportController.adminHideReview);
+
 // 숨김 처리된 리뷰 목록
 router.get('/reviews/hidden', reportController.adminGetHiddenReviews);
 
 // 보험서류 신청 관리
 import * as insuranceController from '../controllers/insuranceController';
+import { upload as uploadMiddleware, handleUploadError as handleInsuranceUploadError } from '../middlewares/upload';
 router.get('/insurance', insuranceController.adminListInsurance);
-router.patch('/insurance/:id', insuranceController.adminUpdateInsurance);
+// PATCH: multipart(파일업로드) 또는 JSON 둘 다 허용
+router.patch(
+  '/insurance/:id',
+  uploadMiddleware.single('document'),
+  handleInsuranceUploadError,
+  insuranceController.adminUpdateInsurance,
+);
 
 // 결제/정산 관리
 router.get('/payments', adminController.getPayments);
+router.get('/sidebar-badges', adminController.getSidebarBadges);
+router.get('/additional-fees', adminController.adminListAdditionalFees);
 router.get('/settlements', adminController.getSettlements);
+router.post('/settlements/bulk-pay', adminController.bulkPaySettlements);
+router.post('/settlements/:id/pay', adminController.paySettlement);
+
+// 중간정산
+router.get('/contracts/active-for-settlement', adminController.getActiveContractsForSettlement);
+router.post('/contracts/:contractId/mid-settlement', adminController.createMidSettlement);
+
+// 계약 통합 관리
+router.get('/contracts/:contractId/detail', adminController.getAdminContractDetail);
+router.post('/contracts/:contractId/force-cancel', adminController.forceCancelContract);
+router.post('/contracts/:contractId/force-complete', adminController.forceCompleteContract);
+
+// 환불 요청 관리 (2단계 플로우)
+import * as paymentController from '../controllers/paymentController';
+router.get('/refund-requests', paymentController.getRefundRequests);
+router.post('/payments/:id/refund-approve', paymentController.approveRefundRequest);
+router.post('/payments/:id/refund-reject', paymentController.rejectRefundRequest);
 
 // 플랫폼 설정
 router.get('/platform-config', adminController.getPlatformConfig);

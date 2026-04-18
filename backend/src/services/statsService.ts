@@ -42,10 +42,13 @@ export async function getPatientExportData() {
       guardian: { include: { user: true } },
       careRequests: {
         include: {
-          contract: {
+          contracts: {
+            where: { status: { not: 'CANCELLED' } },
             include: {
               payments: true,
             },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
           },
         },
       },
@@ -55,12 +58,14 @@ export async function getPatientExportData() {
 
   return patients.map((p) => {
     const totalCareCount = p.careRequests.length;
-    const totalCareFee = p.careRequests.reduce((sum, cr) => {
-      return sum + (cr.contract?.totalAmount || 0);
+    const totalCareFee = p.careRequests.reduce((sum, cr: any) => {
+      const c = cr.contracts?.[0];
+      return sum + (c?.totalAmount || 0);
     }, 0);
-    const totalPlatformFee = p.careRequests.reduce((sum, cr) => {
-      if (!cr.contract) return sum;
-      return sum + Math.round(cr.contract.totalAmount * (cr.contract.platformFee / 100));
+    const totalPlatformFee = p.careRequests.reduce((sum, cr: any) => {
+      const c = cr.contracts?.[0];
+      if (!c) return sum;
+      return sum + Math.round(c.totalAmount * (c.platformFee / 100));
     }, 0);
 
     return {

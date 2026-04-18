@@ -77,9 +77,9 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
 
     // 트랜잭션으로 계약 생성 + 상태 업데이트 (race condition 방지)
     const contract = await prisma.$transaction(async (tx) => {
-      // 트랜잭션 내에서 중복 계약 확인
-      const existingContract = await tx.contract.findUnique({
-        where: { careRequestId },
+      // 트랜잭션 내에서 중복 계약 확인 (취소된 계약은 허용 — 재매칭 가능)
+      const existingContract = await tx.contract.findFirst({
+        where: { careRequestId, status: { not: 'CANCELLED' } },
       });
       if (existingContract) {
         throw new AppError('이미 계약이 생성된 간병 요청입니다.', 400);
@@ -443,8 +443,39 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
         });
       }
 
-      // 간병인 정산 생성 (사용한 일수만큼)
-      if (usedDays > 0) {
+      // ── 부분 정산: 기존 미정산 Earning 재조정 (DIRECT 결제는 생성 시 full amount로 기록됨)
+      const existingEarnings = await tx.earning.findMany({
+        where: { contractId: contract.id, isPaid: false },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (existingEarnings.length > 0) {
+        if (usedDays > 0) {
+          // 첫 Earning을 usedAmount로 재조정, 나머지는 정리
+          await tx.earning.update({
+            where: { id: existingEarnings[0].id },
+            data: {
+              amount: usedAmount,
+              platformFee: platformFeeAmount,
+              taxAmount,
+              netAmount: netEarning,
+            },
+          });
+          if (existingEarnings.length > 1) {
+            await tx.earning.deleteMany({
+              where: {
+                contractId: contract.id,
+                isPaid: false,
+                id: { notIn: [existingEarnings[0].id] },
+              },
+            });
+          }
+        } else {
+          // 사용일 0 → 미정산 Earning 전부 제거
+          await tx.earning.deleteMany({
+            where: { contractId: contract.id, isPaid: false },
+          });
+        }
+      } else if (usedDays > 0) {
         await tx.earning.create({
           data: {
             caregiverId: contract.caregiverId,
@@ -457,27 +488,35 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
         });
       }
 
-      // 환불 결제 생성 (환불할 금액이 있는 경우)
-      if (refundAmount > 0) {
-        const originalPayment = await tx.payment.findFirst({
-          where: {
-            contractId: contract.id,
-            status: { in: ['COMPLETED', 'ESCROW'] },
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        if (originalPayment) {
-          await tx.payment.update({
-            where: { id: originalPayment.id },
-            data: {
-              status: 'PARTIAL_REFUND',
+      // ── 자동 환불 규칙: Payment 상태를 정확히 반영 (DIRECT 포함 모든 방법)
+      const originalPayment = await tx.payment.findFirst({
+        where: {
+          contractId: contract.id,
+          status: { in: ['COMPLETED', 'ESCROW'] },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (originalPayment) {
+        let newStatus: 'COMPLETED' | 'PARTIAL_REFUND' | 'REFUNDED' = originalPayment.status as any;
+        if (refundAmount <= 0) {
+          // 사용일수로 전액 소진 → 상태 유지 (COMPLETED)
+          newStatus = originalPayment.status === 'ESCROW' ? 'COMPLETED' : (originalPayment.status as any);
+        } else if (refundAmount >= originalPayment.totalAmount) {
+          newStatus = 'REFUNDED';
+        } else {
+          newStatus = 'PARTIAL_REFUND';
+        }
+        await tx.payment.update({
+          where: { id: originalPayment.id },
+          data: {
+            status: newStatus,
+            ...(refundAmount > 0 && {
               refundedAt: now,
               refundAmount,
               refundReason: reason || '계약 취소에 의한 일할 환불',
-            },
-          });
-        }
+            }),
+          },
+        });
       }
     });
 
@@ -659,7 +698,7 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     const FONT_REGULAR = '/usr/share/fonts/truetype/nanum/NanumGothic.ttf';
     const FONT_BOLD = '/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf';
 
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="contract-${id.slice(0, 8)}.pdf"`);
     doc.pipe(res);
@@ -690,6 +729,21 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     doc.lineWidth(1.5).strokeColor(COLOR_PRIMARY).moveTo(MARGIN, 140).lineTo(PAGE_W - MARGIN, 140).stroke();
 
     let y = 160;
+
+    // 취소된 계약이면 효력 없음 안내 배너
+    if (contract.status === 'CANCELLED') {
+      const bannerH = 40;
+      doc.rect(MARGIN, y, CONTENT_W, bannerH).fillAndStroke('#FEE2E2', '#DC2626');
+      doc.font('KorBold').fontSize(13).fillColor('#B91C1C')
+        .text('※ 본 계약은 취소되어 효력이 없습니다', MARGIN, y + 6, { width: CONTENT_W, align: 'center' });
+      const cancelDate = contract.cancelledAt
+        ? new Date(contract.cancelledAt).toLocaleDateString('ko-KR')
+        : '-';
+      doc.font('Kor').fontSize(9).fillColor('#7F1D1D')
+        .text(`취소일: ${cancelDate}${contract.cancellationReason ? ' · 사유: ' + contract.cancellationReason : ''}`,
+          MARGIN, y + 24, { width: CONTENT_W, align: 'center' });
+      y += bannerH + 12;
+    }
 
     const drawTableRow = (label: string, value: string) => {
       const rowH = 24;
@@ -786,6 +840,21 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     y += 14;
     doc.fontSize(8)
       .text('주관 | 케어매치 주식회사 · 사업자등록번호 173-81-03376', MARGIN, y, { width: CONTENT_W, align: 'center' });
+
+    // 취소된 계약 — 각 페이지 중앙에 대각선 "VOID / 취소됨" 워터마크
+    if (contract.status === 'CANCELLED') {
+      const pages = doc.bufferedPageRange();
+      for (let i = 0; i < pages.count; i++) {
+        doc.switchToPage(pages.start + i);
+        doc.save();
+        doc.translate(PAGE_W / 2, 420);
+        doc.rotate(-30);
+        doc.font('KorBold').fontSize(96).fillColor('#DC2626').opacity(0.12)
+          .text('VOID · 취소됨', -250, -50, { width: 500, align: 'center' });
+        doc.restore();
+        doc.opacity(1);
+      }
+    }
 
     doc.end();
   } catch (error) {

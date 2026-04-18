@@ -21,4 +21,7 @@ router.get('/caregiver/:caregiverId', reviewController.getCaregiverReviews);
 // GET /my - 내가 받은 리뷰 (간병인)
 router.get('/my', reviewController.getMyReceivedReviews);
 
+// GET /written - 내가 작성한 리뷰 (보호자)
+router.get('/written', reviewController.getMyWrittenReviews);
+
 export default router;

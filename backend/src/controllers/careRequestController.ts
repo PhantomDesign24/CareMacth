@@ -3,6 +3,14 @@ import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import {
+  calculateDistance,
+  getDistanceScore,
+  getExperienceScore,
+  getReviewScore,
+  getRehireScore,
+  getCancelPenalty,
+} from '../utils/matchingScores';
 
 // POST / - 간병 요청 생성
 export const createCareRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -188,20 +196,10 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
       }
     } else if (req.user!.role === 'CAREGIVER') {
       whereClause.status = status || 'OPEN';
-
-      // 선택 없으면 선호지역 자동 적용 (간병인만)
-      if (!req.query.regions) {
-        const caregiver = await prisma.caregiver.findUnique({
-          where: { userId: req.user!.id },
-          select: { preferredRegions: true },
-        });
-        if (caregiver && caregiver.preferredRegions.length > 0) {
-          whereClause.OR = [
-            { region: { in: caregiver.preferredRegions } },
-            { regions: { hasSome: caregiver.preferredRegions } },
-          ];
-        }
-      }
+      // 지역 필터는 프론트의 regions 쿼리를 단일 진실원으로 사용 (아래 공통 처리).
+      // 이전엔 regions 쿼리 비어있으면 선호지역을 서버에서 자동 적용했으나,
+      // 프론트가 "전체 지역"을 명시적으로 선택하는 경우와 구분 안 돼서 제거.
+      // 선호지역 초기값은 프론트에서 caregiverAPI.list()로 받아 regionFilter에 세팅함.
     } else if (req.user!.role === 'ADMIN') {
       if (status) {
         whereClause.status = status;
@@ -297,6 +295,22 @@ export const getCareRequestById = async (req: AuthRequest, res: Response, next: 
                 certificates: {
                   where: { verified: true },
                 },
+                reviews: {
+                  where: { isHidden: false },
+                  select: {
+                    id: true,
+                    rating: true,
+                    comment: true,
+                    wouldRehire: true,
+                    createdAt: true,
+                    guardian: { include: { user: { select: { name: true } } } },
+                  },
+                  orderBy: { createdAt: 'desc' },
+                  take: 3,
+                },
+                _count: {
+                  select: { reviews: { where: { isHidden: false } } },
+                },
               },
             },
           },
@@ -306,7 +320,11 @@ export const getCareRequestById = async (req: AuthRequest, res: Response, next: 
           orderBy: { score: 'desc' },
           take: 20,
         },
-        contract: true,
+        contracts: {
+          where: { status: { not: 'CANCELLED' } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     });
 
@@ -322,6 +340,88 @@ export const getCareRequestById = async (req: AuthRequest, res: Response, next: 
       if (!guardian || careRequest.guardianId !== guardian.id) {
         throw new AppError('접근 권한이 없습니다.', 403);
       }
+    }
+
+    // 기존 API 호환: contract(단수) 필드로 활성 계약 1건 제공
+    const anyCr: any = careRequest;
+    anyCr.contract = anyCr.contracts?.[0] || null;
+
+    // 지원자별 매칭 점수 붙이기 (MatchScore는 careRequestId + caregiverId 기준)
+    // MatchScore 레코드 없으면 지원자 정보 기반 즉시 계산 (fallback)
+    const scoresByCaregiver = new Map<string, any>();
+    for (const s of (anyCr.matchScores || [])) {
+      scoresByCaregiver.set(s.caregiverId, s);
+    }
+
+    // fallback 계산에 필요한 지원자들의 caregiver 상세 조회
+    const needsFallback = (anyCr.applications || []).filter(
+      (app: any) => !scoresByCaregiver.has(app.caregiverId)
+    );
+    if (needsFallback.length > 0) {
+      const fallbackCaregivers = await prisma.caregiver.findMany({
+        where: { id: { in: needsFallback.map((a: any) => a.caregiverId) } },
+        select: {
+          id: true,
+          latitude: true,
+          longitude: true,
+          experienceYears: true,
+          specialties: true,
+          avgRating: true,
+          totalMatches: true,
+          rehireRate: true,
+          cancellationRate: true,
+          noShowCount: true,
+          hasBadge: true,
+          workStatus: true,
+        },
+      });
+      const fallbackMap = new Map(fallbackCaregivers.map((c) => [c.id, c]));
+      const patient = anyCr.patient;
+      for (const app of needsFallback) {
+        const cg = fallbackMap.get(app.caregiverId);
+        if (!cg) continue;
+        let distanceScore = 15;
+        if (anyCr.latitude && anyCr.longitude && cg.latitude && cg.longitude) {
+          const dist = calculateDistance(anyCr.latitude, anyCr.longitude, cg.latitude, cg.longitude);
+          distanceScore = getDistanceScore(dist);
+        }
+        const experienceScore = getExperienceScore(
+          cg.experienceYears,
+          cg.specialties,
+          {
+            hasDementia: patient?.hasDementia ?? false,
+            hasInfection: patient?.hasInfection ?? false,
+            mobilityStatus: patient?.mobilityStatus ?? 'INDEPENDENT',
+          }
+        );
+        const reviewScore = getReviewScore(cg.avgRating, cg.totalMatches);
+        const rehireScore = getRehireScore(cg.rehireRate);
+        const cancelPenalty = getCancelPenalty(cg.cancellationRate, cg.noShowCount);
+        const badgeBonus = cg.hasBadge ? 5 : 0;
+        const immediateBonus = cg.workStatus === 'IMMEDIATE' ? 3 : 0;
+        const total = Math.max(0, distanceScore + experienceScore + reviewScore + rehireScore + cancelPenalty + badgeBonus + immediateBonus);
+        scoresByCaregiver.set(app.caregiverId, {
+          caregiverId: cg.id,
+          score: total,
+          distanceScore,
+          experienceScore,
+          reviewScore,
+          rehireScore,
+          cancelPenalty,
+        });
+      }
+    }
+
+    for (const app of (anyCr.applications || [])) {
+      const s = scoresByCaregiver.get(app.caregiverId);
+      app.matchScore = s ? {
+        total: Math.round(s.score * 10) / 10,
+        distance: Math.round(s.distanceScore * 10) / 10,
+        experience: Math.round(s.experienceScore * 10) / 10,
+        review: Math.round(s.reviewScore * 10) / 10,
+        rehire: Math.round(s.rehireScore * 10) / 10,
+        cancelPenalty: Math.round(s.cancelPenalty * 10) / 10,
+      } : null;
     }
 
     res.json({
@@ -479,12 +579,20 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
       throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
     }
 
-    if (req.user!.role !== 'ADMIN' && caregiver.status !== 'APPROVED') {
-      throw new AppError('승인된 간병인만 지원할 수 있습니다.', 403);
-    }
-
-    if (req.user!.role !== 'ADMIN' && caregiver.workStatus === 'WORKING') {
-      throw new AppError('현재 간병 진행 중에는 새로운 지원을 할 수 없습니다.', 400);
+    if (req.user!.role !== 'ADMIN') {
+      if (caregiver.status !== 'APPROVED') {
+        throw new AppError('승인된 간병인만 지원할 수 있습니다.', 403);
+      }
+      // 필수 서류 등록 여부 확인 — 신분증 + 범죄이력 조회서
+      if (!caregiver.identityVerified || !caregiver.idCardImage) {
+        throw new AppError('신분증 등록 및 본인 인증이 완료된 후 지원 가능합니다.', 403);
+      }
+      if (!caregiver.criminalCheckDone || !caregiver.criminalCheckDoc) {
+        throw new AppError('범죄이력 조회서 등록이 완료된 후 지원 가능합니다.', 403);
+      }
+      if (caregiver.workStatus === 'WORKING') {
+        throw new AppError('현재 간병 진행 중에는 새로운 지원을 할 수 없습니다.', 400);
+      }
     }
 
     // 간병 요청 확인
