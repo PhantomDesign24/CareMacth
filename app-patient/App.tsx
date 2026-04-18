@@ -147,7 +147,15 @@ export default function App() {
     registerPushNotifications();
   }, []);
 
+  // iOS 푸시는 Apple Developer Program ($99/년) + APNs Auth Key 있어야 실제 작동
+  // 없이 getDevicePushTokenAsync() 호출하면 에러 → 유료 계정 전까지 iOS 비활성화
+  const PUSH_ENABLED = Platform.OS === 'android';
+
   const registerPushNotifications = async () => {
+    if (!PUSH_ENABLED) {
+      console.log('Push: iOS는 Apple Developer 등록 전까지 비활성화됨');
+      return;
+    }
     if (!Device.isDevice) {
       console.log('Push: 에뮬레이터에서는 지원하지 않습니다.');
       return;
@@ -163,12 +171,10 @@ export default function App() {
         console.log('Push: 알림 권한이 거부되었습니다.');
         return;
       }
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('carematch-default', {
-          name: '케어매치 알림', importance: Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 250, 250, 250], sound: 'default',
-        });
-      }
+      await Notifications.setNotificationChannelAsync('carematch-default', {
+        name: '케어매치 알림', importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250], sound: 'default',
+      });
       // FCM 네이티브 토큰 사용 (Firebase 직접 발송용)
       const tokenData = await Notifications.getDevicePushTokenAsync();
       const fcmToken = tokenData.data;
@@ -182,8 +188,6 @@ export default function App() {
         });
         console.log('Push: 디바이스 토큰 등록 완료');
       } catch (e) { console.log('Push: 디바이스 토큰 등록 실패', e); }
-      // 회원이면 유저에도 연결
-      // 유저 연결은 WebView 로그인 시 onMessage에서 처리
     } catch (e) { console.log('Push setup error:', e); }
   };
 
@@ -335,29 +339,33 @@ export default function App() {
           });
           return;
         }
-        try {
-          const tokenData = await Notifications.getDevicePushTokenAsync();
-          await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: tokenData.data, platform: Platform.OS, userId: data.userId }),
-          });
-          console.log('Push: 유저 FCM 토큰 연결 완료', data.userId);
-        } catch (e) { console.log('Push: 유저 토큰 연결 실패', e); }
+        if (PUSH_ENABLED) {
+          try {
+            const tokenData = await Notifications.getDevicePushTokenAsync();
+            await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: tokenData.data, platform: Platform.OS, userId: data.userId }),
+            });
+            console.log('Push: 유저 FCM 토큰 연결 완료', data.userId);
+          } catch (e) { console.log('Push: 유저 토큰 연결 실패', e); }
+        }
       }
       // 로그아웃 시 FCM 토큰에서 유저 연결 해제 + 유저 정보 초기화
       if (data.type === 'USER_LOGOUT') {
         setUserName('');
         setUserEmail('');
-        try {
-          const tokenData = await Notifications.getDevicePushTokenAsync();
-          await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: tokenData.data, platform: Platform.OS, userId: null }),
-          });
-          console.log('Push: 유저 FCM 토큰 연결 해제 완료');
-        } catch (e) { console.log('Push: 유저 토큰 연결 해제 실패', e); }
+        if (PUSH_ENABLED) {
+          try {
+            const tokenData = await Notifications.getDevicePushTokenAsync();
+            await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: tokenData.data, platform: Platform.OS, userId: null }),
+            });
+            console.log('Push: 유저 FCM 토큰 연결 해제 완료');
+          } catch (e) { console.log('Push: 유저 토큰 연결 해제 실패', e); }
+        }
       }
     } catch {}
   };
