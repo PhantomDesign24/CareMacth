@@ -271,7 +271,7 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
             include: { user: { select: { email: true } }, patients: false },
           });
           const patient = await prisma.patient.findFirst({
-            where: { careRequests: { some: { contract: { id: payment.contractId! } } } },
+            where: { careRequests: { some: { contracts: { some: { id: payment.contractId! } } } } },
           });
           if (guardianWithUser?.user?.email) {
             sendEmail(
@@ -309,7 +309,9 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
-// POST /:id/refund - 환불
+// POST /:id/refund - 환불 요청 (보호자) 또는 즉시 환불 (관리자)
+// 보호자/간병인: 환불 요청만 생성 (PENDING) → 관리자가 approve/reject
+// 관리자: 즉시 환불 실행
 export const refundPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const errors = validationResult(req);
@@ -323,100 +325,330 @@ export const refundPayment = async (req: AuthRequest, res: Response, next: NextF
     const payment = await prisma.payment.findUnique({
       where: { id },
       include: {
-        contract: true,
-        guardian: true,
+        contract: { include: { caregiver: { select: { userId: true } }, guardian: { select: { userId: true } } } },
+        guardian: { include: { user: { select: { name: true } } } },
       },
     });
+    if (!payment) throw new AppError('결제 정보를 찾을 수 없습니다.', 404);
 
-    if (!payment) {
-      throw new AppError('결제 정보를 찾을 수 없습니다.', 404);
-    }
-
-    // 접근 권한 확인
-    if (req.user!.role === 'GUARDIAN') {
-      const guardian = await prisma.guardian.findUnique({
-        where: { userId: req.user!.id },
-      });
+    // 접근 권한
+    const role = req.user!.role;
+    const isAdmin = role === 'ADMIN';
+    if (role === 'GUARDIAN') {
+      const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
       if (!guardian || payment.guardianId !== guardian.id) {
         throw new AppError('접근 권한이 없습니다.', 403);
       }
-    } else if (req.user!.role !== 'ADMIN') {
+    } else if (role === 'CAREGIVER') {
+      // 간병인도 분쟁 상황에서 환불 요청 가능
+      if (payment.contract?.caregiver?.userId !== req.user!.id) {
+        throw new AppError('접근 권한이 없습니다.', 403);
+      }
+    } else if (!isAdmin) {
       throw new AppError('접근 권한이 없습니다.', 403);
     }
 
     if (!['COMPLETED', 'ESCROW'].includes(payment.status)) {
       throw new AppError('환불할 수 없는 결제 상태입니다.', 400);
     }
+    if (payment.refundRequestStatus === 'PENDING') {
+      throw new AppError('이미 환불 요청이 접수되어 관리자 검토 중입니다.', 400);
+    }
 
-    const parsedRefundAmount = refundRequestAmount ? parseInt(refundRequestAmount) : null;
-
-    // 환불 금액 검증
-    if (parsedRefundAmount !== null) {
-      if (parsedRefundAmount <= 0) {
-        throw new AppError('환불 금액은 1원 이상이어야 합니다.', 400);
-      }
-      if (parsedRefundAmount > payment.totalAmount) {
+    const parsed = refundRequestAmount ? parseInt(refundRequestAmount) : null;
+    if (parsed !== null) {
+      if (parsed <= 0) throw new AppError('환불 금액은 1원 이상이어야 합니다.', 400);
+      if (parsed > payment.totalAmount) {
         throw new AppError(`환불 금액은 원래 결제 금액(${payment.totalAmount.toLocaleString()}원)을 초과할 수 없습니다.`, 400);
       }
     }
+    const refundAmount = parsed ?? payment.totalAmount;
 
-    const refundAmount = parsedRefundAmount ?? payment.totalAmount;
-
-    const isPartialRefund = refundAmount < payment.totalAmount;
-
-    // 토스페이먼츠 환불 요청
-    if (payment.tossPaymentKey) {
-      const secretKey = config.toss.secretKey;
-      const encodedKey = Buffer.from(`${secretKey}:`).toString('base64');
-
-      try {
-        await axios.post(
-          `https://api.tosspayments.com/v1/payments/${payment.tossPaymentKey}/cancel`,
-          {
-            cancelReason: reason || '고객 요청에 의한 환불',
-            cancelAmount: refundAmount,
+    // ── 보호자/간병인: 환불 요청만 생성 (2단계 플로우)
+    if (!isAdmin) {
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.update({
+          where: { id },
+          data: {
+            refundRequestStatus: 'PENDING',
+            refundRequestedAt: new Date(),
+            refundRequestedBy: req.user!.id,
+            refundRequestReason: reason || '고객 요청에 의한 환불',
+            refundRequestAmount: refundAmount,
           },
-          {
-            headers: {
-              Authorization: `Basic ${encodedKey}`,
-              'Content-Type': 'application/json',
-            },
+        });
+        // 관리자에게 알림
+        const admins = await tx.user.findMany({
+          where: { role: 'ADMIN', isActive: true },
+          select: { id: true },
+        });
+        if (admins.length > 0) {
+          await tx.notification.createMany({
+            data: admins.map((a) => ({
+              userId: a.id,
+              type: 'PAYMENT' as const,
+              title: '환불 요청 접수',
+              body: `${payment.guardian?.user?.name || '사용자'}님이 ${refundAmount.toLocaleString()}원 환불을 요청했습니다.`,
+              data: { paymentId: id, contractId: payment.contractId } as any,
+            })),
+          });
+        }
+      });
+      return res.json({
+        success: true,
+        data: { refundAmount, pending: true },
+        message: '환불 요청이 접수되었습니다. 관리자 검토 후 처리됩니다.',
+      });
+    }
+
+    // ── 관리자: 즉시 환불 실행
+    await executeRefund(payment, refundAmount, reason || '관리자 직접 환불', req.user!.id);
+    res.json({
+      success: true,
+      data: { refundAmount, isPartialRefund: refundAmount < payment.totalAmount },
+      message: `${refundAmount.toLocaleString()}원이 환불 처리되었습니다.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 내부 유틸: 실제 환불 실행 (Toss cancel + Payment/Contract/Earning 동기화 + 알림)
+async function executeRefund(
+  payment: any,
+  refundAmount: number,
+  reason: string,
+  reviewerUserId: string,
+) {
+  const isPartialRefund = refundAmount < payment.totalAmount;
+
+  // 1) 토스페이먼츠 실환불
+  if (payment.tossPaymentKey) {
+    const secretKey = config.toss.secretKey;
+    const encodedKey = Buffer.from(`${secretKey}:`).toString('base64');
+    try {
+      await axios.post(
+        `https://api.tosspayments.com/v1/payments/${payment.tossPaymentKey}/cancel`,
+        { cancelReason: reason, cancelAmount: refundAmount },
+        { headers: { Authorization: `Basic ${encodedKey}`, 'Content-Type': 'application/json' } },
+      );
+    } catch (tossError: any) {
+      const msg = tossError.response?.data?.message || '토스 환불 실패';
+      throw new AppError(msg, 400);
+    }
+  }
+
+  // 2) DB 연쇄 업데이트
+  await prisma.$transaction(async (tx) => {
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: isPartialRefund ? 'PARTIAL_REFUND' : 'REFUNDED',
+        refundedAt: new Date(),
+        refundAmount,
+        refundReason: reason,
+        refundRequestStatus: 'APPROVED',
+        refundReviewedAt: new Date(),
+        refundReviewedBy: reviewerUserId,
+      },
+    });
+
+    // 포인트 복구
+    if (payment.pointsUsed > 0 && payment.guardian?.userId) {
+      await tx.user.update({
+        where: { id: payment.guardian.userId },
+        data: { points: { increment: payment.pointsUsed } },
+      });
+    }
+
+    // 전액 환불일 때 연관 Contract 상태 연쇄 처리
+    if (!isPartialRefund && payment.contract && payment.contract.status === 'ACTIVE') {
+      await tx.contract.update({
+        where: { id: payment.contract.id },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: new Date(),
+          cancelledBy: reviewerUserId,
+          cancellationReason: `전액 환불로 인한 계약 취소: ${reason}`,
+        },
+      });
+      // 간병인 근무 상태 해제
+      await tx.caregiver.update({
+        where: { id: payment.contract.caregiverId },
+        data: { workStatus: 'AVAILABLE' },
+      });
+      // CareApplication 정리
+      await tx.careApplication.updateMany({
+        where: {
+          careRequestId: payment.contract.careRequestId,
+          status: { in: ['PENDING', 'ACCEPTED'] },
+        },
+        data: { status: 'CANCELLED' },
+      });
+    }
+
+    // 미정산 Earning 차감/제거
+    if (payment.contract) {
+      const unpaidEarnings = await tx.earning.findMany({
+        where: { contractId: payment.contract.id, isPaid: false },
+      });
+      if (unpaidEarnings.length > 0) {
+        // 환불액 만큼 Earning에서 차감
+        let remaining = refundAmount;
+        for (const e of unpaidEarnings) {
+          if (remaining <= 0) break;
+          if (e.amount <= remaining) {
+            await tx.earning.delete({ where: { id: e.id } });
+            remaining -= e.amount;
+          } else {
+            const newAmount = e.amount - remaining;
+            const newPlatformFee = Math.round(newAmount * ((payment.contract.platformFee || 10) / 100));
+            const newTax = Math.round((newAmount - newPlatformFee) * ((payment.contract.taxRate || 3.3) / 100));
+            await tx.earning.update({
+              where: { id: e.id },
+              data: {
+                amount: newAmount,
+                platformFee: newPlatformFee,
+                taxAmount: newTax,
+                netAmount: newAmount - newPlatformFee - newTax,
+              },
+            });
+            remaining = 0;
           }
-        );
-      } catch (tossError: any) {
-        const errorMessage = tossError.response?.data?.message || '환불 처리 중 오류가 발생했습니다.';
-        throw new AppError(errorMessage, 400);
+        }
       }
     }
 
+    // 보호자 + 간병인 알림
+    const notifications: any[] = [];
+    if (payment.guardian?.userId) {
+      notifications.push({
+        userId: payment.guardian.userId,
+        type: 'PAYMENT' as const,
+        title: isPartialRefund ? '부분 환불 완료' : '환불 완료',
+        body: `${refundAmount.toLocaleString()}원이 환불 처리되었습니다.`,
+        data: { paymentId: payment.id } as any,
+      });
+    }
+    if (payment.contract?.caregiver?.userId) {
+      notifications.push({
+        userId: payment.contract.caregiver.userId,
+        type: 'PAYMENT' as const,
+        title: isPartialRefund ? '계약 일부 환불 알림' : '계약 환불 및 취소',
+        body: isPartialRefund
+          ? `계약 결제 중 ${refundAmount.toLocaleString()}원이 보호자에게 환불되었습니다. 정산 금액이 조정됩니다.`
+          : `보호자의 환불로 인해 계약이 취소되었습니다.`,
+        data: { paymentId: payment.id, contractId: payment.contractId } as any,
+      });
+    }
+    if (notifications.length > 0) {
+      await tx.notification.createMany({ data: notifications });
+    }
+  });
+}
+
+// POST /admin/payments/:id/refund-approve - 관리자: 환불 요청 승인 → 실제 환불
+export const approveRefundRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const payment = await prisma.payment.findUnique({
+      where: { id },
+      include: {
+        contract: { include: { caregiver: { select: { userId: true } }, guardian: { select: { userId: true } } } },
+        guardian: { include: { user: { select: { name: true } } } },
+      },
+    });
+    if (!payment) throw new AppError('결제 정보를 찾을 수 없습니다.', 404);
+    if (payment.refundRequestStatus !== 'PENDING') {
+      throw new AppError('처리 대기 중인 환불 요청이 아닙니다.', 400);
+    }
+    const refundAmount = payment.refundRequestAmount ?? payment.totalAmount;
+    const reason = payment.refundRequestReason || '환불 요청 승인';
+
+    await executeRefund(payment, refundAmount, reason, req.user!.id);
+    res.json({ success: true, data: { refundAmount }, message: '환불이 승인·처리되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /admin/payments/:id/refund-reject - 관리자: 환불 요청 거절
+export const rejectRefundRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const payment = await prisma.payment.findUnique({
+      where: { id },
+      include: { guardian: { select: { userId: true } } },
+    });
+    if (!payment) throw new AppError('결제 정보를 찾을 수 없습니다.', 404);
+    if (payment.refundRequestStatus !== 'PENDING') {
+      throw new AppError('처리 대기 중인 환불 요청이 아닙니다.', 400);
+    }
+
     await prisma.$transaction(async (tx) => {
-      // 결제 상태 업데이트
       await tx.payment.update({
         where: { id },
         data: {
-          status: isPartialRefund ? 'PARTIAL_REFUND' : 'REFUNDED',
-          refundedAt: new Date(),
-          refundAmount,
-          refundReason: reason || '고객 요청에 의한 환불',
+          refundRequestStatus: 'REJECTED',
+          refundReviewedAt: new Date(),
+          refundReviewedBy: req.user!.id,
+          refundRejectReason: reason || '환불 불가',
         },
       });
-
-      // 포인트 복구
-      if (payment.pointsUsed > 0) {
-        await tx.user.update({
-          where: { id: req.user!.id },
-          data: { points: { increment: payment.pointsUsed } },
+      if (payment.guardian?.userId) {
+        await tx.notification.create({
+          data: {
+            userId: payment.guardian.userId,
+            type: 'PAYMENT',
+            title: '환불 요청 거절',
+            body: `환불 요청이 거절되었습니다. ${reason ? '사유: ' + reason : ''}`,
+            data: { paymentId: id } as any,
+          },
         });
       }
     });
 
+    res.json({ success: true, message: '환불 요청이 거절되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /admin/refund-requests - 관리자: 환불 요청 목록
+export const getRefundRequests = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const status = (req.query.status as string) || 'PENDING';
+    const payments = await prisma.payment.findMany({
+      where: { refundRequestStatus: status as any },
+      include: {
+        contract: {
+          include: {
+            caregiver: { include: { user: { select: { name: true } } } },
+            careRequest: { include: { patient: { select: { name: true } } } },
+          },
+        },
+        guardian: { include: { user: { select: { name: true, phone: true } } } },
+      },
+      orderBy: { refundRequestedAt: 'desc' },
+    });
     res.json({
       success: true,
-      data: {
-        refundAmount,
-        isPartialRefund,
-      },
-      message: `${refundAmount.toLocaleString()}원이 환불 처리되었습니다.`,
+      data: payments.map((p) => ({
+        id: p.id,
+        guardianName: p.guardian?.user?.name,
+        guardianPhone: p.guardian?.user?.phone,
+        caregiverName: p.contract?.caregiver?.user?.name,
+        patientName: p.contract?.careRequest?.patient?.name,
+        totalAmount: p.totalAmount,
+        refundRequestAmount: p.refundRequestAmount,
+        refundRequestReason: p.refundRequestReason,
+        refundRequestedAt: p.refundRequestedAt,
+        refundRequestStatus: p.refundRequestStatus,
+        refundRejectReason: p.refundRejectReason,
+        method: p.method,
+        paidAt: p.paidAt,
+      })),
     });
   } catch (error) {
     next(error);
@@ -616,6 +848,7 @@ export const createAdditionalFee = async (req: AuthRequest, res: Response, next:
 
     const contract = await prisma.contract.findFirst({
       where: { id: contractId, caregiverId: caregiver.id, status: { in: ['ACTIVE', 'EXTENDED'] } },
+      include: { guardian: { select: { userId: true } } },
     });
     if (!contract) throw new AppError('유효한 계약이 아닙니다.', 404);
 
@@ -628,13 +861,13 @@ export const createAdditionalFee = async (req: AuthRequest, res: Response, next:
       },
     });
 
-    // 보호자 알림
+    // 보호자 알림 (guardian.userId → User.id)
     await prisma.notification.create({
       data: {
-        userId: contract.guardianId,
+        userId: contract.guardian.userId,
         type: 'PAYMENT',
         title: '추가 간병비 요청',
-        body: `간병인이 ${parseInt(amount).toLocaleString()}원 추가 간병비를 요청했습니다.`,
+        body: `간병인이 ${parseInt(amount).toLocaleString()}원 추가 간병비를 요청했습니다. 사유: ${String(reason).trim()}`,
         data: { feeId: fee.id, contractId },
       },
     }).catch(() => {});
@@ -650,6 +883,7 @@ export const getAdditionalFees = async (req: AuthRequest, res: Response, next: N
   try {
     const role = req.user!.role;
     let fees: any[] = [];
+    // 간병인 보기: 본인이 요청한 건
     if (role === 'CAREGIVER') {
       const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
       if (!caregiver) throw new AppError('간병인 정보 없음', 404);
@@ -658,16 +892,26 @@ export const getAdditionalFees = async (req: AuthRequest, res: Response, next: N
         include: { contract: { include: { careRequest: { include: { patient: { select: { name: true } } } } } } },
         orderBy: { createdAt: 'desc' },
       });
-    } else if (role === 'GUARDIAN') {
-      const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
-      if (!guardian) throw new AppError('보호자 정보 없음', 404);
-      fees = await prisma.additionalFee.findMany({
-        where: { contract: { guardianId: guardian.id } },
-        include: { contract: { include: { careRequest: { include: { patient: { select: { name: true } } } } } } },
-        orderBy: { createdAt: 'desc' },
-      });
     } else {
-      fees = [];
+      // 보호자 보기 (ADMIN도 Guardian 레코드 있으면 허용)
+      const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
+      if (!guardian) {
+        // ADMIN이면서 Guardian 없으면 전체 목록 반환
+        if (role === 'ADMIN') {
+          fees = await prisma.additionalFee.findMany({
+            include: { contract: { include: { careRequest: { include: { patient: { select: { name: true } } } } } } },
+            orderBy: { createdAt: 'desc' },
+          });
+        } else {
+          throw new AppError('보호자 정보 없음', 404);
+        }
+      } else {
+        fees = await prisma.additionalFee.findMany({
+          where: { contract: { guardianId: guardian.id } },
+          include: { contract: { include: { careRequest: { include: { patient: { select: { name: true } } } } } } },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
     }
     res.json({ success: true, data: fees });
   } catch (error) {
@@ -684,7 +928,7 @@ export const approveAdditionalFee = async (req: AuthRequest, res: Response, next
 
     const fee = await prisma.additionalFee.findUnique({
       where: { id },
-      include: { contract: true },
+      include: { contract: { include: { caregiver: { select: { userId: true } } } } },
     });
     if (!fee) throw new AppError('요청을 찾을 수 없습니다.', 404);
     if (fee.contract.guardianId !== guardian.id) throw new AppError('권한 없음', 403);
@@ -693,26 +937,51 @@ export const approveAdditionalFee = async (req: AuthRequest, res: Response, next
       where: { id },
       data: { approvedByGuardian: true },
     });
+    // 간병인 알림
+    await prisma.notification.create({
+      data: {
+        userId: fee.contract.caregiver.userId,
+        type: 'PAYMENT',
+        title: '추가 간병비 승인',
+        body: `보호자가 ${fee.amount.toLocaleString()}원 추가 간병비를 승인했습니다.`,
+        data: { feeId: id, contractId: fee.contractId } as any,
+      },
+    }).catch(() => {});
     res.json({ success: true, data: updated });
   } catch (error) {
     next(error);
   }
 };
 
-// POST /additional-fees/:id/reject - 보호자가 거절
+// POST /additional-fees/:id/reject - 보호자가 거절 (이력 보존)
 export const rejectAdditionalFee = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
+    const { reason } = req.body || {};
     const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
     if (!guardian) throw new AppError('보호자 정보 없음', 404);
     const fee = await prisma.additionalFee.findUnique({
       where: { id },
-      include: { contract: true },
+      include: { contract: { include: { caregiver: { select: { userId: true } } } } },
     });
     if (!fee) throw new AppError('요청을 찾을 수 없습니다.', 404);
     if (fee.contract.guardianId !== guardian.id) throw new AppError('권한 없음', 403);
-    await prisma.additionalFee.delete({ where: { id } });
-    res.json({ success: true });
+    // 삭제 대신 rejected 플래그로 이력 보존
+    const updated = await prisma.additionalFee.update({
+      where: { id },
+      data: { rejected: true, rejectReason: reason || null, approvedByGuardian: false },
+    });
+    // 간병인 알림
+    await prisma.notification.create({
+      data: {
+        userId: fee.contract.caregiver.userId,
+        type: 'PAYMENT',
+        title: '추가 간병비 거절',
+        body: `보호자가 ${fee.amount.toLocaleString()}원 추가 간병비 요청을 거절했습니다.${reason ? ' 사유: ' + reason : ''}`,
+        data: { contractId: fee.contractId, feeId: id, rejectReason: reason } as any,
+      },
+    }).catch(() => {});
+    res.json({ success: true, data: updated });
   } catch (error) {
     next(error);
   }

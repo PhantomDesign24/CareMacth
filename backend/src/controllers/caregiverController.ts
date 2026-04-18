@@ -263,6 +263,55 @@ export const getEarnings = async (req: AuthRequest, res: Response, next: NextFun
       },
     });
 
+    // 추가 간병비 (옵션 B: 별도 트랙으로 수익 요약에만 합산)
+    // platformFee %와 taxRate %는 계약별로 다를 수 있어 개별 계산
+    const additionalFees = await prisma.additionalFee.findMany({
+      where: {
+        requestedBy: caregiver.id,
+        rejected: false,
+      },
+      include: {
+        contract: {
+          select: { platformFee: true, taxRate: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const additionalFeesEnriched = additionalFees.map((f) => {
+      const platformFeePercent = f.contract?.platformFee ?? 10;
+      const taxRate = f.contract?.taxRate ?? 3.3;
+      const platformFeeAmount = Math.round(f.amount * (platformFeePercent / 100));
+      const taxAmount = Math.round((f.amount - platformFeeAmount) * (taxRate / 100));
+      const netAmount = f.amount - platformFeeAmount - taxAmount;
+      return {
+        id: f.id,
+        contractId: f.contractId,
+        amount: f.amount,
+        platformFeeAmount,
+        taxAmount,
+        netAmount,
+        reason: f.reason,
+        approvedByGuardian: f.approvedByGuardian,
+        paid: f.paid,
+        createdAt: f.createdAt,
+      };
+    });
+
+    const approvedFees = additionalFeesEnriched.filter((f) => f.approvedByGuardian);
+    const additionalFeesSummary = {
+      totalAmount: approvedFees.reduce((s, f) => s + f.amount, 0),
+      totalPlatformFee: approvedFees.reduce((s, f) => s + f.platformFeeAmount, 0),
+      totalTax: approvedFees.reduce((s, f) => s + f.taxAmount, 0),
+      totalNetAmount: approvedFees.reduce((s, f) => s + f.netAmount, 0),
+      unpaidAmount: approvedFees.filter((f) => !f.paid).reduce((s, f) => s + f.netAmount, 0),
+      pendingCount: additionalFeesEnriched.filter((f) => !f.approvedByGuardian).length,
+      approvedCount: approvedFees.length,
+    };
+
+    // 정산 수익 + 추가비를 합친 통합 요약
+    const combinedNet = (summary._sum.netAmount || 0) + additionalFeesSummary.totalNetAmount;
+    const combinedUnpaid = (unpaidTotal._sum.netAmount || 0) + additionalFeesSummary.unpaidAmount;
+
     res.json({
       success: true,
       data: {
@@ -273,6 +322,12 @@ export const getEarnings = async (req: AuthRequest, res: Response, next: NextFun
           totalTax: summary._sum.taxAmount || 0,
           totalNetAmount: summary._sum.netAmount || 0,
           unpaidAmount: unpaidTotal._sum.netAmount || 0,
+        },
+        additionalFees: additionalFeesEnriched,
+        additionalFeesSummary,
+        combinedSummary: {
+          totalNetAmount: combinedNet,
+          unpaidAmount: combinedUnpaid,
         },
         pagination: {
           page,

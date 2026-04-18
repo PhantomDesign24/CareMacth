@@ -283,13 +283,18 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
             where: { status: { in: ['PENDING', 'ACCEPTED'] } },
             select: { id: true, status: true },
           },
-          contract: {
+          contracts: {
+            orderBy: { createdAt: 'desc' },
             include: {
               caregiver: {
                 include: { user: { select: { name: true, phone: true } } },
               },
               payments: {
                 select: { id: true, status: true, totalAmount: true },
+              },
+              reviews: {
+                select: { id: true, rating: true, comment: true, wouldRehire: true, createdAt: true },
+                take: 1,
               },
             },
           },
@@ -304,23 +309,33 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
 
     // 기존 contract 기반 응답 형식에 맞춰 매핑 (프론트 호환)
     const contracts = careRequests.map((cr: any) => {
+      // 활성 계약 = CANCELLED 이외의 가장 최근 계약
+      const activeContract = (cr.contracts || []).find((c: any) => c.status !== 'CANCELLED');
+      const latestContract = activeContract || (cr.contracts || [])[0];
       // 계약이 취소됐는데 CareRequest는 OPEN/MATCHING이면 → 재매칭 중 (공고 중)
-      // virtualContract로 반환하여 "공고 중"으로 표시되게 함
       const contractCancelledButReopened =
-        cr.contract?.status === 'CANCELLED' &&
+        latestContract?.status === 'CANCELLED' &&
         ['OPEN', 'MATCHING'].includes(cr.status);
 
-      if (cr.contract && !contractCancelledButReopened) {
-        // 계약 있는 경우 — 기존 contract 형식 + careRequest 정보
+      if (activeContract && !contractCancelledButReopened) {
+        // 활성 계약 있는 경우 — 기존 contract 형식 + careRequest 정보
+        // 프론트 호환: review 단수 필드 합성 (reviews[0])
         return {
-          ...cr.contract,
+          ...activeContract,
+          review: activeContract.reviews?.[0] || null,
+          reviews: undefined,
           careRequest: {
             ...cr,
-            contract: undefined,
+            contracts: undefined,
             applications: undefined,
             _count: cr._count,
           },
         };
+      }
+      // 계약이 취소 후 재공고 중이거나 과거 취소 건 — latestContract의 리뷰도 노출
+      if (latestContract) {
+        // fallback: 과거 취소 계약의 review도 있으면 프론트에서 재리뷰 불가 처리
+        (cr as any)._latestReview = latestContract.reviews?.[0] || null;
       }
       // 계약 없는 경우 (매칭 전) — 가상 contract 형식
       return {
@@ -333,7 +348,7 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
         dailyRate: cr.dailyRate || 0,
         totalAmount: (cr.dailyRate || 0) * (cr.durationDays || 1),
         status: cr.status, // CareRequest 상태 그대로 (OPEN/MATCHING/MATCHED/CANCELLED)
-        review: null,
+        review: (cr as any)._latestReview || null,
         careRequest: {
           ...cr,
           contract: undefined,
@@ -342,6 +357,11 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
         },
         caregiver: null,
       };
+    });
+
+    // careRequest.contracts 잔재 제거
+    contracts.forEach((c: any) => {
+      if (c?.careRequest?.contracts !== undefined) delete c.careRequest.contracts;
     });
 
     res.json({
@@ -376,7 +396,7 @@ export const getPayments = async (req: AuthRequest, res: Response, next: NextFun
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
 
-    const [payments, total] = await Promise.all([
+    const [payments, total, aggregate] = await Promise.all([
       prisma.payment.findMany({
         where: { guardianId: guardian.id },
         include: {
@@ -385,6 +405,9 @@ export const getPayments = async (req: AuthRequest, res: Response, next: NextFun
               id: true,
               startDate: true,
               endDate: true,
+              status: true,
+              dailyRate: true,
+              totalAmount: true,
               careRequest: {
                 select: {
                   patient: {
@@ -402,12 +425,76 @@ export const getPayments = async (req: AuthRequest, res: Response, next: NextFun
       prisma.payment.count({
         where: { guardianId: guardian.id },
       }),
+      prisma.payment.findMany({
+        where: { guardianId: guardian.id },
+        select: {
+          totalAmount: true,
+          refundAmount: true,
+          status: true,
+          pointsUsed: true,
+          refundRequestStatus: true,
+        },
+      }),
     ]);
+
+    // 정산 요약 집계
+    const summary = aggregate.reduce(
+      (acc, p) => {
+        if (['COMPLETED', 'ESCROW', 'PARTIAL_REFUND'].includes(p.status)) {
+          acc.totalPaid += p.totalAmount - (p.refundAmount || 0);
+        }
+        if (p.status === 'REFUNDED' || p.status === 'PARTIAL_REFUND') {
+          acc.totalRefunded += p.refundAmount || 0;
+        }
+        if (p.status === 'PENDING') {
+          acc.totalPending += p.totalAmount;
+        }
+        if (p.refundRequestStatus === 'PENDING') {
+          acc.pendingRefundRequests += 1;
+        }
+        acc.totalPointsUsed += p.pointsUsed || 0;
+        return acc;
+      },
+      {
+        totalPaid: 0,
+        totalRefunded: 0,
+        totalPending: 0,
+        totalPointsUsed: 0,
+        pendingRefundRequests: 0,
+        count: aggregate.length,
+      },
+    );
+
+    // 추가 간병비 (옵션 B: 별도 트랙으로 집계만)
+    const additionalFees = await prisma.additionalFee.findMany({
+      where: { contract: { guardianId: guardian.id } },
+      select: { amount: true, approvedByGuardian: true, rejected: true, paid: true },
+    });
+    const additionalFeesSummary = additionalFees.reduce(
+      (acc, f) => {
+        if (f.rejected) {
+          acc.rejectedCount += 1;
+          return acc;
+        }
+        if (f.approvedByGuardian) {
+          acc.approvedTotal += f.amount;
+          acc.approvedCount += 1;
+          if (!f.paid) acc.approvedUnpaid += f.amount;
+        } else {
+          acc.pendingCount += 1;
+          acc.pendingTotal += f.amount;
+        }
+        return acc;
+      },
+      { approvedTotal: 0, approvedUnpaid: 0, approvedCount: 0, pendingCount: 0, pendingTotal: 0, rejectedCount: 0 },
+    );
+    (summary as any).additionalFees = additionalFeesSummary;
 
     res.json({
       success: true,
       data: {
         payments,
+        summary,
         pagination: {
           page,
           limit,
