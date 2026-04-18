@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { FiPhone, FiMenu, FiX, FiChevronDown, FiUser, FiLogOut } from "react-icons/fi";
 import { SITE } from "@/config/site";
+import NotificationBell from "@/components/NotificationBell";
 
 const ROLE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   GUARDIAN: { label: "보호자", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
@@ -159,6 +160,8 @@ export default function Header() {
               {SITE.phone}
             </a>
             {user ? (
+              <>
+              <NotificationBell />
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
@@ -198,6 +201,7 @@ export default function Header() {
                   </div>
                 )}
               </div>
+              </>
             ) : (
               <Link
                 href="/care-request"

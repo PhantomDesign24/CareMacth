@@ -11,13 +11,18 @@ const api = axios.create({
   },
 });
 
-// Request interceptor: attach auth token
+// Request interceptor: attach auth token + fix FormData content-type
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("cm_access_token");
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
+      }
+      // FormData를 보낼 때는 Content-Type을 지워야 axios가 boundary 포함해 자동 설정
+      if (config.data instanceof FormData && config.headers) {
+        delete config.headers["Content-Type"];
+        delete (config.headers as any)["content-type"];
       }
     }
     return config;
@@ -79,11 +84,18 @@ export function isAuthenticated(): boolean {
   return !!getAccessToken();
 }
 
+let loggingOut = false;
 export function logout() {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("cm_access_token");
-    localStorage.removeItem("cm_refresh_token");
-    window.location.href = "/auth/login";
+  if (typeof window === "undefined") return;
+  // 이미 로그아웃 중이면 중복 실행 방지 (401 무한루프 차단)
+  if (loggingOut) return;
+  loggingOut = true;
+  localStorage.removeItem("cm_access_token");
+  localStorage.removeItem("cm_refresh_token");
+  localStorage.removeItem("user"); // 유저 상태도 함께 정리 (Header의 NotificationBell 등 재렌더 차단)
+  // 이미 로그인 페이지면 이동 안함 (reload 루프 방지)
+  if (!window.location.pathname.startsWith("/auth/login")) {
+    window.location.href = "/auth/login?reason=session";
   }
 }
 
@@ -201,11 +213,11 @@ export const documentAPI = {
   getProfile: () => api.get('/caregiver/profile'),
   updateProfile: (data: Record<string, unknown>) => api.put('/caregiver/profile', data),
   uploadCertificate: (formData: FormData) =>
-    api.post('/caregiver/certificates', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    api.post('/caregiver/certificates', formData),
   uploadIdCard: (formData: FormData) =>
-    api.post('/caregiver/id-card', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    api.post('/caregiver/id-card', formData),
   uploadCriminalCheck: (formData: FormData) =>
-    api.post('/caregiver/criminal-check', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    api.post('/caregiver/criminal-check', formData),
 };
 
 export const careRecordAPI = {
@@ -216,7 +228,8 @@ export const careRecordAPI = {
   saveDailyLog: (data: Record<string, unknown>) =>
     api.post('/care-records/daily-log', data),
   uploadPhotos: (formData: FormData) =>
-    api.post('/care-records/photos', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    // FormData는 axios가 boundary 포함한 Content-Type을 자동 설정 → 수동 지정 금지
+    api.post('/care-records/photos', formData),
   list: (contractId: string, params?: Record<string, unknown>) =>
     api.get(`/care-records/${contractId}`, { params }),
 };
@@ -258,6 +271,8 @@ export const insuranceAPI = {
 
 export const notificationAPI = {
   list: () => api.get('/notifications'),
+  markRead: (id: string) => api.put(`/notifications/${id}/read`),
+  markAllRead: () => api.put(`/notifications/all/read`),
   getPushSetting: () => api.get('/notifications/push-setting'),
   updatePushSetting: (enabled: boolean) =>
     api.put('/notifications/push-setting', { enabled }),
@@ -295,6 +310,7 @@ export const reviewAPI = {
   create: (data: { contractId: string; rating: number; comment: string; wouldRehire: boolean }) =>
     api.post('/reviews', data),
   myReceived: () => api.get('/reviews/my'),
+  myWritten: () => api.get('/reviews/written'),
   byCaregiver: (caregiverId: string) => api.get(`/reviews/caregiver/${caregiverId}`),
 };
 

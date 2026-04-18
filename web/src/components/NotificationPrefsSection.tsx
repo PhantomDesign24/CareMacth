@@ -74,7 +74,7 @@ export default function NotificationPrefsSection() {
     <div className="border border-gray-200 bg-white rounded-2xl p-6">
       <h4 className="font-bold text-gray-900 mb-1">알림 설정</h4>
       <p className="text-xs text-gray-500 mb-4">
-        받고 싶은 알림 카테고리를 선택하세요.
+        {isApp ? "받고 싶은 알림 카테고리를 선택하세요." : "받고 싶은 인앱 알림 카테고리를 선택하세요. (푸시 알림은 모바일 앱에서 받을 수 있습니다)"}
       </p>
 
       {/* 전체 푸시 on/off — 앱 전용 */}
