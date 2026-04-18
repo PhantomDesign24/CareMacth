@@ -278,7 +278,7 @@ model CareRequest {
   status              CareRequestStatus @default(OPEN)
 
   applications        CareApplication[]
-  contract            Contract?
+  contracts           Contract[]
   matchScores         MatchScore[]
 
   createdAt           DateTime @default(now())
@@ -355,7 +355,7 @@ enum ContractStatus {
 
 model Contract {
   id              String         @id @default(uuid())
-  careRequestId   String         @unique
+  careRequestId   String
   careRequest     CareRequest    @relation(fields: [careRequestId], references: [id])
   guardianId      String
   guardian        Guardian       @relation(fields: [guardianId], references: [id])
@@ -385,6 +385,8 @@ model Contract {
   extensions      ContractExtension[]
   additionalFees  AdditionalFee[]
   disputes        Dispute[]
+  earnings        Earning[]
+  reviews         Review[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -392,6 +394,7 @@ model Contract {
   @@index([status, endDate])
   @@index([caregiverId])
   @@index([guardianId])
+  @@index([careRequestId])
 }
 
 model ContractExtension {
@@ -455,6 +458,16 @@ model Payment {
   refundAmount    Int?
   refundReason    String?
 
+  // 환불 요청/승인 2단계 플로우
+  refundRequestStatus RefundRequestStatus?  // null=요청 없음, PENDING=심사 대기, APPROVED/REJECTED
+  refundRequestedAt   DateTime?
+  refundRequestedBy   String?               // 요청자 userId
+  refundRequestReason String?               // 요청 사유 (refundReason과 구분)
+  refundRequestAmount Int?                  // 요청한 환불 금액 (부분환불 가능)
+  refundReviewedAt    DateTime?
+  refundReviewedBy    String?               // 관리자 userId
+  refundRejectReason  String?               // 거절 시 사유
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -462,6 +475,13 @@ model Payment {
   @@index([guardianId])
   @@index([createdAt])
   @@index([status, createdAt])
+  @@index([refundRequestStatus])
+}
+
+enum RefundRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model AdditionalFee {
@@ -472,10 +492,15 @@ model AdditionalFee {
   reason      String   // 사유
   requestedBy String   // caregiverId
   approvedByGuardian Boolean @default(false)
+  rejected    Boolean  @default(false) // 보호자가 거절한 경우 true
+  rejectReason String?                  // 거절 사유
   paid        Boolean  @default(false)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([rejected])
+  @@index([approvedByGuardian])
 }
 
 model Earning {
@@ -483,6 +508,7 @@ model Earning {
   caregiverId     String
   caregiver       Caregiver @relation(fields: [caregiverId], references: [id])
   contractId      String?
+  contract        Contract? @relation(fields: [contractId], references: [id])
   amount          Int       // 정산 금액
   platformFee     Int       // 플랫폼 수수료
   taxAmount       Int       // 세액 (3.3%)
@@ -494,6 +520,7 @@ model Earning {
 
   @@index([caregiverId])
   @@index([isPaid])
+  @@index([contractId])
 }
 
 // ==========================================
@@ -545,6 +572,7 @@ model Review {
   caregiverId String
   caregiver   Caregiver @relation(fields: [caregiverId], references: [id])
   contractId  String
+  contract    Contract  @relation(fields: [contractId], references: [id])
   rating      Float     // 1-5
   comment     String?
   wouldRehire Boolean   @default(false) // 재고용 의사
@@ -555,6 +583,7 @@ model Review {
   reports     Report[]
 
   @@unique([guardianId, contractId])
+  @@index([contractId])
 }
 
 // ==========================================
