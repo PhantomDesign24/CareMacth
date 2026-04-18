@@ -13,6 +13,15 @@ import {
   formatCareStatus,
 } from "@/lib/format";
 
+interface CaregiverReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  wouldRehire: boolean;
+  createdAt: string;
+  guardian?: { user?: { name?: string } };
+}
+
 interface Caregiver {
   id: string;
   user: {
@@ -27,6 +36,18 @@ interface Caregiver {
   specialties: string[];
   gender: string;
   nationality: string;
+  bio?: string | null;
+  reviews?: CaregiverReview[];
+  totalReviewCount?: number;
+}
+
+interface MatchScore {
+  total: number;
+  distance: number;
+  experience: number;
+  review: number;
+  rehire: number;
+  cancelPenalty: number;
 }
 
 interface Application {
@@ -37,6 +58,7 @@ interface Application {
   proposedRate: number | null;
   isAccepted: boolean;
   caregiver: Caregiver;
+  matchScore: MatchScore | null;
 }
 
 interface CareRequest {
@@ -72,6 +94,26 @@ export default function ApplicantsPage() {
     isAccepted: boolean;
   } | null>(null);
 
+  // 전체 리뷰 모달 상태
+  const [reviewsModalCaregiver, setReviewsModalCaregiver] = useState<Caregiver | null>(null);
+  const [fullReviews, setFullReviews] = useState<CaregiverReview[]>([]);
+  const [fullReviewsLoading, setFullReviewsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!reviewsModalCaregiver) return;
+    setFullReviewsLoading(true);
+    import("@/lib/api").then(({ reviewAPI }) =>
+      reviewAPI
+        .byCaregiver(reviewsModalCaregiver.id)
+        .then((res) => {
+          const list = res.data?.data?.reviews || res.data?.data || res.data || [];
+          setFullReviews(Array.isArray(list) ? list : []);
+        })
+        .catch(() => setFullReviews([]))
+        .finally(() => setFullReviewsLoading(false))
+    );
+  }, [reviewsModalCaregiver]);
+
   // 금액 인상 모달 상태
   const [showRaiseModal, setShowRaiseModal] = useState(false);
   const [newDailyRate, setNewDailyRate] = useState("");
@@ -103,6 +145,7 @@ export default function ApplicantsPage() {
           createdAt: app.createdAt || "",
           proposedRate: app.proposedRate ?? null,
           isAccepted: app.isAccepted ?? false,
+          matchScore: app.matchScore || null,
           caregiver: {
             id: app.caregiver?.id || app.caregiverId || "",
             user: {
@@ -117,6 +160,9 @@ export default function ApplicantsPage() {
             specialties: app.caregiver?.specialties || [],
             gender: app.caregiver?.gender || "",
             nationality: app.caregiver?.nationality || "",
+            bio: app.caregiver?.bio || null,
+            reviews: app.caregiver?.reviews || [],
+            totalReviewCount: app.caregiver?._count?.reviews || 0,
           },
         })),
       });
@@ -384,14 +430,14 @@ export default function ApplicantsPage() {
                     setNewDailyRate("");
                     setShowRaiseModal(true);
                   }}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-xl transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors"
                 >
                   💰 금액 올리기
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowExpandRegionModal(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors"
                 >
                   🌏 지역 확대
                 </button>
@@ -420,224 +466,258 @@ export default function ApplicantsPage() {
           <div className="space-y-4">
             {sortedApplications.map((app) => {
               const cg = app.caregiver;
+              const score = app.matchScore?.total ?? null;
+              // 등급별 라인형 아이콘 (trophy / shield-check / star / info)
+              const trophyIcon = (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                  <path d="M8 4h8v4a4 4 0 0 1-8 0V4Z" />
+                  <path d="M16 5h3a2 2 0 0 1 0 4h-3" />
+                  <path d="M8 5H5a2 2 0 0 0 0 4h3" />
+                  <path d="M12 12v4" />
+                  <path d="M8 20h8" />
+                  <path d="M10 20v-2h4v2" />
+                </svg>
+              );
+              const shieldCheckIcon = (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                  <path d="M12 3 4 6v5.5c0 4.8 3.2 9 8 10 4.8-1 8-5.2 8-10V6l-8-3Z" />
+                  <path d="m9 12 2 2 4-4" />
+                </svg>
+              );
+              const starIcon = (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                  <path d="m12 3 2.6 6.3 6.8.5-5.2 4.4 1.7 6.6L12 17.3l-5.9 3.5 1.7-6.6L2.6 9.8l6.8-.5L12 3Z" />
+                </svg>
+              );
+              const infoIcon = (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 8h.01" />
+                  <path d="M11 12h1v4h1" />
+                </svg>
+              );
+              const tier =
+                score === null ? null
+                : score >= 85 ? { label: "최우수 매칭", border: "border-emerald-200", bg: "from-emerald-50 to-teal-50", ring: "ring-emerald-300", text: "text-emerald-700", bar: "from-emerald-400 to-teal-500", dot: "bg-emerald-500", icon: trophyIcon }
+                : score >= 70 ? { label: "우수 매칭", border: "border-blue-200", bg: "from-blue-50 to-sky-50", ring: "ring-blue-300", text: "text-blue-700", bar: "from-blue-400 to-sky-500", dot: "bg-blue-500", icon: shieldCheckIcon }
+                : score >= 50 ? { label: "양호 매칭", border: "border-orange-200", bg: "from-orange-50 to-amber-50", ring: "ring-orange-300", text: "text-orange-700", bar: "from-orange-400 to-amber-500", dot: "bg-orange-500", icon: starIcon }
+                : { label: "검토 필요", border: "border-gray-200", bg: "from-gray-50 to-slate-50", ring: "ring-gray-300", text: "text-gray-600", bar: "from-gray-400 to-slate-500", dot: "bg-gray-400", icon: infoIcon };
+
               return (
                 <div key={app.id} className="card">
-                  <div className="flex flex-col md:flex-row gap-6">
-                    {/* Profile section */}
-                    <div className="flex items-start gap-4 md:w-1/3">
-                      <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
-                        {cg.user.profileImage ? (
-                          <img
-                            src={cg.user.profileImage}
-                            alt={cg.user.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <svg
-                            className="w-8 h-8 text-gray-400"
-                            fill="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
-                          </svg>
-                        )}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900 text-lg">
-                          {cg.user.name}
-                        </h3>
-                        <div className="flex flex-wrap gap-2 mt-1 text-sm text-gray-500">
-                          <span>{formatGender(cg.gender)}</span>
-                          {cg.nationality && (
-                            <>
-                              <span className="text-gray-300">|</span>
-                              <span>{cg.nationality}</span>
-                            </>
-                          )}
-                        </div>
-                        <div className="mt-2">{renderStars(cg.avgRating)}</div>
-
-                        {/* Rate badge */}
-                        <div className="mt-3">
-                          {app.isAccepted ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              제시 금액 수락 - {formatMoney(careRequest?.dailyRate)}
-                            </span>
-                          ) : app.proposedRate ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              역제안 - {app.proposedRate.toLocaleString()}원/일
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Stats section */}
-                    <div className="md:w-1/3">
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <span className="text-gray-500">경력</span>
-                          <p className="font-medium text-gray-900">
-                            {cg.experienceYears}년
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">총 매칭</span>
-                          <p className="font-medium text-gray-900">
-                            {cg.totalMatches}건
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">재고용률</span>
-                          <p className="font-medium text-gray-900">
-                            {cg.rehireRate}%
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">지원일</span>
-                          <p className="font-medium text-gray-900">
-                            {formatDate(app.createdAt)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Certificates */}
-                      {cg.certificates.length > 0 && (
-                        <div className="mt-3">
-                          <span className="text-sm text-gray-500">자격증</span>
-                          <div className="flex flex-wrap gap-1.5 mt-1">
-                            {cg.certificates.map(
-                              (cert, idx: number) => (
-                                <span
-                                  key={cert.id || idx}
-                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${cert.verified ? "bg-green-50 text-green-700" : "bg-primary-50 text-primary-700"}`}
-                                  title={`발급: ${cert.issuer}`}
-                                >
-                                  {cert.verified && <span>✓</span>}
-                                  {cert.name}
-                                </span>
-                              )
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Specialties */}
-                      {cg.specialties.length > 0 && (
-                        <div className="mt-3">
-                          <span className="text-sm text-gray-500">전문분야</span>
-                          <div className="flex flex-wrap gap-1.5 mt-1">
-                            {cg.specialties.map(
-                              (spec: string, idx: number) => (
-                                <span
-                                  key={idx}
-                                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary-50 text-secondary-700"
-                                >
-                                  {spec}
-                                </span>
-                              )
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Message + Action section */}
-                    <div className="md:w-1/3 flex flex-col justify-between">
-                      {/* 제안 금액 강조 표시 */}
-                      <div className="mb-3 rounded-xl p-4 border-2 border-primary-200 bg-primary-50">
-                        <div className="text-xs text-gray-500 mb-1">
-                          {app.isAccepted ? "보호자 제시 금액 수락" : app.proposedRate ? "간병인 제안 금액" : "금액 미제시"}
-                        </div>
-                        <div className="text-2xl font-extrabold text-primary-600">
-                          {app.proposedRate != null
-                            ? `${app.proposedRate.toLocaleString()}원`
-                            : app.isAccepted && careRequest?.dailyRate
-                              ? `${careRequest.dailyRate.toLocaleString()}원`
-                              : "협의"}
-                          <span className="ml-1 text-xs font-medium text-gray-400">/ 일</span>
-                        </div>
-                        {app.proposedRate != null && careRequest?.dailyRate && (
-                          <div className="mt-1 text-xs text-gray-500">
-                            원래 제시: {careRequest.dailyRate.toLocaleString()}원
-                            {app.proposedRate > careRequest.dailyRate && <span className="ml-1 text-orange-600">(+{(app.proposedRate - careRequest.dailyRate).toLocaleString()})</span>}
-                            {app.proposedRate < careRequest.dailyRate && <span className="ml-1 text-green-600">(-{(careRequest.dailyRate - app.proposedRate).toLocaleString()})</span>}
-                          </div>
-                        )}
-                      </div>
-
-                      {app.message && (
-                        <div className="bg-gray-50 rounded-xl p-4 mb-4">
-                          <span className="text-xs text-gray-500 block mb-1">
-                            지원 메시지
-                          </span>
-                          <p className="text-sm text-gray-700 leading-relaxed">
-                            {app.message}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* 상태별 액션 버튼 */}
-                      {careRequest?.status === "CANCELLED" ? (
-                        app.status === "ACCEPTED" ? (
-                          <div className="w-full py-2.5 text-sm font-semibold text-gray-500 bg-gray-100 rounded-xl text-center border border-gray-200">
-                            취소된 요청
-                          </div>
-                        ) : (
-                          <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-xl text-center">
-                            취소된 요청
-                          </div>
-                        )
-                      ) : careRequest?.status === "MATCHED" || careRequest?.status === "IN_PROGRESS" || careRequest?.status === "COMPLETED" ? (
-                        app.status === "ACCEPTED" ? (
-                          <div className="w-full py-2.5 text-sm font-semibold text-green-700 bg-green-50 rounded-xl text-center border border-green-200">
-                            ✓ 이 간병인과 매칭 완료
-                          </div>
-                        ) : (
-                          <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-xl text-center">
-                            매칭 종료됨
-                          </div>
-                        )
-                      ) : app.status === "REJECTED" || app.status === "CANCELLED" ? (
-                        <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-xl text-center">
-                          {app.status === "REJECTED" ? "거절됨" : "취소됨"}
-                        </div>
-                      ) : !['OPEN', 'MATCHING'].includes(careRequest?.status || '') ? (
-                        <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-xl text-center">
-                          선택 불가
-                        </div>
+                  {/* 프로필 + 매칭 점수 상단 헤더 */}
+                  <div className="flex items-start gap-4 mb-4 pb-4 border-b border-gray-100">
+                    <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
+                      {cg.user.profileImage ? (
+                        <img src={cg.user.profileImage} alt={cg.user.name} className="w-full h-full object-cover" />
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setConfirmTarget({
-                              caregiverId: cg.id,
-                              caregiverName: cg.user.name,
-                              proposedRate: app.proposedRate,
-                              isAccepted: app.isAccepted,
-                            })
-                          }
-                          disabled={selecting !== null}
-                          className="btn-primary w-full text-sm"
-                        >
-                          {selecting === cg.id ? (
-                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                            </svg>
-                          ) : (
-                            "이 간병인 선택"
-                          )}
-                        </button>
+                        <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                          <h3 className="font-bold text-gray-900 text-lg">{cg.user.name}</h3>
+                          <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
+                            <span>{formatGender(cg.gender)}</span>
+                            {cg.nationality && <><span className="text-gray-300">·</span><span>{cg.nationality}</span></>}
+                            <span className="text-gray-300">·</span>
+                            <span>지원일 {formatDate(app.createdAt)}</span>
+                          </div>
+                          <div className="mt-1.5">{renderStars(cg.avgRating)}</div>
+                        </div>
+                        {/* 매칭 점수 */}
+                        {score !== null && tier && (
+                          <div className={`shrink-0 p-3 rounded-lg bg-gradient-to-br ${tier.bg} border ${tier.border} w-full sm:w-auto sm:min-w-[220px]`}>
+                            <div className="flex items-center gap-3">
+                              <div className={`shrink-0 w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm ring-2 ${tier.ring} ${tier.text}`}>
+                                {tier.icon}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${tier.dot}`} />
+                                    <span className={`text-[11px] font-semibold ${tier.text}`}>{tier.label}</span>
+                                  </div>
+                                  <div className="flex items-baseline gap-0.5">
+                                    <span className={`text-xl font-extrabold ${tier.text}`}>{score.toFixed(0)}</span>
+                                    <span className="text-[10px] font-medium text-gray-400">점</span>
+                                  </div>
+                                </div>
+                                <div className="w-full h-1.5 bg-white/70 rounded-full overflow-hidden">
+                                  <div className={`h-full bg-gradient-to-r ${tier.bar} rounded-full transition-all`} style={{ width: `${Math.min(100, Math.max(0, score))}%` }} />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 핵심 스탯 & 제안 금액 (한 줄, 항상 채움) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                    <StatBlock
+                      icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M20 7h-4V3H8v4H4v13h16V7Z" /><path d="M10 11h4" /></svg>}
+                      label="경력"
+                      value={`${cg.experienceYears}년`}
+                    />
+                    <StatBlock
+                      icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>}
+                      label="총 매칭"
+                      value={`${cg.totalMatches}건`}
+                    />
+                    <StatBlock
+                      icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" /></svg>}
+                      label="재고용률"
+                      value={`${cg.rehireRate}%`}
+                    />
+                    <div className="rounded-lg border-2 border-primary-200 bg-primary-50 px-3 py-2">
+                      <div className="text-[10px] text-primary-600 font-semibold">
+                        {app.isAccepted ? "제시 금액 수락" : app.proposedRate ? "역제안 금액" : "금액 미제시"}
+                      </div>
+                      <div className="text-base font-extrabold text-primary-600 mt-0.5">
+                        {app.proposedRate != null
+                          ? `${app.proposedRate.toLocaleString()}원`
+                          : app.isAccepted && careRequest?.dailyRate
+                            ? `${careRequest.dailyRate.toLocaleString()}원`
+                            : "협의"}
+                        <span className="text-[10px] font-medium text-gray-400">/일</span>
+                      </div>
+                      {app.proposedRate != null && careRequest?.dailyRate && app.proposedRate !== careRequest.dailyRate && (
+                        <div className={`text-[10px] mt-0.5 ${app.proposedRate > careRequest.dailyRate ? "text-orange-600" : "text-green-600"}`}>
+                          제시 대비 {app.proposedRate > careRequest.dailyRate ? "+" : ""}
+                          {(app.proposedRate - careRequest.dailyRate).toLocaleString()}원
+                        </div>
                       )}
                     </div>
                   </div>
+
+                  {/* 자격증/전문분야/소개 — 존재하는 것만 flex wrap */}
+                  {(cg.certificates.length > 0 || cg.specialties.length > 0 || cg.bio) && (
+                    <div className="mb-4 space-y-2">
+                      {(cg.certificates.length > 0 || cg.specialties.length > 0) && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {cg.certificates.map((cert, idx: number) => (
+                            <span key={cert.id || idx}
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${cert.verified ? "bg-green-50 text-green-700" : "bg-primary-50 text-primary-700"}`}
+                              title={`발급: ${cert.issuer}`}>
+                              {cert.verified && <span>✓</span>}
+                              {cert.name}
+                            </span>
+                          ))}
+                          {cg.specialties.map((spec: string, idx: number) => (
+                            <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
+                              {spec}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {cg.bio && (
+                        <p className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 leading-relaxed">
+                          {cg.bio}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 지원 메시지 + 리뷰 — 2단 그리드 (둘 다 있으면 나란히, 하나만 있으면 전체폭) */}
+                  {(app.message || (cg.reviews && cg.reviews.length > 0)) && (
+                    <div className={`grid gap-3 mb-4 ${app.message && cg.reviews && cg.reviews.length > 0 ? "sm:grid-cols-2" : "grid-cols-1"}`}>
+                      {app.message && (
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <div className="flex items-center gap-1.5 text-xs text-gray-500 font-semibold mb-1.5">
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M8.625 9.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm.375 3.375a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm3-3.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 3.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm3.375-3.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 3.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                              <path d="M4.848 2.771A49.144 49.144 0 0 1 12 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 0 1-3.476.383.39.39 0 0 0-.297.17l-2.755 4.133a.75.75 0 0 1-1.248 0l-2.755-4.133a.39.39 0 0 0-.297-.17 48.9 48.9 0 0 1-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97Z" />
+                            </svg>
+                            지원 메시지
+                          </div>
+                          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{app.message}</p>
+                        </div>
+                      )}
+                      {cg.reviews && cg.reviews.length > 0 && (
+                        <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5 text-xs text-amber-700 font-semibold">
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.32.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .32-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                              </svg>
+                              리뷰 {cg.totalReviewCount || cg.reviews.length}건
+                            </div>
+                            {(cg.totalReviewCount || 0) > cg.reviews.length && (
+                              <button type="button" onClick={() => setReviewsModalCaregiver(cg)}
+                                className="text-xs font-semibold text-orange-600 hover:text-orange-700">
+                                전체 보기 →
+                              </button>
+                            )}
+                          </div>
+                          <div className="space-y-1.5">
+                            {cg.reviews.map((rv) => (
+                              <div key={rv.id} className="bg-white rounded-lg p-2 border border-amber-100">
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="text-amber-500">{"★".repeat(Math.round(rv.rating))}</span>
+                                  <span className="font-semibold text-gray-700">{rv.guardian?.user?.name || "익명"}</span>
+                                  {rv.wouldRehire && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">재고용 의사</span>
+                                  )}
+                                </div>
+                                {rv.comment && <p className="text-xs text-gray-600 mt-1 line-clamp-2">{rv.comment}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 액션 버튼 — 항상 하단 full-width */}
+                  {careRequest?.status === "CANCELLED" ? (
+                    <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-lg text-center">
+                      취소된 요청
+                    </div>
+                  ) : careRequest?.status === "MATCHED" || careRequest?.status === "IN_PROGRESS" || careRequest?.status === "COMPLETED" ? (
+                    app.status === "ACCEPTED" ? (
+                      <div className="w-full py-2.5 text-sm font-semibold text-green-700 bg-green-50 rounded-lg text-center border border-green-200">
+                        ✓ 이 간병인과 매칭 완료
+                      </div>
+                    ) : (
+                      <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-lg text-center">
+                        매칭 종료됨
+                      </div>
+                    )
+                  ) : app.status === "REJECTED" || app.status === "CANCELLED" ? (
+                    <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-lg text-center">
+                      {app.status === "REJECTED" ? "거절됨" : "취소됨"}
+                    </div>
+                  ) : !['OPEN', 'MATCHING'].includes(careRequest?.status || '') ? (
+                    <div className="w-full py-2.5 text-sm text-gray-400 bg-gray-50 rounded-lg text-center">
+                      선택 불가
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmTarget({
+                        caregiverId: cg.id,
+                        caregiverName: cg.user.name,
+                        proposedRate: app.proposedRate,
+                        isAccepted: app.isAccepted,
+                      })}
+                      disabled={selecting !== null}
+                      className="btn-primary w-full text-sm"
+                    >
+                      {selecting === cg.id ? (
+                        <svg className="animate-spin h-5 w-5 mx-auto" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : (
+                        "이 간병인 선택"
+                      )}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -646,7 +726,7 @@ export default function ApplicantsPage() {
 
         {/* 취소된 요청 안내 */}
         {careRequest?.status === "CANCELLED" && (
-          <div className="mt-6 rounded-2xl p-6 border-2 bg-gray-50 border-gray-200">
+          <div className="mt-6 rounded-lg p-6 border-2 bg-gray-50 border-gray-200">
             <div className="text-xs font-semibold mb-1 text-gray-500">ℹ 취소된 요청</div>
             <div className="text-lg font-bold text-gray-900">이 간병 요청은 취소되었습니다</div>
             <p className="text-sm text-gray-600 mt-1">
@@ -660,11 +740,76 @@ export default function ApplicantsPage() {
           <PaymentStatusBanner careRequestId={careRequestId} />
         )}
 
+        {/* 전체 리뷰 모달 */}
+        {reviewsModalCaregiver && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4"
+            onClick={() => setReviewsModalCaregiver(null)}
+          >
+            <div
+              className="bg-white rounded-lg shadow-xl max-w-xl w-full max-h-[85vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    {reviewsModalCaregiver.user.name} 간병인 리뷰
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    평균 ⭐ {reviewsModalCaregiver.avgRating.toFixed(1)} ·
+                    총 {reviewsModalCaregiver.totalReviewCount || fullReviews.length}건
+                  </p>
+                </div>
+                <button
+                  onClick={() => setReviewsModalCaregiver(null)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {fullReviewsLoading ? (
+                  <div className="py-20 text-center text-gray-400 text-sm">불러오는 중...</div>
+                ) : fullReviews.length === 0 ? (
+                  <div className="py-20 text-center text-gray-400 text-sm">리뷰가 없습니다.</div>
+                ) : (
+                  fullReviews.map((rv: any) => (
+                    <div key={rv.id} className="border border-gray-100 rounded-lg p-3">
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-amber-500 font-bold">
+                            {"★".repeat(Math.round(rv.rating))}
+                            <span className="text-gray-300">{"★".repeat(5 - Math.round(rv.rating))}</span>
+                          </span>
+                          <span className="text-gray-700 font-medium">
+                            {rv.guardian?.user?.name || "익명"}
+                          </span>
+                          {rv.wouldRehire && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">
+                              재고용 의사
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-gray-400">
+                          {new Date(rv.createdAt).toLocaleDateString("ko-KR")}
+                        </span>
+                      </div>
+                      {rv.comment && (
+                        <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{rv.comment}</p>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 금액 인상 모달 */}
         {/* 지역 확대 모달 */}
         {showExpandRegionModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-2">지역 확대 재검색</h3>
               <p className="text-sm text-gray-500 mb-4">
                 현재 지역 외에 추가로 알림을 받을 지역을 선택하세요. 해당 지역 간병인에게 공고가 재발송됩니다.
@@ -723,7 +868,7 @@ export default function ApplicantsPage() {
                       setExpandingRegion(false);
                     }
                   }}
-                  className="flex-1 text-sm px-4 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-medium rounded-xl"
+                  className="flex-1 text-sm px-4 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-medium rounded-lg"
                 >
                   {expandingRegion ? "처리 중..." : `${expandRegions.length}개 지역 추가`}
                 </button>
@@ -734,12 +879,12 @@ export default function ApplicantsPage() {
 
         {showRaiseModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-8">
               <h3 className="text-lg font-bold text-gray-900 mb-4">
                 금액 인상 재공고
               </h3>
               <div className="space-y-4">
-                <div className="bg-gray-50 rounded-xl p-4">
+                <div className="bg-gray-50 rounded-lg p-4">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">현재 일당</span>
                     <span className="font-semibold text-gray-900">
@@ -788,7 +933,7 @@ export default function ApplicantsPage() {
                     !newDailyRate ||
                     parseInt(newDailyRate) <= (careRequest?.dailyRate || 0)
                   }
-                  className="flex-1 text-sm px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-medium rounded-xl transition-colors"
+                  className="flex-1 text-sm px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-medium rounded-lg transition-colors"
                 >
                   {raisingRate ? "처리 중..." : "재공고"}
                 </button>
@@ -800,7 +945,7 @@ export default function ApplicantsPage() {
         {/* Confirm dialog overlay */}
         {confirmTarget && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-8">
               <h3 className="text-lg font-bold text-gray-900 mb-2">
                 간병인 선택 확인
               </h3>
@@ -812,7 +957,7 @@ export default function ApplicantsPage() {
               </p>
 
               {/* Show rate info in confirm dialog */}
-              <div className="bg-gray-50 rounded-xl p-4 mb-4">
+              <div className="bg-gray-50 rounded-lg p-4 mb-4">
                 {confirmTarget.isAccepted ? (
                   <div className="flex items-center gap-2 text-sm">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">제시 금액 수락</span>
@@ -920,7 +1065,7 @@ function PaymentStatusBanner({ careRequestId }: { careRequestId: string }) {
     : `${totalAmount.toLocaleString()}원 결제가 필요합니다`;
 
   return (
-    <div className={`mt-6 rounded-2xl p-6 border-2 ${bgClass}`}>
+    <div className={`mt-6 rounded-lg p-6 border-2 ${bgClass}`}>
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <div className={`text-xs font-semibold mb-1 ${badgeColor}`}>{badgeText}</div>
@@ -935,12 +1080,24 @@ function PaymentStatusBanner({ careRequestId }: { careRequestId: string }) {
         {!isPaid && !isEscrow && (
           <Link
             href={`/dashboard/guardian/payment/${contractId}`}
-            className="inline-flex items-center gap-1 px-6 py-3 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-1 px-6 py-3 bg-orange-500 text-white rounded-lg font-bold hover:bg-orange-600 transition-colors whitespace-nowrap"
           >
             결제하기 →
           </Link>
         )}
       </div>
+    </div>
+  );
+}
+
+function StatBlock({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-gray-100 bg-white px-3 py-2">
+      <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium">
+        <span className="text-gray-400">{icon}</span>
+        {label}
+      </div>
+      <div className="text-base font-bold text-gray-900 mt-0.5">{value}</div>
     </div>
   );
 }

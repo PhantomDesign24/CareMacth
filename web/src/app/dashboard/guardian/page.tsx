@@ -3,7 +3,7 @@
 import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
-import { dashboardAPI, careRequestAPI, paymentAPI, guardianAPI, contractAPI, extensionAPI, authAPI, insuranceAPI, disputeAPI } from "@/lib/api";
+import { dashboardAPI, careRequestAPI, paymentAPI, guardianAPI, contractAPI, extensionAPI, authAPI, insuranceAPI, disputeAPI, reviewAPI } from "@/lib/api";
 import { formatDate, formatMoney, formatCareStatus, formatContractStatus, formatPaymentStatus, formatPaymentMethod, formatCareType, formatLocation, formatMobility } from "@/lib/format";
 import { showToast } from "@/components/Toast";
 import NotificationPrefsSection from "@/components/NotificationPrefsSection";
@@ -139,7 +139,7 @@ export default function GuardianDashboardPage() {
 function GuardianDashboard() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const validTabs = ["history", "payments", "patients", "insurance", "referral", "settings"] as const;
+  const validTabs = ["history", "payments", "reviews", "patients", "insurance", "referral", "settings"] as const;
   type TabKey = typeof validTabs[number];
   const tabFromUrl = searchParams.get("tab") as TabKey | null;
   const [activeTab, setActiveTab] = useState<TabKey>(validTabs.includes(tabFromUrl as TabKey) ? (tabFromUrl as TabKey) : "history");
@@ -149,6 +149,14 @@ function GuardianDashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [careHistory, setCareHistory] = useState<CareHistory[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentSummary, setPaymentSummary] = useState<{
+    totalPaid: number;
+    totalRefunded: number;
+    totalPending: number;
+    totalPointsUsed: number;
+    pendingRefundRequests: number;
+    count: number;
+  }>({ totalPaid: 0, totalRefunded: 0, totalPending: 0, totalPointsUsed: 0, pendingRefundRequests: 0, count: 0 });
 
   // Cancel contract modal state
   const [cancelContractId, setCancelContractId] = useState<string | null>(null);
@@ -252,6 +260,16 @@ function GuardianDashboard() {
       // 결제 내역
       const payData = payRes.data?.data || payRes.data || {};
       const paymentList = payData.payments || [];
+      if (payData.summary) {
+        setPaymentSummary({
+          totalPaid: payData.summary.totalPaid || 0,
+          totalRefunded: payData.summary.totalRefunded || 0,
+          totalPending: payData.summary.totalPending || 0,
+          totalPointsUsed: payData.summary.totalPointsUsed || 0,
+          pendingRefundRequests: payData.summary.pendingRefundRequests || 0,
+          count: payData.summary.count || 0,
+        });
+      }
       // 이번 달 비용: 이번 달에 결제 완료(COMPLETED)된 금액만 합산 (PENDING 제외)
       const now = new Date();
       const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
@@ -594,6 +612,7 @@ function GuardianDashboard() {
   const tabs = [
     { key: "history" as const, label: "간병 이력" },
     { key: "payments" as const, label: "결제 내역" },
+    { key: "reviews" as const, label: "내 리뷰" },
     { key: "patients" as const, label: "환자 정보" },
     { key: "insurance" as const, label: "보험서류" },
     { key: "referral" as const, label: "추천인 코드" },
@@ -703,6 +722,8 @@ function GuardianDashboard() {
           {/* Care history */}
           {activeTab === "history" && (
             <div>
+              {/* 추가 간병비 요청 알림 배너 */}
+              <GuardianAdditionalFeesBanner onChanged={fetchData} />
               {/* 상단 툴바: 필터 + 새 요청 버튼 */}
               <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
@@ -869,6 +890,14 @@ function GuardianDashboard() {
                             📄 계약서
                           </button>
                         )}
+                        {!care.isVirtual && (
+                          <Link
+                            href={`/dashboard/guardian/journal/${care.id}`}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-teal-700 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors"
+                          >
+                            📋 간병일지
+                          </Link>
+                        )}
                         {!care.isVirtual && (care.contractStatus === 'COMPLETED' || care.isPaid) && (
                           <button
                             type="button"
@@ -927,8 +956,45 @@ function GuardianDashboard() {
             });
             return (
               <div>
+                {/* 정산 요약 */}
+                <div className="px-4 sm:px-6 pt-5">
+                  <h3 className="text-sm font-bold text-gray-900 mb-3">정산 요약</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                      <div className="text-xs text-blue-700">총 결제 금액</div>
+                      <div className="text-base sm:text-lg font-bold text-blue-700 mt-1">
+                        {paymentSummary.totalPaid.toLocaleString()}원
+                      </div>
+                    </div>
+                    <div className="bg-red-50 border border-red-100 rounded-xl p-3">
+                      <div className="text-xs text-red-700">환불 받은 금액</div>
+                      <div className="text-base sm:text-lg font-bold text-red-700 mt-1">
+                        {paymentSummary.totalRefunded.toLocaleString()}원
+                      </div>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                      <div className="text-xs text-amber-700">결제 대기</div>
+                      <div className="text-base sm:text-lg font-bold text-amber-700 mt-1">
+                        {paymentSummary.totalPending.toLocaleString()}원
+                      </div>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-100 rounded-xl p-3">
+                      <div className="text-xs text-purple-700">사용 포인트</div>
+                      <div className="text-base sm:text-lg font-bold text-purple-700 mt-1">
+                        {paymentSummary.totalPointsUsed.toLocaleString()}P
+                      </div>
+                    </div>
+                  </div>
+                  {paymentSummary.pendingRefundRequests > 0 && (
+                    <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-800 flex items-center gap-2">
+                      <span>⏳</span>
+                      <span>환불 요청 {paymentSummary.pendingRefundRequests}건이 관리자 검토 중입니다.</span>
+                    </div>
+                  )}
+                </div>
+
                 {/* 필터 */}
-                <div className="px-4 sm:px-6 py-3 bg-gray-50 border-b border-gray-100 flex flex-wrap gap-1.5">
+                <div className="px-4 sm:px-6 py-3 mt-4 bg-gray-50 border-y border-gray-100 flex flex-wrap gap-1.5">
                   {paymentFilters.map((f) => (
                     <button
                       key={f.value}
@@ -1036,6 +1102,9 @@ function GuardianDashboard() {
               </div>
             );
           })()}
+
+          {/* My reviews */}
+          {activeTab === "reviews" && <GuardianReviewsTab />}
 
           {/* Patient info */}
           {activeTab === "patients" && (
@@ -1877,6 +1946,285 @@ function GuardianDashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---- GuardianAdditionalFeesBanner (간병인이 요청한 추가 간병비 — 승인/거절) ----
+function GuardianAdditionalFeesBanner({ onChanged }: { onChanged: () => void }) {
+  const [fees, setFees] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [actionLoading, setActionLoading] = React.useState<string | null>(null);
+  const bannerRef = React.useRef<HTMLDivElement>(null);
+
+  // URL의 feeId 쿼리 파라미터 추출 (notification → 특정 요청 하이라이트)
+  const [highlightFeeId, setHighlightFeeId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const feeId = params.get("feeId");
+    if (feeId) setHighlightFeeId(feeId);
+  }, []);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await paymentAPI.getAdditionalFees();
+      const list = res.data?.data || res.data || [];
+      setFees(Array.isArray(list) ? list : []);
+    } catch {
+      setFees([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  // 하이라이트 대상이 있고 데이터 로드 완료되면 스크롤
+  React.useEffect(() => {
+    if (!loading && highlightFeeId && bannerRef.current) {
+      bannerRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [loading, highlightFeeId]);
+
+  // 거절된 건 제외, 아직 승인 안 된 건만 배너 노출
+  const pending = fees.filter((f) => !f.approvedByGuardian && !f.rejected);
+  const history = fees.filter((f) => f.approvedByGuardian || f.rejected);
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+
+  const handleApprove = async (id: string) => {
+    if (!confirm("이 추가 간병비를 승인하시겠습니까?")) return;
+    setActionLoading(id);
+    try {
+      await paymentAPI.approveAdditionalFee(id);
+      showToast("추가 간병비를 승인했습니다.", "success");
+      await load();
+      onChanged();
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || "승인 실패", "error");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+  const handleReject = async (id: string) => {
+    if (!confirm("이 추가 간병비 요청을 거절하시겠습니까?")) return;
+    setActionLoading(id);
+    try {
+      await paymentAPI.rejectAdditionalFee(id);
+      showToast("추가 간병비 요청을 거절했습니다.", "success");
+      await load();
+      onChanged();
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || "거절 실패", "error");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  if (loading || (pending.length === 0 && history.length === 0)) return null;
+
+  return (
+    <div ref={bannerRef} className={`mx-4 sm:mx-6 mt-4 p-4 rounded-xl ${pending.length > 0 ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className={`font-bold text-sm ${pending.length > 0 ? "text-amber-700" : "text-gray-700"}`}>
+            💰 추가 간병비
+            {pending.length > 0 && <span className="ml-1">· 대기 {pending.length}건</span>}
+            {history.length > 0 && <span className="ml-1 text-xs text-gray-500">(이력 {history.length}건)</span>}
+          </span>
+          {pending.length > 0 && (
+            <span className="text-xs text-amber-600">간병인이 간병 중 추가로 청구한 비용입니다.</span>
+          )}
+        </div>
+        {history.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="text-xs text-gray-600 hover:text-gray-800 font-medium flex items-center gap-1"
+          >
+            {historyOpen ? "이력 숨기기 ▲" : "이력 보기 ▼"}
+          </button>
+        )}
+      </div>
+      <div className="space-y-2">
+        {pending.map((f: any) => {
+          const isHighlighted = highlightFeeId === f.id;
+          return (
+            <div
+              key={f.id}
+              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-white rounded-lg border transition-all ${
+                isHighlighted ? "border-orange-500 ring-2 ring-orange-200 shadow-md" : "border-amber-100"
+              }`}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-semibold text-gray-900">
+                    {f.contract?.careRequest?.patient?.name || "-"} 환자
+                  </span>
+                  <span className="font-bold text-orange-600">
+                    +{f.amount?.toLocaleString()}원
+                  </span>
+                  {isHighlighted && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500 text-white font-semibold">
+                      알림에서 이동
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-600 mt-1">사유: {f.reason}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {new Date(f.createdAt).toLocaleDateString("ko-KR")} 요청
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={actionLoading === f.id}
+                  onClick={() => handleReject(f.id)}
+                  className="text-xs px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                >
+                  거절
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading === f.id}
+                  onClick={() => handleApprove(f.id)}
+                  className="text-xs px-3 py-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
+                >
+                  {actionLoading === f.id ? "처리중..." : "승인"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 처리 이력 (승인/거절) */}
+      {historyOpen && history.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="text-xs font-semibold text-gray-500 mb-2">처리 이력</div>
+          <div className="space-y-1.5">
+            {history
+              .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+              .map((f: any) => {
+                const statusBadge = f.rejected
+                  ? { label: "거절됨", cls: "bg-red-100 text-red-700" }
+                  : f.paid
+                  ? { label: "지급완료", cls: "bg-green-100 text-green-700" }
+                  : f.approvedByGuardian
+                  ? { label: "승인됨", cls: "bg-blue-100 text-blue-700" }
+                  : { label: "대기", cls: "bg-amber-100 text-amber-700" };
+                return (
+                  <div key={f.id} className="flex items-center justify-between gap-2 p-2.5 bg-white rounded-lg border border-gray-100 text-xs">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-gray-800">
+                          {f.contract?.careRequest?.patient?.name || "-"}
+                        </span>
+                        <span className="font-bold text-gray-900">
+                          {f.amount?.toLocaleString()}원
+                        </span>
+                        <span className={`px-1.5 py-0.5 rounded-full font-semibold text-[10px] ${statusBadge.cls}`}>
+                          {statusBadge.label}
+                        </span>
+                      </div>
+                      <div className="text-gray-500 mt-0.5 truncate">
+                        사유: {f.reason}
+                      </div>
+                      {f.rejected && f.rejectReason && (
+                        <div className="text-red-600 mt-0.5 text-[10px]">거절 사유: {f.rejectReason}</div>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0 text-[10px] text-gray-400">
+                      {new Date(f.createdAt).toLocaleDateString("ko-KR")}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- GuardianReviewsTab (내가 작성한 리뷰 목록) ----
+function GuardianReviewsTab() {
+  const [reviews, setReviews] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await reviewAPI.myWritten();
+        const list = res.data?.data?.reviews || res.data?.data || [];
+        setReviews(list);
+      } catch {
+        setReviews([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) {
+    return <div className="p-12 text-center text-gray-400">불러오는 중...</div>;
+  }
+  if (reviews.length === 0) {
+    return (
+      <div className="p-12 text-center text-gray-400">
+        <p>아직 작성한 리뷰가 없습니다.</p>
+        <p className="text-xs mt-2 text-gray-400">간병 이력 탭에서 완료된 간병에 대해 리뷰를 작성할 수 있습니다.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="p-4 sm:p-6 space-y-3">
+      {reviews.map((rv: any) => (
+        <div key={rv.id} className="border border-gray-100 rounded-xl p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                {rv.caregiver?.user?.profileImage ? (
+                  <img src={rv.caregiver.user.profileImage} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-lg">👤</span>
+                )}
+              </div>
+              <div>
+                <div className="font-semibold text-gray-900">{rv.caregiver?.user?.name || "간병인"}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {rv.contract?.careRequest?.patient?.name && `환자: ${rv.contract.careRequest.patient.name} · `}
+                  {rv.contract?.startDate && `${new Date(rv.contract.startDate).toLocaleDateString("ko-KR")} ~ ${new Date(rv.contract.endDate).toLocaleDateString("ko-KR")}`}
+                </div>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-amber-500 font-bold">
+                {"★".repeat(Math.round(rv.rating))}
+                <span className="text-gray-300">{"★".repeat(5 - Math.round(rv.rating))}</span>
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                {new Date(rv.createdAt).toLocaleDateString("ko-KR")}
+              </div>
+            </div>
+          </div>
+          {rv.comment && (
+            <p className="mt-3 text-sm text-gray-700 whitespace-pre-wrap">{rv.comment}</p>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            {rv.wouldRehire && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                재고용 의사 있음
+              </span>
+            )}
+            {rv.isHidden && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                관리자 숨김 처리됨
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
