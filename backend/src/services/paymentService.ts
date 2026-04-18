@@ -187,7 +187,7 @@ export async function processRefund(
   }
 }
 
-// 간병인 정산 (종료 후 익일)
+// 간병인 정산 (종료 후 익일) — 중간정산이 있으면 잔여분만 생성
 export async function settleEarning(contractId: string) {
   const contract = await prisma.contract.findUnique({
     where: { id: contractId },
@@ -195,6 +195,7 @@ export async function settleEarning(contractId: string) {
       payments: { where: { status: { in: ['ESCROW', 'COMPLETED'] } } },
       careRequest: true,
       additionalFees: { where: { approvedByGuardian: true, paid: true } },
+      earnings: true,
     },
   });
 
@@ -205,15 +206,42 @@ export async function settleEarning(contractId: string) {
   const totalPaid = contract.payments.reduce((sum, p) => sum + p.amount, 0);
   const totalAdditionalFees = contract.additionalFees.reduce((sum, f) => sum + f.amount, 0);
   const totalEarnable = totalPaid + totalAdditionalFees;
-  const platformFee = Math.round(totalEarnable * (contract.platformFee / 100));
-  const taxAmount = Math.round((totalEarnable - platformFee) * (contract.taxRate / 100));
-  const netAmount = totalEarnable - platformFee - taxAmount;
+
+  // 이미 생성된 Earning(중간정산 포함) 차감
+  const alreadySettled = contract.earnings.reduce((s, e) => s + e.amount, 0);
+  const remainingAmount = totalEarnable - alreadySettled;
+
+  if (remainingAmount <= 0) {
+    // 더 이상 정산할 금액이 없음 → Earning 새로 만들지 않고 에스크로만 정리
+    for (const payment of contract.payments) {
+      if (payment.status === 'ESCROW' && payment.tossPaymentKey) {
+        try {
+          await axios.post(
+            `${TOSS_API_URL}/payments/${payment.tossPaymentKey}/release`,
+            {},
+            { headers: { Authorization: getTossAuthHeader(), 'Content-Type': 'application/json' } },
+          );
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: { status: 'COMPLETED', paidAt: new Date() },
+          });
+        } catch {
+          // best-effort
+        }
+      }
+    }
+    return null;
+  }
+
+  const platformFee = Math.round(remainingAmount * (contract.platformFee / 100));
+  const taxAmount = Math.round((remainingAmount - platformFee) * (contract.taxRate / 100));
+  const netAmount = remainingAmount - platformFee - taxAmount;
 
   const earning = await prisma.earning.create({
     data: {
       caregiverId: contract.caregiverId,
       contractId: contract.id,
-      amount: totalEarnable,
+      amount: remainingAmount,
       platformFee,
       taxAmount,
       netAmount,

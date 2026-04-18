@@ -203,30 +203,108 @@ export async function requestExtension(
   }
 }
 
-// 연장 수락
+// 연장 수락 + 자동 결제 생성
 export async function acceptExtension(extensionId: string) {
   const extension = await prisma.contractExtension.findUnique({
     where: { id: extensionId },
-    include: { contract: true },
+    include: { contract: { include: { guardian: true, caregiver: true } } },
   });
 
   if (!extension) {
     throw new Error('연장 요청을 찾을 수 없습니다.');
   }
 
-  await prisma.contractExtension.update({
-    where: { id: extensionId },
-    data: { approvedByCaregiver: true },
-  });
+  const contract = extension.contract;
+  const additionalAmount = extension.additionalAmount;
+  const vatAmount = Math.round(additionalAmount / 11);
+  const totalAmount = additionalAmount;
 
-  // 계약 종료일 업데이트
-  await prisma.contract.update({
-    where: { id: extension.contractId },
-    data: {
-      endDate: extension.newEndDate,
-      totalAmount: extension.contract.totalAmount + extension.additionalAmount,
-      status: 'EXTENDED',
-    },
+  // 기존 Payment 중 가장 최근 것에서 결제 방법 승계
+  const lastPayment = await prisma.payment.findFirst({
+    where: { contractId: contract.id, status: { in: ['COMPLETED', 'ESCROW', 'PARTIAL_REFUND'] } },
+    orderBy: { createdAt: 'desc' },
+  });
+  const method = lastPayment?.method || 'BANK_TRANSFER';
+  const isDirect = method === 'DIRECT';
+
+  const platformFeeAmount = Math.round(additionalAmount * (contract.platformFee / 100));
+  const taxAmount = Math.round(additionalAmount * (contract.taxRate / 100));
+  const netAmount = additionalAmount - platformFeeAmount - taxAmount;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.contractExtension.update({
+      where: { id: extensionId },
+      data: { approvedByCaregiver: true },
+    });
+
+    await tx.contract.update({
+      where: { id: contract.id },
+      data: {
+        endDate: extension.newEndDate,
+        totalAmount: contract.totalAmount + additionalAmount,
+        status: 'EXTENDED',
+      },
+    });
+
+    // 연장 금액에 대한 자동 결제 생성
+    const extensionPayment = await tx.payment.create({
+      data: {
+        contractId: contract.id,
+        guardianId: contract.guardianId,
+        amount: additionalAmount,
+        vatAmount,
+        totalAmount,
+        method,
+        status: isDirect ? 'COMPLETED' : 'PENDING',
+        ...(isDirect && { paidAt: new Date() }),
+      },
+    });
+
+    // 직접결제면 Earning 즉시 생성
+    if (isDirect) {
+      await tx.earning.create({
+        data: {
+          caregiverId: contract.caregiverId,
+          contractId: contract.id,
+          amount: additionalAmount,
+          platformFee: platformFeeAmount,
+          taxAmount,
+          netAmount,
+        },
+      });
+    }
+
+    // 알림: 결제 필요 시 보호자에게, 직접결제면 양쪽 모두 연장 확정 알림
+    if (!isDirect) {
+      await tx.notification.create({
+        data: {
+          userId: contract.guardian.userId,
+          type: 'PAYMENT',
+          title: '연장 결제 필요',
+          body: `${additionalAmount.toLocaleString()}원의 연장 결제가 생성되었습니다. 결제를 완료해주세요.`,
+          data: { paymentId: extensionPayment.id, contractId: contract.id, extensionId } as any,
+        },
+      });
+    } else {
+      await tx.notification.createMany({
+        data: [
+          {
+            userId: contract.guardian.userId,
+            type: 'PAYMENT',
+            title: '연장 결제 완료 (직접결제)',
+            body: `${additionalAmount.toLocaleString()}원 연장 결제가 기록되었습니다.`,
+            data: { paymentId: extensionPayment.id, contractId: contract.id } as any,
+          },
+          {
+            userId: contract.caregiver.userId,
+            type: 'EXTENSION',
+            title: '연장 확정',
+            body: `계약이 연장되었습니다. 정산 예정 금액: ${netAmount.toLocaleString()}원`,
+            data: { contractId: contract.id } as any,
+          },
+        ],
+      });
+    }
   });
 
   return extension;
