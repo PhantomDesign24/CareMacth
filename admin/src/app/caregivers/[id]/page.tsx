@@ -133,6 +133,54 @@ interface CaregiverDetailData {
     adminId: string;
     createdAt: string;
   }[];
+  contracts?: {
+    id: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+    dailyRate: number;
+    totalAmount: number;
+    patientName: string;
+    guardianName: string;
+    paymentStatus: string | null;
+  }[];
+  earnings?: {
+    id: string;
+    contractId: string | null;
+    amount: number;
+    platformFee: number;
+    taxAmount: number;
+    netAmount: number;
+    isPaid: boolean;
+    paidAt: string | null;
+    createdAt: string;
+  }[];
+  earningsSummary?: {
+    total: number;
+    totalNet: number;
+    unpaidCount: number;
+    unpaidAmount: number;
+  };
+  disputes?: {
+    id: string;
+    status: string;
+    category: string;
+    reason: string;
+    reporterName: string;
+    patientName: string;
+    createdAt: string;
+  }[];
+  additionalFees?: {
+    id: string;
+    amount: number;
+    reason: string;
+    approvedByGuardian: boolean;
+    paid: boolean;
+    patientName: string;
+    guardianName: string;
+    createdAt: string;
+  }[];
+  applicationCount?: number;
 }
 
 // ─── Main Page ─────────────────────────────────────────
@@ -146,7 +194,7 @@ export default function CaregiverDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"certificates" | "criminal" | "reviews" | "penalties" | "memos" | "documents">("certificates");
+  const [activeTab, setActiveTab] = useState<"certificates" | "criminal" | "reviews" | "penalties" | "memos" | "documents" | "contracts" | "earnings" | "disputes" | "fees">("certificates");
 
   // Image modal
   const [imageModalUrl, setImageModalUrl] = useState<string | null>(null);
@@ -321,13 +369,23 @@ export default function CaregiverDetailPage() {
   const penalties = data.penalties || [];
   const memos = data.consultMemos || [];
 
+  const contracts = data.contracts || [];
+  const earnings = data.earnings || [];
+  const earningsSummary = data.earningsSummary || { total: 0, totalNet: 0, unpaidCount: 0, unpaidAmount: 0 };
+  const disputes = data.disputes || [];
+  const additionalFees = data.additionalFees || [];
+
   const tabs = [
-    { key: "certificates" as const, label: "자격증 목록", count: certificates.length },
-    { key: "criminal" as const, label: "범죄이력 조회" },
+    { key: "certificates" as const, label: "자격증", count: certificates.length },
     { key: "documents" as const, label: "서류" },
-    { key: "reviews" as const, label: "리뷰/평점", count: reviews.length },
-    { key: "penalties" as const, label: "패널티 이력", count: penalties.length },
-    { key: "memos" as const, label: "상담 메모", count: memos.length },
+    { key: "criminal" as const, label: "범죄이력" },
+    { key: "contracts" as const, label: "계약 이력", count: contracts.length },
+    { key: "earnings" as const, label: "수익/정산", count: earnings.length },
+    { key: "fees" as const, label: "추가비 요청", count: additionalFees.length },
+    { key: "disputes" as const, label: "분쟁", count: disputes.length },
+    { key: "reviews" as const, label: "리뷰", count: reviews.length },
+    { key: "penalties" as const, label: "패널티", count: penalties.length },
+    { key: "memos" as const, label: "메모", count: memos.length },
   ];
 
   return (
@@ -910,6 +968,194 @@ export default function CaregiverDetailPage() {
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        )}
+
+        {/* Contracts 계약 이력 */}
+        {activeTab === "contracts" && (
+          <div className="card">
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">계약 이력 <span className="text-sm font-normal text-gray-400">{contracts.length}건</span></h3>
+            {contracts.length === 0 ? (
+              <p className="text-sm text-gray-400">계약 이력이 없습니다.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-gray-600">계약 ID</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-600">환자</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-600">보호자</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-600">기간</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-600">일당/총액</th>
+                      <th className="px-3 py-2 text-center font-medium text-gray-600">상태</th>
+                      <th className="px-3 py-2 text-center font-medium text-gray-600">결제</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contracts.map((c) => (
+                      <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-3 py-2 font-mono text-xs text-primary-600">
+                          <Link href={`/matchings`} className="hover:underline">{c.id.slice(0, 8)}...</Link>
+                        </td>
+                        <td className="px-3 py-2">{c.patientName}</td>
+                        <td className="px-3 py-2">{c.guardianName}</td>
+                        <td className="px-3 py-2 text-xs text-gray-600">
+                          {formatDate(c.startDate)} ~<br />{formatDate(c.endDate)}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="text-xs text-gray-500">{formatMoney(c.dailyRate)}</div>
+                          <div className="font-bold">{formatMoney(c.totalAmount)}</div>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                            c.status === "ACTIVE" ? "bg-green-100 text-green-700" :
+                            c.status === "EXTENDED" ? "bg-blue-100 text-blue-700" :
+                            c.status === "COMPLETED" ? "bg-gray-100 text-gray-600" :
+                            c.status === "CANCELLED" ? "bg-red-100 text-red-700" :
+                            "bg-gray-100 text-gray-600"
+                          }`}>{c.status}</span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-xs text-gray-600">
+                          {c.paymentStatus || "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Earnings 수익/정산 */}
+        {activeTab === "earnings" && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="card bg-blue-50 border-blue-100">
+                <div className="text-xs text-blue-700">총 정산 생성액</div>
+                <div className="text-lg font-bold text-blue-800 mt-1">{formatMoney(earningsSummary.total)}</div>
+              </div>
+              <div className="card bg-green-50 border-green-100">
+                <div className="text-xs text-green-700">실 지급액 누계</div>
+                <div className="text-lg font-bold text-green-800 mt-1">{formatMoney(earningsSummary.totalNet)}</div>
+              </div>
+              <div className="card bg-amber-50 border-amber-100">
+                <div className="text-xs text-amber-700">미지급 건수</div>
+                <div className="text-lg font-bold text-amber-800 mt-1">{earningsSummary.unpaidCount}건</div>
+              </div>
+              <div className="card bg-red-50 border-red-100">
+                <div className="text-xs text-red-700">미지급 금액</div>
+                <div className="text-lg font-bold text-red-800 mt-1">{formatMoney(earningsSummary.unpaidAmount)}</div>
+              </div>
+            </div>
+            <div className="card">
+              <h3 className="mb-4 text-lg font-semibold text-gray-900">정산 이력</h3>
+              {earnings.length === 0 ? (
+                <p className="text-sm text-gray-400">정산 내역이 없습니다.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">생성일</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">총액</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">수수료</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">세금</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">실수령</th>
+                        <th className="px-3 py-2 text-center font-medium text-gray-600">지급상태</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {earnings.map((e) => (
+                        <tr key={e.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="px-3 py-2 text-xs text-gray-500">{formatDate(e.createdAt)}</td>
+                          <td className="px-3 py-2 text-right">{formatMoney(e.amount)}</td>
+                          <td className="px-3 py-2 text-right text-primary-600">-{formatMoney(e.platformFee)}</td>
+                          <td className="px-3 py-2 text-right text-gray-500">-{formatMoney(e.taxAmount)}</td>
+                          <td className="px-3 py-2 text-right font-bold">{formatMoney(e.netAmount)}</td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                              e.isPaid ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                            }`}>
+                              {e.isPaid ? `완료(${formatDate(e.paidAt || '')})` : "대기"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Additional Fees 추가비 */}
+        {activeTab === "fees" && (
+          <div className="card">
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">추가 간병비 요청 <span className="text-sm font-normal text-gray-400">{additionalFees.length}건</span></h3>
+            {additionalFees.length === 0 ? (
+              <p className="text-sm text-gray-400">요청한 추가비가 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {additionalFees.map((f) => (
+                  <div key={f.id} className="rounded-lg border border-gray-100 p-3 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold">{f.patientName} 환자 · 보호자 {f.guardianName}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{formatDate(f.createdAt)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-orange-600">{formatMoney(f.amount)}</div>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                          f.approvedByGuardian
+                            ? f.paid ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                            : "bg-amber-100 text-amber-700"
+                        }`}>
+                          {f.approvedByGuardian ? (f.paid ? "승인·지급완료" : "승인·지급대기") : "보호자 승인대기"}
+                        </span>
+                      </div>
+                    </div>
+                    {f.reason && <p className="text-xs text-gray-600 mt-2">사유: {f.reason}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Disputes 분쟁 */}
+        {activeTab === "disputes" && (
+          <div className="card">
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">분쟁 이력 <span className="text-sm font-normal text-gray-400">{disputes.length}건</span></h3>
+            {disputes.length === 0 ? (
+              <p className="text-sm text-gray-400">분쟁 이력이 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {disputes.map((d) => (
+                  <div key={d.id} className="rounded-lg border border-gray-100 p-3 bg-gray-50">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700">
+                          {d.category}
+                        </span>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                          d.status === "PENDING" || d.status === "PROCESSING" ? "bg-amber-100 text-amber-700" :
+                          d.status === "RESOLVED" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                        }`}>
+                          {d.status}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500">{formatDate(d.createdAt)}</span>
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      환자: <span className="font-medium">{d.patientName}</span> · 신고자: <span className="font-medium">{d.reporterName}</span>
+                    </div>
+                    <p className="text-sm text-gray-700 mt-1">{d.reason}</p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

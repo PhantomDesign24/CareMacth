@@ -426,12 +426,21 @@ export interface Caregiver {
   phone?: string;
   email?: string;
   status: string;
+  workStatus?: string;
   associationFee?: number;
   associationFeePaid?: boolean;
+  associationPaidAt?: string | null;
+  identityVerified?: boolean;
+  hasIdCard?: boolean;
+  criminalCheckDone?: boolean;
+  hasCriminalCheckDoc?: boolean;
+  certificateCount?: number;
+  verifiedCertificateCount?: number;
   totalMatchings?: number;
   period?: string;
   penaltyCount?: number;
   penaltyTotal?: number;
+  avgRating?: number;
   rating?: number;
   hasBadge?: boolean;
   createdAt?: string;
@@ -585,11 +594,17 @@ export interface AdminPayment {
   fee: number;
   netAmount: number;
   status: string;
+  contractStatus?: string | null;
+  contractCancelledAt?: string | null;
   method: string;
   paidAt: string | null;
   createdAt: string;
   refundAmount: number | null;
   refundedAt: string | null;
+  additionalFeesCount?: number;
+  additionalFeesPending?: number;
+  additionalFeesTotal?: number;
+  disputesCount?: number;
 }
 
 export interface PaymentsSummary {

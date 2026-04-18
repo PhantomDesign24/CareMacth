@@ -279,6 +279,53 @@ export default function ReportsPage() {
                       {new Date(target.reviewedAt).toLocaleString("ko-KR")}
                     </div>
                   )}
+                  {target.targetType === "REVIEW" && target.reviewId && (
+                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                      <div className="text-xs text-gray-500">
+                        현재 리뷰 상태:{" "}
+                        <span className={target.review?.isHidden ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
+                          {target.review?.isHidden ? "숨김" : "공개"}
+                        </span>
+                      </div>
+                      {target.review?.isHidden ? (
+                        <button
+                          onClick={async () => {
+                            if (!confirm("해당 리뷰의 숨김을 해제하시겠습니까? 리뷰가 다시 공개됩니다.")) return;
+                            try {
+                              const { apiRequest } = await import("@/lib/api");
+                              await apiRequest(`/admin/reviews/${target.reviewId}/unhide`, { method: "POST" });
+                              setToast("리뷰 숨김이 해제되었습니다.");
+                              setTarget(null);
+                              await load();
+                            } catch (e: any) {
+                              alert(e?.message || "실패");
+                            }
+                          }}
+                          className="w-full py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-200"
+                        >
+                          🔓 리뷰 숨김 해제 (공개로 되돌리기)
+                        </button>
+                      ) : (
+                        <button
+                          onClick={async () => {
+                            if (!confirm("해당 리뷰를 다시 숨김 처리하시겠습니까?")) return;
+                            try {
+                              const { apiRequest } = await import("@/lib/api");
+                              await apiRequest(`/admin/reviews/${target.reviewId}/hide`, { method: "POST" });
+                              setToast("리뷰가 숨김 처리되었습니다.");
+                              setTarget(null);
+                              await load();
+                            } catch (e: any) {
+                              alert(e?.message || "실패");
+                            }
+                          }}
+                          className="w-full py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200"
+                        >
+                          🔒 리뷰 다시 숨김 처리
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : null}
             </div>

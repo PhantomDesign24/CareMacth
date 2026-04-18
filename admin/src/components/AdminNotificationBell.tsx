@@ -1,0 +1,193 @@
+"use client";
+
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { apiRequest } from "@/lib/api";
+
+interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  data: any;
+  createdAt: string;
+}
+
+const API_BASE =
+  typeof window !== "undefined" && window.location.hostname !== "localhost"
+    ? "/api"
+    : "http://localhost:4000/api";
+
+async function fetchNotifications(): Promise<Notification[]> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
+  if (!token) return [];
+  try {
+    const res = await fetch(`${API_BASE}/notifications`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const payload = json?.data ?? json;
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.notifications)) return payload.notifications;
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+async function markRead(id: string) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
+  await fetch(`${API_BASE}/notifications/${id}/read`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+async function markAllRead() {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
+  await fetch(`${API_BASE}/notifications/all/read`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+function typeToHref(n: Notification): string | null {
+  const d = n.data || {};
+  switch (n.type) {
+    case "SYSTEM":
+      if (d.insuranceId || d.insuranceDocRequestId) return "/insurance";
+      if (d.reportId) return "/reports";
+      return null;
+    case "PAYMENT":
+      if (d.paymentId) return "/payments";
+      return "/payments";
+    case "CONTRACT":
+    case "EXTENSION":
+      if (d.contractId) return "/matchings";
+      return "/matchings";
+    case "MATCHING":
+      return "/matchings";
+    default:
+      return null;
+  }
+}
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.round(diff / 60000);
+  if (min < 1) return "방금 전";
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const d = Math.round(hr / 24);
+  if (d < 7) return `${d}일 전`;
+  return new Date(iso).toLocaleDateString("ko-KR");
+}
+
+export default function AdminNotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<Notification[]>([]);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const load = useCallback(async () => {
+    const list = await fetchNotifications();
+    setItems(list);
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const unread = items.filter((n) => !n.isRead).length;
+
+  const handleClick = async (n: Notification) => {
+    try {
+      if (!n.isRead) {
+        await markRead(n.id);
+        setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, isRead: true } : x)));
+      }
+    } catch {}
+    const href = typeToHref(n);
+    if (href) window.location.href = href;
+  };
+
+  const handleMarkAll = async () => {
+    try {
+      await markAllRead();
+      setItems((prev) => prev.map((x) => ({ ...x, isRead: true })));
+    } catch {}
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+        aria-label="알림"
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+        </svg>
+        {unread > 0 && (
+          <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-80 max-h-96 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden z-50 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <span className="text-sm font-bold text-gray-900">알림</span>
+            {unread > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAll}
+                className="text-xs text-orange-500 hover:text-orange-600"
+              >
+                모두 읽음
+              </button>
+            )}
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {items.length === 0 ? (
+              <div className="py-10 text-center text-xs text-gray-400">알림이 없습니다.</div>
+            ) : (
+              items.slice(0, 20).map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => handleClick(n)}
+                  className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${
+                    !n.isRead ? "bg-orange-50/40" : ""
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    {!n.isRead && <span className="mt-1.5 w-2 h-2 rounded-full bg-orange-500 shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-gray-900 truncate">{n.title}</div>
+                      <div className="text-xs text-gray-600 line-clamp-2 mt-0.5">{n.body}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">{timeAgo(n.createdAt)}</div>
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

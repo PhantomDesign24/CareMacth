@@ -92,7 +92,7 @@ export default function StatsPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `caregivers_export_${period}.xlsx`;
+      a.download = `carematch-stats-${period}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

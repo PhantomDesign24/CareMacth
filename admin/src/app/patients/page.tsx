@@ -133,7 +133,15 @@ export default function PatientsPage() {
     {
       key: "registeredAt",
       label: "등록일",
-      render: (value) => <span className="text-sm text-gray-500">{(value as string) || "-"}</span>,
+      render: (value) => {
+        const v = value as string | null | undefined;
+        if (!v) return <span className="text-sm text-gray-500">-</span>;
+        const d = new Date(v);
+        const text = isNaN(d.getTime())
+          ? v
+          : d.toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" });
+        return <span className="text-sm text-gray-500">{text}</span>;
+      },
     },
     {
       key: "status",
@@ -141,8 +149,13 @@ export default function PatientsPage() {
       align: "center",
       render: (value) => {
         const v = (value as string) || "-";
-        const isActive = v === "활성" || v === "active";
-        return <span className={isActive ? "badge-green" : "badge-gray"}>{v}</span>;
+        const cls =
+          v === "활성" || v === "active" ? "badge-green" :
+          v === "완료" ? "badge-blue" :
+          v === "취소" ? "badge-red" :
+          v === "대기중" ? "badge-yellow" :
+          "badge-gray";
+        return <span className={cls}>{v}</span>;
       },
     },
     {
