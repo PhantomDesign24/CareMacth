@@ -82,6 +82,7 @@ export default function FindWorkPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [regionFilter, setRegionFilter] = useState<string[]>([]);
+  const [myPreferredRegions, setMyPreferredRegions] = useState<string[]>([]);
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -136,13 +137,16 @@ export default function FindWorkPage() {
       .then((res) => {
         const data = res.data?.data || {};
         const preferred: string[] = data.preferredRegions || [];
+        setMyPreferredRegions(preferred);
         if (preferred.length > 0) setRegionFilter(preferred);
         if (data.workStatus) setMyWorkStatus(data.workStatus);
       })
       .catch(() => {});
     caregiverAPI.getMyApplications()
       .then((res) => {
-        const list: { careRequestId: string; status: string }[] = res.data?.data || [];
+        const raw: { careRequestId: string; status: string }[] = res.data?.data || [];
+        // 취소된 지원은 재지원 가능하므로 제외
+        const list = raw.filter((a) => a.status !== 'CANCELLED');
         setAppliedIds(list.map((a) => a.careRequestId));
         setAppliedStatuses(
           list.reduce<Record<string, string>>((acc, a) => {
@@ -412,7 +416,7 @@ export default function FindWorkPage() {
           </div>
 
           {/* 전체 / 필터해제 버튼 */}
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-3 flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => { setRegionFilter([]); setPage(1); }}
@@ -425,12 +429,43 @@ export default function FindWorkPage() {
               <FiMapPin className="w-3.5 h-3.5" />
               전체 지역
             </button>
+            {isCaregiver && myPreferredRegions.length > 0 && (() => {
+              const isPreferredActive =
+                regionFilter.length === myPreferredRegions.length &&
+                myPreferredRegions.every((r) => regionFilter.includes(r));
+              return (
+                <button
+                  type="button"
+                  onClick={() => { setRegionFilter(myPreferredRegions); setPage(1); }}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
+                    isPreferredActive
+                      ? "bg-orange-500 border-orange-500 text-white shadow-sm shadow-orange-200"
+                      : "bg-white border-gray-200 text-gray-600 hover:border-orange-300"
+                  }`}
+                >
+                  ⭐ 내 선호지역
+                  <span className={`text-xs ${isPreferredActive ? "text-orange-100" : "text-gray-400"}`}>
+                    ({myPreferredRegions.join("·")})
+                  </span>
+                </button>
+              );
+            })()}
             {regionFilter.length > 0 && (
               <span className="text-xs text-gray-400">
                 {regionFilter.join(" · ")} 선택됨
               </span>
             )}
           </div>
+
+          {/* 선호지역 외 노출 안내 */}
+          {isCaregiver && regionFilter.length === 0 && myPreferredRegions.length > 0 && (
+            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-center gap-2">
+              <span className="shrink-0">ℹ</span>
+              <span>
+                현재 <strong>선호지역 외 공고</strong>도 함께 표시 중입니다. 선호지역({myPreferredRegions.join(", ")})으로 돌아가려면 <strong>&quot;내 선호지역&quot;</strong> 버튼을 누르세요.
+              </span>
+            </div>
+          )}
 
           {/* Region grid - 다중 선택 */}
           <div className="grid grid-cols-6 sm:grid-cols-9 gap-2">
@@ -611,6 +646,33 @@ export default function FindWorkPage() {
                         <span className="text-xl sm:text-2xl font-extrabold text-orange-600">
                           {req.dailyRate ? `${req.dailyRate.toLocaleString()}원` : "협의"}
                         </span>
+                        {req.dailyRate && req.durationDays && (() => {
+                          const gross = req.dailyRate * req.durationDays;
+                          // 기본 수수료 10%, 세율 3.3% (실제 계약 시 재계산)
+                          const fee = Math.round(gross * 0.1);
+                          const tax = Math.round((gross - fee) * 0.033);
+                          const net = gross - fee - tax;
+                          return (
+                            <div className="mt-2 pt-2 border-t border-orange-200 text-[11px] text-left space-y-0.5">
+                              <div className="flex justify-between">
+                                <span className="text-gray-500">총액 ({req.durationDays}일)</span>
+                                <span className="text-gray-700 font-medium">{gross.toLocaleString()}원</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-500">수수료 10%</span>
+                                <span className="text-gray-400">-{fee.toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-500">세금 3.3%</span>
+                                <span className="text-gray-400">-{tax.toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between pt-1 border-t border-orange-100">
+                                <span className="text-orange-700 font-semibold">실수령</span>
+                                <span className="text-orange-700 font-bold">{net.toLocaleString()}원</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Action buttons — 간병인만 */}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { documentAPI } from "@/lib/api";
+import { compressImage } from "@/lib/imageCompress";
 import { formatDate } from "@/lib/format";
 
 interface Certificate {
@@ -24,6 +25,9 @@ interface CaregiverProfile {
   specialties: string[];
   preferredRegions: string[];
   idCardImage: string | null;
+  identityVerified: boolean;
+  criminalCheckDone: boolean;
+  criminalCheckDoc: string | null;
   backgroundCheck: boolean;
   certificates: Certificate[];
   user: {
@@ -62,6 +66,57 @@ export default function CaregiverDocumentsPage() {
   const [certIssuer, setCertIssuer] = useState("");
   const [certIssueDate, setCertIssueDate] = useState("");
   const [certFile, setCertFile] = useState<File | null>(null);
+
+  // 신분증 / 범죄이력 upload
+  const [idCardFile, setIdCardFile] = useState<File | null>(null);
+  const [criminalFile, setCriminalFile] = useState<File | null>(null);
+  const [idCardUploading, setIdCardUploading] = useState(false);
+  const [criminalUploading, setCriminalUploading] = useState(false);
+
+  const handleIdCardUpload = async () => {
+    if (!idCardFile) { setError("신분증 파일을 선택해주세요."); return; }
+    setIdCardUploading(true);
+    setError(""); setSuccessMsg("");
+    try {
+      const fd = new FormData();
+      const optimized = await compressImage(idCardFile);
+      fd.append("image", optimized);
+      await documentAPI.uploadIdCard(fd);
+      setSuccessMsg("신분증이 등록되었습니다. 관리자 검토 후 인증 완료됩니다.");
+      setIdCardFile(null);
+      const fi = document.getElementById("id-card-input") as HTMLInputElement;
+      if (fi) fi.value = "";
+      await fetchProfile();
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || "신분증 업로드 실패");
+    } finally {
+      setIdCardUploading(false);
+    }
+  };
+
+  const handleCriminalUpload = async () => {
+    if (!criminalFile) { setError("범죄이력 조회서 파일을 선택해주세요."); return; }
+    setCriminalUploading(true);
+    setError(""); setSuccessMsg("");
+    try {
+      const fd = new FormData();
+      const optimized = await compressImage(criminalFile);
+      // 백엔드 multer는 'document' 필드명을 기대함
+      fd.append("document", optimized);
+      await documentAPI.uploadCriminalCheck(fd);
+      setSuccessMsg("범죄이력 조회서가 등록되었습니다.");
+      setCriminalFile(null);
+      const fi = document.getElementById("criminal-input") as HTMLInputElement;
+      if (fi) fi.value = "";
+      await fetchProfile();
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || "업로드 실패");
+    } finally {
+      setCriminalUploading(false);
+    }
+  };
 
   const fetchProfile = useCallback(async () => {
     setLoading(true);
@@ -150,7 +205,8 @@ export default function CaregiverDocumentsPage() {
       formData.append("name", certName);
       formData.append("issuer", certIssuer);
       formData.append("issueDate", certIssueDate);
-      formData.append("image", certFile);
+      const optimized = await compressImage(certFile);
+      formData.append("image", optimized);
 
       await documentAPI.uploadCertificate(formData);
 
@@ -453,24 +509,118 @@ export default function CaregiverDocumentsPage() {
           </div>
         </div>
 
+        {/* 신분증 */}
+        <div className="card">
+          <h2 className="text-lg font-bold text-gray-900 mb-2">신분증 등록</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            주민등록증·운전면허증 등 본인 확인용 신분증을 업로드해주세요. 관리자 검토 후 인증 완료되며, 인증 완료 전까지는 지원이 제한됩니다.
+          </p>
+          {profile?.idCardImage ? (
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+              <div className="w-full sm:w-40 h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                <img src={profile.idCardImage} alt="신분증" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm">
+                  <span className="text-gray-500">상태:</span>{" "}
+                  <span className={profile.identityVerified ? "text-green-600 font-semibold" : "text-amber-600 font-semibold"}>
+                    {profile.identityVerified ? "✓ 본인 확인 완료" : "⏳ 관리자 검토 중"}
+                  </span>
+                </p>
+                <p className="text-xs text-gray-400 mt-1">재등록 시 아래에서 새 파일을 선택하세요.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              ⚠ 아직 신분증이 등록되지 않았습니다. 등록 후 승인까지 지원이 제한됩니다.
+            </div>
+          )}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              id="id-card-input"
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => setIdCardFile(e.target.files?.[0] || null)}
+              className="flex-1 text-sm file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 file:font-semibold hover:file:bg-primary-100"
+            />
+            <button
+              type="button"
+              className="btn-primary px-6"
+              onClick={handleIdCardUpload}
+              disabled={idCardUploading || !idCardFile}
+            >
+              {idCardUploading ? "업로드 중..." : "등록"}
+            </button>
+          </div>
+        </div>
+
+        {/* 범죄이력 조회서 */}
+        <div className="card">
+          <h2 className="text-lg font-bold text-gray-900 mb-2">범죄이력 조회서 등록</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            정부24 또는 경찰서에서 발급받은 범죄경력회보서(성범죄/아동학대 포함)를 업로드해주세요. 간병 활동 필수 서류입니다.
+          </p>
+          {profile?.criminalCheckDoc ? (
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+              <div className="w-full sm:w-40 h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                <img src={profile.criminalCheckDoc} alt="범죄이력 조회서" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm">
+                  <span className="text-gray-500">상태:</span>{" "}
+                  <span className={profile.criminalCheckDone ? "text-green-600 font-semibold" : "text-amber-600 font-semibold"}>
+                    {profile.criminalCheckDone ? "✓ 조회 완료" : "⏳ 관리자 검토 중"}
+                  </span>
+                </p>
+                <p className="text-xs text-gray-400 mt-1">재등록 시 아래에서 새 파일을 선택하세요.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              ⚠ 아직 범죄이력 조회서가 등록되지 않았습니다. 등록 후 승인까지 지원이 제한됩니다.
+            </div>
+          )}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              id="criminal-input"
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => setCriminalFile(e.target.files?.[0] || null)}
+              className="flex-1 text-sm file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 file:font-semibold hover:file:bg-primary-100"
+            />
+            <button
+              type="button"
+              className="btn-primary px-6"
+              onClick={handleCriminalUpload}
+              disabled={criminalUploading || !criminalFile}
+            >
+              {criminalUploading ? "업로드 중..." : "등록"}
+            </button>
+          </div>
+        </div>
+
         {/* Document Status Section */}
         <div className="card">
           <h2 className="text-lg font-bold text-gray-900 mb-6">서류 현황</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between py-3 border-b border-gray-100">
               <span className="text-gray-700">신원 인증</span>
-              {profile?.idCardImage ? (
-                <span className="text-green-600 font-medium">&#10003; 완료</span>
+              {profile?.identityVerified ? (
+                <span className="text-green-600 font-medium">✓ 완료</span>
+              ) : profile?.idCardImage ? (
+                <span className="text-amber-600 font-medium">⏳ 검토중</span>
               ) : (
-                <span className="text-red-500 font-medium">&#10005; 미등록</span>
+                <span className="text-red-500 font-medium">✕ 미등록</span>
               )}
             </div>
             <div className="flex items-center justify-between py-3 border-b border-gray-100">
               <span className="text-gray-700">범죄이력 조회</span>
-              {profile?.backgroundCheck ? (
-                <span className="text-green-600 font-medium">&#10003; 완료</span>
+              {profile?.criminalCheckDone ? (
+                <span className="text-green-600 font-medium">✓ 완료</span>
+              ) : profile?.criminalCheckDoc ? (
+                <span className="text-amber-600 font-medium">⏳ 검토중</span>
               ) : (
-                <span className="text-red-500 font-medium">&#10005; 미등록</span>
+                <span className="text-red-500 font-medium">✕ 미등록</span>
               )}
             </div>
             <div className="flex items-center justify-between py-3">
@@ -480,6 +630,11 @@ export default function CaregiverDocumentsPage() {
               </span>
             </div>
           </div>
+          {(!profile?.identityVerified || !profile?.criminalCheckDone) && (
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              ⚠ 신원 인증 + 범죄이력 조회가 모두 완료되지 않으면 간병 지원이 제한됩니다.
+            </div>
+          )}
         </div>
       </div>
     </div>

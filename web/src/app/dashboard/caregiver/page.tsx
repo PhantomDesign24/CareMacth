@@ -247,8 +247,25 @@ function CaregiverDashboard() {
 
       const penaltyData = penaltiesRes.data?.data || penaltiesRes.data || {};
       const penaltyList = penaltyData.penalties || [];
+      // 패널티 유형별 기준 점수 (CLAUDE.md 기준)
+      const typeToPoints: Record<string, number> = {
+        NO_SHOW: 30,         // 무단 불참
+        CANCELLATION: 10,    // 24시간 이내 취소
+        COMPLAINT: 10,       // 보호자 불만 (5~20 중앙값)
+        MANUAL: 5,           // 관리자 수동
+      };
+      const typeToLabel: Record<string, string> = {
+        NO_SHOW: "무단 불참",
+        CANCELLATION: "24시간 이내 취소",
+        COMPLAINT: "보호자 불만 접수",
+        MANUAL: "관리자 부여 패널티",
+      };
       setPenalties(penaltyList.map((p: any) => ({
-        id: p.id, date: formatDate(p.createdAt), reason: p.type, points: 0, description: p.reason,
+        id: p.id,
+        date: formatDate(p.createdAt),
+        reason: typeToLabel[p.type] || p.type,
+        points: typeToPoints[p.type] ?? 0,
+        description: p.reason,
       })));
 
       const reqData = requestsRes.data?.data || requestsRes.data || {};
@@ -412,7 +429,8 @@ function CaregiverDashboard() {
   };
 
   const referralCode = summary?.referralCode ?? "";
-  const penaltyScore = summary?.penaltyScore ?? penalties.reduce((sum, p) => sum + p.points, 0);
+  // 실제 누적 점수는 개별 패널티의 points 합산 (summary.penaltyScore는 count였던 레거시 값이라 무시)
+  const penaltyScore = penalties.reduce((sum, p) => sum + p.points, 0);
 
   const statusOptions: { value: Status; label: string; color: string; dotColor: string }[] = [
     { value: "working", label: "근무 중", color: "bg-blue-50 text-blue-700 border-blue-200", dotColor: "bg-blue-500" },
@@ -1033,7 +1051,7 @@ function CaregiverDashboard() {
                         <div className="text-xs text-red-400 mt-1">{pen.date}</div>
                       </div>
                       <span className="text-lg font-bold text-red-600 shrink-0">
-                        {pen.points}점
+                        -{pen.points}점
                       </span>
                     </div>
                   ))}

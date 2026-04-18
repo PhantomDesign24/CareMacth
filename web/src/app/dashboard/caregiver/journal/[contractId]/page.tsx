@@ -3,6 +3,7 @@
 import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { careRecordAPI, contractAPI } from "@/lib/api";
+import { compressImages } from "@/lib/imageCompress";
 import { showToast } from "@/components/Toast";
 import { FiClock, FiLogOut, FiLogIn, FiSave, FiArrowLeft, FiDownload } from "react-icons/fi";
 
@@ -66,6 +67,54 @@ function JournalPage() {
     otherCareNote: "",
     notes: "",
   });
+  const [photoUploading, setPhotoUploading] = useState(false);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setPhotoUploading(true);
+    try {
+      // 업로드 전 이미지 압축
+      const compressed = await compressImages(Array.from(files));
+      const fd = new FormData();
+      fd.append('contractId', contractId);
+      if (today?.id) fd.append('recordId', today.id);
+      fd.append('date', selectedDate);
+      for (const f of compressed) {
+        fd.append('photos', f);
+      }
+      const res = await careRecordAPI.uploadPhotos(fd);
+      const payload = res.data?.data || {};
+      const newPhotos: string[] = payload.photos || [];
+      const newRecordId: string | undefined = payload.recordId;
+      setToday((prev) => {
+        if (prev) return { ...prev, photos: newPhotos };
+        // 새로 생성된 빈 기록
+        return {
+          id: newRecordId || "",
+          date: selectedDate,
+          checkInTime: null,
+          checkOutTime: null,
+          careHours: null,
+          careHoursManual: null,
+          mealCare: false,
+          activityCare: false,
+          excretionCare: false,
+          hygieneCare: false,
+          otherCare: false,
+          otherCareNote: null,
+          notes: null,
+          photos: newPhotos,
+        };
+      });
+      showToast(`사진 ${files.length}장 업로드 완료`, "success");
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || "업로드 실패", "error");
+    } finally {
+      setPhotoUploading(false);
+      e.target.value = "";
+    }
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -440,6 +489,42 @@ function JournalPage() {
             rows={3}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400 resize-none"
           />
+        </div>
+
+        {/* 사진 첨부 (저장 후 업로드 가능) */}
+        <div className="bg-white rounded-xl p-4 border border-gray-100">
+          <h2 className="text-sm font-bold text-gray-900 mb-3">
+            사진 첨부 (선택)
+            {today?.photos && today.photos.length > 0 && (
+              <span className="ml-2 text-xs font-normal text-gray-400">{today.photos.length}장</span>
+            )}
+          </h2>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            disabled={photoUploading}
+            onChange={handlePhotoUpload}
+            className="block w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-orange-50 file:text-orange-700 file:text-xs file:font-semibold hover:file:bg-orange-100 disabled:opacity-50"
+          />
+          {photoUploading && (
+            <p className="mt-2 text-xs text-orange-500">업로드 중...</p>
+          )}
+          {today?.photos && today.photos.length > 0 && (
+            <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {today.photos.map((url, idx) => (
+                <a
+                  key={idx}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative block aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50"
+                >
+                  <img src={url} alt={`photo-${idx + 1}`} className="w-full h-full object-cover" />
+                </a>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 저장 */}
