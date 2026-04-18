@@ -23,7 +23,7 @@ import * as Notifications from 'expo-notifications';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Device from 'expo-device';
 import * as SecureStore from 'expo-secure-store';
-import RNExitApp from 'react-native-exit-app';
+// 앱 종료: React Native 내장 BackHandler.exitApp()만 사용 (Android 전용, iOS는 원래 종료 불가)
 import { APP_CONFIG } from './src/config';
 
 const DOMAIN = APP_CONFIG.domain;
@@ -219,12 +219,7 @@ export default function App() {
             { text: '취소', style: 'cancel', onPress: hideModal },
             { text: '종료', style: 'danger', onPress: () => {
               hideModal();
-              // JS 런타임까지 완전 종료 (프로세스 kill)
-              try {
-                RNExitApp.exitApp();
-              } catch {
-                BackHandler.exitApp();
-              }
+              BackHandler.exitApp();
             }},
           ],
         });
