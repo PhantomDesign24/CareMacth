@@ -18,6 +18,20 @@ const API_BASE =
     ? "/api"
     : "http://localhost:4000/api";
 
+// 관리자 전용 알림 판별 — admin-role만 받는 알림은 특정 data 필드 포함
+function isAdminRelevant(n: Notification): boolean {
+  const d = n.data || {};
+  // admin 대상임을 명시적으로 표시하는 필드들
+  if (d.reportId) return true;
+  if (d.disputeId) return true;
+  if (d.insuranceDocRequestId) return true; // insuranceId는 보호자 알림에서도 쓰임
+  if (d.adminAlert === true) return true;
+  if (d.forAdmin === true) return true;
+  // 제목/본문 패턴 (보조)
+  if (/신고 접수|분쟁 접수|환불 요청 접수|간병보험 서류 신청/.test(n.title || "")) return true;
+  return false;
+}
+
 async function fetchNotifications(): Promise<Notification[]> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
   if (!token) return [];
@@ -28,9 +42,11 @@ async function fetchNotifications(): Promise<Notification[]> {
     if (!res.ok) return [];
     const json = await res.json();
     const payload = json?.data ?? json;
-    if (Array.isArray(payload)) return payload;
-    if (Array.isArray(payload?.notifications)) return payload.notifications;
-    return [];
+    let list: Notification[] = [];
+    if (Array.isArray(payload)) list = payload;
+    else if (Array.isArray(payload?.notifications)) list = payload.notifications;
+    // 관리자 전용 알림만 노출 (Guardian/Caregiver 개인 알림 제외)
+    return list.filter(isAdminRelevant);
   } catch {
     return [];
   }
@@ -63,39 +79,39 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   SYSTEM: { label: "공지", color: "bg-gray-100 text-gray-700" },
 };
 
+// 관리자는 basePath '/admin' 설정이라 window.location.href 이동 시 /admin 접두사 필수
+const BP = "/admin";
+
 function typeToHref(n: Notification): string | null {
   const d = n.data || {};
   switch (n.type) {
     case "SYSTEM":
-      if (d.insuranceId || d.insuranceDocRequestId) return "/insurance";
-      if (d.disputeId) return "/disputes";
-      if (d.reportId) return "/reports";
-      if (d.caregiverId) return `/caregivers/${d.caregiverId}`;
-      return "/dashboard";
+      if (d.insuranceId || d.insuranceDocRequestId) return `${BP}/insurance`;
+      if (d.disputeId) return `${BP}/disputes`;
+      if (d.reportId) return `${BP}/reports`;
+      if (d.caregiverId) return `${BP}/caregivers/${d.caregiverId}`;
+      return `${BP}/`;
     case "PAYMENT":
-      // 환불 요청 승인 대기 → 환불 요청 탭
-      if (d.paymentId && d.refundRequest) return "/payments?tab=refunds";
-      // 추가비 요청 → 추가 간병비 탭
-      if (d.feeId) return "/payments?tab=additional-fees";
-      // 정산 관련 → 정산 탭
-      if (d.earningId || d.bulk) return "/payments?tab=settlements";
-      return "/payments";
+      if (d.paymentId && d.refundRequest) return `${BP}/payments?tab=refunds`;
+      if (d.feeId) return `${BP}/payments?tab=additional-fees`;
+      if (d.earningId || d.bulk) return `${BP}/payments?tab=settlements`;
+      return `${BP}/payments`;
     case "CONTRACT":
     case "EXTENSION":
-      if (d.contractId) return `/matchings?contract=${d.contractId}`;
-      return "/matchings";
+      if (d.contractId) return `${BP}/matchings?contract=${d.contractId}`;
+      return `${BP}/matchings`;
     case "MATCHING":
     case "APPLICATION":
-      if (d.careRequestId) return `/matchings?careRequest=${d.careRequestId}`;
-      return "/matchings";
+      if (d.careRequestId) return `${BP}/matchings?careRequest=${d.careRequestId}`;
+      return `${BP}/matchings`;
     case "CARE_RECORD":
-      if (d.contractId) return `/matchings?contract=${d.contractId}`;
-      return "/matchings";
+      if (d.contractId) return `${BP}/matchings?contract=${d.contractId}`;
+      return `${BP}/matchings`;
     case "PENALTY":
-      if (d.caregiverId) return `/caregivers/${d.caregiverId}`;
-      return "/caregivers";
+      if (d.caregiverId) return `${BP}/caregivers/${d.caregiverId}`;
+      return `${BP}/caregivers`;
     default:
-      return "/dashboard";
+      return `${BP}/`;
   }
 }
 

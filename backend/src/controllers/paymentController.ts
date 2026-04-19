@@ -378,7 +378,7 @@ export const refundPayment = async (req: AuthRequest, res: Response, next: NextF
             refundRequestAmount: refundAmount,
           },
         });
-        // 관리자에게 알림
+        // 관리자에게 알림 (adminAlert=true로 마킹)
         const admins = await tx.user.findMany({
           where: { role: 'ADMIN', isActive: true },
           select: { id: true },
@@ -390,7 +390,7 @@ export const refundPayment = async (req: AuthRequest, res: Response, next: NextF
               type: 'PAYMENT' as const,
               title: '환불 요청 접수',
               body: `${payment.guardian?.user?.name || '사용자'}님이 ${refundAmount.toLocaleString()}원 환불을 요청했습니다.`,
-              data: { paymentId: id, contractId: payment.contractId } as any,
+              data: { paymentId: id, contractId: payment.contractId, refundRequest: true, adminAlert: true } as any,
             })),
           });
         }
