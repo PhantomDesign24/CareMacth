@@ -56,9 +56,20 @@ function formatDate(d: string | null): string {
   }
 }
 
+const REGION_OPTIONS = [
+  "서울", "경기", "인천", "부산", "대구", "대전", "광주", "울산", "세종",
+  "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
+];
+
 export default function CareRequestsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [scheduleFilter, setScheduleFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [regionFilter, setRegionFilter] = useState("");
+  const [applicantFilter, setApplicantFilter] = useState("");
+  const [startFrom, setStartFrom] = useState("");
+  const [startTo, setStartTo] = useState("");
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [rows, setRows] = useState<AdminCareRequestRow[]>([]);
@@ -80,6 +91,12 @@ export default function CareRequestsPage() {
       const res = await getAdminCareRequests({
         status: statusFilter || undefined,
         careType: typeFilter || undefined,
+        scheduleType: scheduleFilter || undefined,
+        location: locationFilter || undefined,
+        region: regionFilter || undefined,
+        hasApplicants: applicantFilter || undefined,
+        startFrom: startFrom || undefined,
+        startTo: startTo || undefined,
         search: search || undefined,
         page: currentPage,
         limit,
@@ -92,7 +109,7 @@ export default function CareRequestsPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, typeFilter, search, currentPage]);
+  }, [statusFilter, typeFilter, scheduleFilter, locationFilter, regionFilter, applicantFilter, startFrom, startTo, search, currentPage]);
 
   useEffect(() => {
     fetchData();
@@ -100,7 +117,19 @@ export default function CareRequestsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, typeFilter, search]);
+  }, [statusFilter, typeFilter, scheduleFilter, locationFilter, regionFilter, applicantFilter, startFrom, startTo, search]);
+
+  const resetFilters = () => {
+    setStatusFilter("");
+    setTypeFilter("");
+    setScheduleFilter("");
+    setLocationFilter("");
+    setRegionFilter("");
+    setApplicantFilter("");
+    setStartFrom("");
+    setStartTo("");
+    setSearch("");
+  };
 
   const openDetail = useCallback(async (row: AdminCareRequestRow) => {
     setDetailRow(row);
@@ -255,7 +284,7 @@ export default function CareRequestsPage() {
         <StatsCard title="완료" value={`${completedCount}건`} color="red" />
       </div>
 
-      <div className="card">
+      <div className="card space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative w-full min-w-0 sm:flex-1 sm:min-w-[200px]">
             <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -291,6 +320,69 @@ export default function CareRequestsPage() {
             <option value="INDIVIDUAL">1:1 간병</option>
             <option value="FAMILY">가족 간병</option>
           </select>
+          <select
+            value={scheduleFilter}
+            onChange={(e) => setScheduleFilter(e.target.value)}
+            className="input-field w-auto"
+          >
+            <option value="">전체 일정</option>
+            <option value="FULL_TIME">24시간</option>
+            <option value="PART_TIME">시간제</option>
+          </select>
+          <select
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            className="input-field w-auto"
+          >
+            <option value="">전체 위치</option>
+            <option value="HOSPITAL">병원</option>
+            <option value="HOME">자택</option>
+            <option value="FACILITY">요양시설</option>
+          </select>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={regionFilter}
+            onChange={(e) => setRegionFilter(e.target.value)}
+            className="input-field w-auto"
+          >
+            <option value="">전체 지역</option>
+            {REGION_OPTIONS.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+          <select
+            value={applicantFilter}
+            onChange={(e) => setApplicantFilter(e.target.value)}
+            className="input-field w-auto"
+          >
+            <option value="">지원 여부 전체</option>
+            <option value="yes">지원자 있음</option>
+            <option value="no">지원자 없음</option>
+          </select>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-500 whitespace-nowrap">시작일</label>
+            <input
+              type="date"
+              value={startFrom}
+              onChange={(e) => setStartFrom(e.target.value)}
+              className="input-field w-auto"
+            />
+            <span className="text-gray-400">~</span>
+            <input
+              type="date"
+              value={startTo}
+              onChange={(e) => setStartTo(e.target.value)}
+              className="input-field w-auto"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="ml-auto text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
+          >
+            필터 초기화
+          </button>
         </div>
       </div>
 

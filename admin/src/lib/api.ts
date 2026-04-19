@@ -411,6 +411,12 @@ export interface AdminCareRequestsResponse {
 export async function getAdminCareRequests(params?: {
   status?: string;
   careType?: string;
+  scheduleType?: string;
+  location?: string;
+  region?: string;
+  hasApplicants?: string;
+  startFrom?: string;
+  startTo?: string;
   search?: string;
   page?: number;
   limit?: number;

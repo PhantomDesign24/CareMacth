@@ -3308,11 +3308,27 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
     const skip = (page - 1) * limit;
     const status = req.query.status as string | undefined;
     const careType = req.query.careType as string | undefined;
+    const scheduleType = req.query.scheduleType as string | undefined;
+    const location = req.query.location as string | undefined;
+    const region = req.query.region as string | undefined;
+    const hasApplicants = req.query.hasApplicants as string | undefined; // 'yes' | 'no'
+    const startFrom = req.query.startFrom as string | undefined;
+    const startTo = req.query.startTo as string | undefined;
     const search = req.query.search as string | undefined;
 
     const where: any = {};
     if (status) where.status = status;
     if (careType) where.careType = careType;
+    if (scheduleType) where.scheduleType = scheduleType;
+    if (location) where.location = location;
+    if (region) where.regions = { has: region };
+    if (hasApplicants === 'yes') where.applications = { some: {} };
+    if (hasApplicants === 'no') where.applications = { none: {} };
+    if (startFrom || startTo) {
+      where.startDate = {};
+      if (startFrom) where.startDate.gte = new Date(startFrom);
+      if (startTo) where.startDate.lte = new Date(`${startTo}T23:59:59.999Z`);
+    }
     if (search) {
       where.OR = [
         { address: { contains: search, mode: 'insensitive' } },
@@ -3322,24 +3338,50 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
       ];
     }
 
-    const [requests, total] = await Promise.all([
+    // 상태별 프로세스 흐름 정렬: OPEN → MATCHING → MATCHED → IN_PROGRESS → COMPLETED → CANCELLED
+    const statusOrder: Record<string, number> = {
+      OPEN: 1,
+      MATCHING: 2,
+      MATCHED: 3,
+      IN_PROGRESS: 4,
+      COMPLETED: 5,
+      CANCELLED: 6,
+    };
+
+    const [allMatching, total] = await Promise.all([
       prisma.careRequest.findMany({
         where,
-        include: {
-          patient: { select: { id: true, name: true, birthDate: true, gender: true } },
-          guardian: {
-            include: {
-              user: { select: { id: true, name: true, phone: true } },
-            },
-          },
-          _count: { select: { applications: true, contracts: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
+        select: { id: true, status: true, createdAt: true },
       }),
       prisma.careRequest.count({ where }),
     ]);
+
+    const orderedIds = allMatching
+      .sort((a, b) => {
+        const so = (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99);
+        if (so !== 0) return so;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      })
+      .slice(skip, skip + limit)
+      .map((r) => r.id);
+
+    const fetched = orderedIds.length > 0
+      ? await prisma.careRequest.findMany({
+          where: { id: { in: orderedIds } },
+          include: {
+            patient: { select: { id: true, name: true, birthDate: true, gender: true } },
+            guardian: {
+              include: {
+                user: { select: { id: true, name: true, phone: true } },
+              },
+            },
+            _count: { select: { applications: true, contracts: true } },
+          },
+        })
+      : [];
+
+    const byId = new Map(fetched.map((r) => [r.id, r]));
+    const requests = orderedIds.map((id) => byId.get(id)!).filter(Boolean);
 
     const rows = requests.map((r) => ({
       id: r.id,
