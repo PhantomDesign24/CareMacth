@@ -376,6 +376,54 @@ export async function deleteEducation(id: string) {
   return apiRequest(`/admin/education/${id}`, { method: "DELETE" });
 }
 
+// ─── Care Requests (일감) ─────────────────────────────
+export interface AdminCareRequestRow {
+  id: string;
+  status: string;
+  careType: string;
+  scheduleType: string;
+  location: string;
+  address: string;
+  hospitalName: string | null;
+  regions: string[];
+  startDate: string;
+  endDate: string | null;
+  durationDays: number | null;
+  dailyRate: number | null;
+  hourlyRate: number | null;
+  patientId: string;
+  patientName: string;
+  patientBirthDate: string | null;
+  patientGender: string | null;
+  guardianId: string;
+  guardianName: string;
+  guardianPhone: string;
+  applicationCount: number;
+  contractCount: number;
+  createdAt: string;
+}
+
+export interface AdminCareRequestsResponse {
+  requests: AdminCareRequestRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export async function getAdminCareRequests(params?: {
+  status?: string;
+  careType?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) {
+  return apiRequest<AdminCareRequestsResponse>("/admin/care-requests", {
+    params: params as Record<string, string | number>,
+  });
+}
+
+export async function getAdminCareRequest(id: string) {
+  return apiRequest<any>(`/admin/care-requests/${id}`);
+}
+
 // ─── Payments / Settlements ──────────────────────────
 export async function getAdminPayments(params?: { status?: string; startDate?: string; endDate?: string; search?: string; page?: number; limit?: number }) {
   return apiRequest<AdminPaymentsResponse>("/admin/payments", {

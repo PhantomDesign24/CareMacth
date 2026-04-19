@@ -39,6 +39,10 @@ router.post('/notifications/send', [
 ], adminController.sendNotification);
 router.delete('/notifications/unsent', adminController.deleteUnsentNotifications);
 
+// 간병 일감(요청) 관리
+router.get('/care-requests', adminController.getCareRequests);
+router.get('/care-requests/:id', adminController.getCareRequestDetail);
+
 // 환자 관리
 router.get('/patients', adminController.getPatients);
 router.get('/patients/:id', adminController.getPatientDetail);

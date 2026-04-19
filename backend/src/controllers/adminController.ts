@@ -3299,3 +3299,132 @@ export const revertEmergencyRematch = async (req: AuthRequest, res: Response, ne
     next(error);
   }
 };
+
+// GET /care-requests - 간병 일감(요청) 목록
+export const getCareRequests = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+    const status = req.query.status as string | undefined;
+    const careType = req.query.careType as string | undefined;
+    const search = req.query.search as string | undefined;
+
+    const where: any = {};
+    if (status) where.status = status;
+    if (careType) where.careType = careType;
+    if (search) {
+      where.OR = [
+        { address: { contains: search, mode: 'insensitive' } },
+        { hospitalName: { contains: search, mode: 'insensitive' } },
+        { patient: { name: { contains: search, mode: 'insensitive' } } },
+        { guardian: { user: { name: { contains: search, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const [requests, total] = await Promise.all([
+      prisma.careRequest.findMany({
+        where,
+        include: {
+          patient: { select: { id: true, name: true, birthDate: true, gender: true } },
+          guardian: {
+            include: {
+              user: { select: { id: true, name: true, phone: true } },
+            },
+          },
+          _count: { select: { applications: true, contracts: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.careRequest.count({ where }),
+    ]);
+
+    const rows = requests.map((r) => ({
+      id: r.id,
+      status: r.status,
+      careType: r.careType,
+      scheduleType: r.scheduleType,
+      location: r.location,
+      address: r.address,
+      hospitalName: r.hospitalName,
+      regions: r.regions,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      durationDays: r.durationDays,
+      dailyRate: r.dailyRate,
+      hourlyRate: r.hourlyRate,
+      patientId: r.patient?.id,
+      patientName: r.patient?.name || '-',
+      patientBirthDate: r.patient?.birthDate,
+      patientGender: r.patient?.gender,
+      guardianId: r.guardian?.id,
+      guardianName: r.guardian?.user?.name || '-',
+      guardianPhone: r.guardian?.user?.phone || '-',
+      applicationCount: r._count.applications,
+      contractCount: r._count.contracts,
+      createdAt: r.createdAt,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        requests: rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /care-requests/:id - 간병 일감 상세 (지원자 포함)
+export const getCareRequestDetail = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const request = await prisma.careRequest.findUnique({
+      where: { id },
+      include: {
+        patient: true,
+        guardian: { include: { user: { select: { id: true, name: true, phone: true, email: true } } } },
+        applications: {
+          include: {
+            caregiver: {
+              include: {
+                user: { select: { id: true, name: true, phone: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        contracts: {
+          select: {
+            id: true,
+            status: true,
+            startDate: true,
+            endDate: true,
+            totalAmount: true,
+            caregiver: {
+              include: { user: { select: { name: true, phone: true } } },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!request) {
+      throw new AppError('간병 요청을 찾을 수 없습니다.', 404);
+    }
+
+    res.json({ success: true, data: request });
+  } catch (error) {
+    next(error);
+  }
+};
