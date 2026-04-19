@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { sendFromTemplate } from '../services/notificationService';
 
 // POST / - 간병보험 서류 신청
 export const createInsuranceDocRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -52,15 +53,14 @@ export const createInsuranceDocRequest = async (req: AuthRequest, res: Response,
     });
 
     if (admins.length > 0) {
-      await prisma.notification.createMany({
-        data: admins.map((admin) => ({
+      await Promise.all(admins.map((admin) =>
+        sendFromTemplate({
           userId: admin.id,
-          type: 'SYSTEM' as const,
-          title: '간병보험 서류 신청',
-          body: `${patientName} 환자의 ${documentType} 신청이 접수되었습니다. (보험사: ${insuranceCompany})`,
+          key: 'INSURANCE_REQUESTED_ADMIN',
+          vars: { patientName, documentType, insuranceCompany },
           data: { insuranceDocRequestId: docRequest.id } as any,
-        })),
-      });
+        }).catch(() => {}),
+      ));
     }
 
     res.status(201).json({
@@ -198,37 +198,26 @@ export const adminUpdateInsurance = async (req: AuthRequest, res: Response, next
       },
     });
 
-    // 상태 변경 시 신청자에게 알림 (REQUESTED 되돌리기는 알림 없음)
+    // 상태 변경 시 신청자에게 알림 (템플릿 기반)
     const docLabel = `보험청구용 ${req_.documentType}`;
     const reasonText = rejectReason || adminNote || '';
-    const notifMap: Record<string, { title: string; body: string } | null> = {
-      PROCESSING: {
-        title: '보험서류 처리 시작',
-        body: `${req_.patientName} 환자분 ${docLabel} 신청이 접수되어 관리자가 처리 중입니다.`,
-      },
-      COMPLETED: {
-        title: '보험서류 발급 완료',
-        body: `${req_.patientName} 환자분 ${docLabel} 발급이 완료되었습니다. 마이페이지 → 보험서류 탭에서 다운로드하실 수 있습니다.`,
-      },
-      REJECTED: {
-        title: '보험서류 신청 거절',
-        body: `${req_.patientName} 환자분 ${docLabel} 신청이 거절되었습니다. 사유: ${reasonText}`,
-      },
-      REQUESTED: {
-        title: '보험서류 재심사 접수',
-        body: `${req_.patientName} 환자분 ${docLabel} 신청이 관리자에 의해 재심사 대기 상태로 전환되었습니다.`,
-      },
+    const keyMap: Record<string, string> = {
+      PROCESSING: 'INSURANCE_PROCESSING',
+      COMPLETED: 'INSURANCE_COMPLETED',
+      REJECTED: 'INSURANCE_REJECTED',
+      REQUESTED: 'INSURANCE_REREVIEW',
     };
-    const notif = status ? notifMap[status] : null;
-    if (notif && status !== req_.status) {
-      await prisma.notification.create({
-        data: {
-          userId: req_.requestedBy,
-          type: 'SYSTEM',
-          title: notif.title,
-          body: notif.body,
-          data: { insuranceId: id, documentUrl: updated.documentUrl, rejectReason: reasonText },
+    const templateKey = status ? keyMap[status] : null;
+    if (templateKey && status !== req_.status) {
+      await sendFromTemplate({
+        userId: req_.requestedBy,
+        key: templateKey,
+        vars: {
+          patientName: req_.patientName,
+          docLabel,
+          reasonText,
         },
+        data: { insuranceId: id, documentUrl: updated.documentUrl, rejectReason: reasonText },
       }).catch(() => {});
     }
 

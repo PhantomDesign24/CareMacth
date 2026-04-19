@@ -240,3 +240,45 @@ export async function sendPenaltyNotification(
     body: `[${penaltyType}] ${reason}`,
   });
 }
+
+/**
+ * 템플릿 기반 알림 발송
+ * - NotificationTemplate 테이블에서 key로 조회
+ * - {{variable}} 플레이스홀더 치환
+ * - enabled=false면 발송 스킵
+ * - 템플릿 없으면 fallback (title/body 직접 전달 가능)
+ */
+export interface TemplateVars {
+  [key: string]: string | number | undefined | null;
+}
+
+export async function sendFromTemplate(params: {
+  userId: string;
+  key: string;
+  vars?: TemplateVars;
+  data?: Record<string, any>;
+  fallbackTitle?: string;
+  fallbackBody?: string;
+  fallbackType?: NotificationType;
+}) {
+  const { userId, key, vars = {}, data, fallbackTitle, fallbackBody, fallbackType } = params;
+
+  const template = await prisma.notificationTemplate.findUnique({ where: { key } });
+
+  // 템플릿 비활성화 시 발송 건너뜀
+  if (template && !template.enabled) {
+    return null;
+  }
+
+  const renderVars = (str: string): string =>
+    str.replace(/\{\{(\w+)\}\}/g, (_, varName) => {
+      const v = vars[varName];
+      return v == null ? '' : String(v);
+    });
+
+  const title = template ? renderVars(template.title) : (fallbackTitle || key);
+  const body = template ? renderVars(template.body) : (fallbackBody || '');
+  const type = (template?.type as NotificationType) || fallbackType || 'SYSTEM';
+
+  return sendNotification({ userId, type, title, body, data });
+}

@@ -91,7 +91,7 @@ export default function NotificationTemplatesPage() {
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-gray-900">알림 템플릿 관리</h1>
         <p className="text-sm text-gray-500 mt-1">
-          사용자에게 발송되는 시스템 알림 문구를 편집합니다. 변수는 <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">{"{name}"}</code> 형태로 사용됩니다.
+          사용자에게 발송되는 시스템 알림 문구를 편집합니다. 변수는 <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">{"{{name}}"}</code> 형태로 사용됩니다. 예: <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">{"{{patientName}}"}</code>, <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">{"{{amount}}"}</code>
         </p>
       </div>
 

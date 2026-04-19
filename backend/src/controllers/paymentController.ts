@@ -7,6 +7,7 @@ import { AuthRequest } from '../middlewares/auth';
 import { config } from '../config';
 import { generateOrderId } from '../utils/generateCode';
 import { sendEmail, emailPaymentCompleted } from '../services/emailService';
+import { sendFromTemplate } from '../services/notificationService';
 
 // POST / - 결제 생성
 export const createPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -862,14 +863,14 @@ export const createAdditionalFee = async (req: AuthRequest, res: Response, next:
     });
 
     // 보호자 알림 (guardian.userId → User.id)
-    await prisma.notification.create({
-      data: {
-        userId: contract.guardian.userId,
-        type: 'PAYMENT',
-        title: '추가 간병비 요청',
-        body: `간병인이 ${parseInt(amount).toLocaleString()}원 추가 간병비를 요청했습니다. 사유: ${String(reason).trim()}`,
-        data: { feeId: fee.id, contractId },
+    await sendFromTemplate({
+      userId: contract.guardian.userId,
+      key: 'ADDITIONAL_FEE_REQUEST',
+      vars: {
+        amount: parseInt(amount).toLocaleString(),
+        reason: String(reason).trim(),
       },
+      data: { feeId: fee.id, contractId },
     }).catch(() => {});
 
     res.status(201).json({ success: true, data: fee });
@@ -938,14 +939,11 @@ export const approveAdditionalFee = async (req: AuthRequest, res: Response, next
       data: { approvedByGuardian: true },
     });
     // 간병인 알림
-    await prisma.notification.create({
-      data: {
-        userId: fee.contract.caregiver.userId,
-        type: 'PAYMENT',
-        title: '추가 간병비 승인',
-        body: `보호자가 ${fee.amount.toLocaleString()}원 추가 간병비를 승인했습니다.`,
-        data: { feeId: id, contractId: fee.contractId } as any,
-      },
+    await sendFromTemplate({
+      userId: fee.contract.caregiver.userId,
+      key: 'ADDITIONAL_FEE_APPROVED',
+      vars: { amount: fee.amount.toLocaleString() },
+      data: { feeId: id, contractId: fee.contractId } as any,
     }).catch(() => {});
     res.json({ success: true, data: updated });
   } catch (error) {
@@ -972,14 +970,14 @@ export const rejectAdditionalFee = async (req: AuthRequest, res: Response, next:
       data: { rejected: true, rejectReason: reason || null, approvedByGuardian: false },
     });
     // 간병인 알림
-    await prisma.notification.create({
-      data: {
-        userId: fee.contract.caregiver.userId,
-        type: 'PAYMENT',
-        title: '추가 간병비 거절',
-        body: `보호자가 ${fee.amount.toLocaleString()}원 추가 간병비 요청을 거절했습니다.${reason ? ' 사유: ' + reason : ''}`,
-        data: { contractId: fee.contractId, feeId: id, rejectReason: reason } as any,
+    await sendFromTemplate({
+      userId: fee.contract.caregiver.userId,
+      key: 'ADDITIONAL_FEE_REJECTED',
+      vars: {
+        amount: fee.amount.toLocaleString(),
+        reasonSuffix: reason ? ' 사유: ' + reason : '',
       },
+      data: { contractId: fee.contractId, feeId: id, rejectReason: reason } as any,
     }).catch(() => {});
     res.json({ success: true, data: updated });
   } catch (error) {
