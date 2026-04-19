@@ -206,60 +206,84 @@ export default function NotificationTemplatesPage() {
                 ...extractVars(editForm.title),
                 ...extractVars(editForm.body),
               ]));
-              const SAMPLE_VALUES: Record<string, string> = {
-                patientName: "홍길동",
-                caregiverName: "김간병",
-                guardianName: "이보호",
-                reporterName: "박신고",
-                amount: "500,000",
-                refundAmount: "450,000",
-                netAmount: "4,000,000",
-                netEarning: "3,500,000",
-                total: "1,200,000",
-                reason: "추가 간병 필요",
-                reasonText: "서류 미비",
-                reasonSuffix: " 사유: 추가 간병 필요",
-                documentType: "간병확인서",
-                insuranceCompany: "삼성생명",
-                docLabel: "보험청구용 간병확인서",
-                additionalDays: "7",
-                billDays: "10",
-                count: "3",
-                daysLeft: "3",
-                address: "서울 강남구 테헤란로",
-                scheduleType: "24시간",
-                newRate: "150,000",
-                regions: "서울, 경기",
-                category: "간병 불성실",
-                statusLabel: "해결 완료",
-                resolution: "관리자 조정",
-                targetType: "리뷰",
-                penaltyType: "취소",
-                usedDays: "5",
+              // 변수 사전 — 샘플값 + 설명
+              const VAR_DICT: Record<string, { sample: string; desc: string }> = {
+                // 사람 이름
+                patientName: { sample: "홍길동", desc: "환자 이름" },
+                caregiverName: { sample: "김간병", desc: "간병인 이름" },
+                guardianName: { sample: "이보호", desc: "보호자 이름" },
+                reporterName: { sample: "박신고", desc: "신고한 사용자 이름" },
+                // 금액
+                amount: { sample: "500,000", desc: "금액 (원, 천단위 콤마 포함)" },
+                refundAmount: { sample: "450,000", desc: "환불 금액 (원)" },
+                netAmount: { sample: "4,000,000", desc: "실수령액 (수수료/세금 차감 후)" },
+                netEarning: { sample: "3,500,000", desc: "정산 예정 금액 (간병인 지급)" },
+                total: { sample: "1,200,000", desc: "총액 합계" },
+                newRate: { sample: "150,000", desc: "인상된 새 일당 (원)" },
+                // 사유
+                reason: { sample: "추가 간병 필요", desc: "요청/처리/거절의 사유 (사용자 입력)" },
+                reasonText: { sample: "서류 미비", desc: "관리자가 작성한 처리 사유" },
+                reasonSuffix: { sample: " 사유: 추가 간병 필요", desc: "사유 접미사 (있을 때만 '사유: ~' 형태)" },
+                resolution: { sample: "관리자 조정", desc: "분쟁 처리 결과 내용" },
+                // 서류/분쟁
+                documentType: { sample: "간병확인서", desc: "보험서류 종류" },
+                insuranceCompany: { sample: "삼성생명", desc: "보험사 이름" },
+                docLabel: { sample: "보험청구용 간병확인서", desc: "서류 표시 레이블" },
+                targetType: { sample: "리뷰", desc: "신고 대상 종류 (리뷰/사용자/메시지 등)" },
+                category: { sample: "간병 불성실", desc: "분쟁 카테고리" },
+                statusLabel: { sample: "해결 완료", desc: "분쟁/요청 상태 한글 라벨" },
+                // 일수/카운트
+                additionalDays: { sample: "7", desc: "연장 요청 추가 일수" },
+                billDays: { sample: "10", desc: "중간정산 청구 일수" },
+                usedDays: { sample: "5", desc: "계약 중 실제 사용한 일수" },
+                count: { sample: "3", desc: "건수 (알림·항목 등)" },
+                daysLeft: { sample: "3", desc: "남은 일수" },
+                rating: { sample: "5", desc: "리뷰 별점 (1-5)" },
+                // 기타
+                address: { sample: "서울 강남구 테헤란로", desc: "공고 주소" },
+                scheduleType: { sample: "24시간", desc: "간병 일정 타입 (24시간/시간제)" },
+                regions: { sample: "서울, 경기", desc: "확대된 지역 목록" },
+                penaltyType: { sample: "취소", desc: "패널티 유형 (취소/노쇼/민원/수동)" },
+                startDate: { sample: "2026. 04. 25.", desc: "간병 시작일" },
+                time: { sample: "09:00", desc: "출퇴근 시각" },
+                hours: { sample: "8", desc: "근무 시간(시간)" },
               };
               const renderPreview = (s: string) =>
-                s.replace(/\{\{(\w+)\}\}/g, (_, v) => SAMPLE_VALUES[v] || `[${v}]`);
+                s.replace(/\{\{(\w+)\}\}/g, (_, v) => VAR_DICT[v]?.sample || `[${v}]`);
               const previewTitle = renderPreview(editForm.title);
               const previewBody = renderPreview(editForm.body);
               return (
                 <div className="mb-4 space-y-3">
                   {vars.length > 0 && (
                     <div className="rounded-lg p-3 bg-blue-50 border border-blue-100">
-                      <div className="text-xs font-semibold text-blue-700 mb-1">📝 사용 가능 변수</div>
-                      <div className="flex flex-wrap gap-1">
-                        {vars.map((v) => (
-                          <code key={v} className="text-[11px] px-2 py-0.5 bg-white border border-blue-200 rounded text-blue-700">
-                            {"{{"}{v}{"}}"}
-                          </code>
-                        ))}
+                      <div className="text-xs font-semibold text-blue-700 mb-2">📝 사용 가능 변수</div>
+                      <div className="space-y-1">
+                        {vars.map((v) => {
+                          const info = VAR_DICT[v];
+                          return (
+                            <div key={v} className="flex items-start gap-2 text-[11px]">
+                              <code className="shrink-0 px-1.5 py-0.5 bg-white border border-blue-200 rounded text-blue-700 font-mono">
+                                {"{{"}{v}{"}}"}
+                              </code>
+                              {info ? (
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-gray-700">{info.desc}</span>
+                                  <span className="text-gray-400 ml-2">예: {info.sample}</span>
+                                </div>
+                              ) : (
+                                <span className="text-red-500 italic">등록되지 않은 변수 — 코드 확인 필요</span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                      <p className="text-[10px] text-blue-600 mt-1.5">
+                      <p className="text-[10px] text-blue-600 mt-2">
                         변수는 코드에서 자동 치환됩니다. 새 변수를 쓰려면 개발자에게 문의.
                       </p>
                     </div>
                   )}
                   <div className="rounded-lg p-3 bg-amber-50 border border-amber-100">
-                    <div className="text-xs font-semibold text-amber-700 mb-2">👁 실시간 미리보기 (예시 값)</div>
+                    <div className="text-xs font-semibold text-amber-700 mb-2">👁 실시간 미리보기 (샘플 값으로 치환)</div>
                     <div className="bg-white rounded-md p-2 border border-amber-100">
                       <div className="text-sm font-semibold text-gray-900">{previewTitle}</div>
                       <div className="text-xs text-gray-700 whitespace-pre-wrap mt-1">{previewBody}</div>
