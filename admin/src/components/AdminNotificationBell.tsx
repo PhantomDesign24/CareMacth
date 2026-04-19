@@ -52,24 +52,50 @@ async function markAllRead() {
   });
 }
 
+const TYPE_LABELS: Record<string, { label: string; color: string }> = {
+  MATCHING: { label: "매칭", color: "bg-orange-50 text-orange-600" },
+  APPLICATION: { label: "지원", color: "bg-blue-50 text-blue-600" },
+  CONTRACT: { label: "계약", color: "bg-green-50 text-green-600" },
+  PAYMENT: { label: "결제", color: "bg-purple-50 text-purple-600" },
+  CARE_RECORD: { label: "간병 기록", color: "bg-teal-50 text-teal-600" },
+  EXTENSION: { label: "연장", color: "bg-amber-50 text-amber-600" },
+  PENALTY: { label: "패널티", color: "bg-red-50 text-red-600" },
+  SYSTEM: { label: "공지", color: "bg-gray-100 text-gray-700" },
+};
+
 function typeToHref(n: Notification): string | null {
   const d = n.data || {};
   switch (n.type) {
     case "SYSTEM":
       if (d.insuranceId || d.insuranceDocRequestId) return "/insurance";
+      if (d.disputeId) return "/disputes";
       if (d.reportId) return "/reports";
-      return null;
+      if (d.caregiverId) return `/caregivers/${d.caregiverId}`;
+      return "/dashboard";
     case "PAYMENT":
-      if (d.paymentId) return "/payments";
+      // 환불 요청 승인 대기 → 환불 요청 탭
+      if (d.paymentId && d.refundRequest) return "/payments?tab=refunds";
+      // 추가비 요청 → 추가 간병비 탭
+      if (d.feeId) return "/payments?tab=additional-fees";
+      // 정산 관련 → 정산 탭
+      if (d.earningId || d.bulk) return "/payments?tab=settlements";
       return "/payments";
     case "CONTRACT":
     case "EXTENSION":
-      if (d.contractId) return "/matchings";
+      if (d.contractId) return `/matchings?contract=${d.contractId}`;
       return "/matchings";
     case "MATCHING":
+    case "APPLICATION":
+      if (d.careRequestId) return `/matchings?careRequest=${d.careRequestId}`;
       return "/matchings";
+    case "CARE_RECORD":
+      if (d.contractId) return `/matchings?contract=${d.contractId}`;
+      return "/matchings";
+    case "PENALTY":
+      if (d.caregiverId) return `/caregivers/${d.caregiverId}`;
+      return "/caregivers";
     default:
-      return null;
+      return "/dashboard";
   }
 }
 
@@ -165,25 +191,33 @@ export default function AdminNotificationBell() {
             {items.length === 0 ? (
               <div className="py-10 text-center text-xs text-gray-400">알림이 없습니다.</div>
             ) : (
-              items.slice(0, 20).map((n) => (
-                <button
-                  key={n.id}
-                  type="button"
-                  onClick={() => handleClick(n)}
-                  className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${
-                    !n.isRead ? "bg-orange-50/40" : ""
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    {!n.isRead && <span className="mt-1.5 w-2 h-2 rounded-full bg-orange-500 shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-gray-900 truncate">{n.title}</div>
-                      <div className="text-xs text-gray-600 line-clamp-2 mt-0.5">{n.body}</div>
-                      <div className="text-[10px] text-gray-400 mt-1">{timeAgo(n.createdAt)}</div>
+              items.slice(0, 20).map((n) => {
+                const typeDef = TYPE_LABELS[n.type] || { label: n.type, color: "bg-gray-100 text-gray-600" };
+                return (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => handleClick(n)}
+                    className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${
+                      !n.isRead ? "bg-orange-50/40" : ""
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      {!n.isRead && <span className="mt-1.5 w-2 h-2 rounded-full bg-orange-500 shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${typeDef.color}`}>
+                            {typeDef.label}
+                          </span>
+                          <span className="text-[10px] text-gray-400">{timeAgo(n.createdAt)}</span>
+                        </div>
+                        <div className="text-sm font-semibold text-gray-900 truncate">{n.title}</div>
+                        <div className="text-xs text-gray-600 line-clamp-2 mt-0.5">{n.body}</div>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
