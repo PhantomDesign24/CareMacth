@@ -8,6 +8,7 @@ import { config } from '../config';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { generateReferralCode } from '../utils/generateCode';
+import { sendToAdmins } from '../services/notificationService';
 
 const generateToken = (user: { id: string; email: string; role: string }) => {
   return jwt.sign(
@@ -100,6 +101,15 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     });
 
     const token = generateToken(user);
+
+    // 간병인 가입 시 관리자 전원에게 알림
+    if (role === 'CAREGIVER') {
+      await sendToAdmins({
+        key: 'CAREGIVER_SIGNUP_PENDING_ADMIN',
+        vars: { caregiverName: user.name },
+        data: { caregiverId: (user as any).caregiver?.id, userId: user.id },
+      }).catch(() => {});
+    }
 
     res.status(201).json({
       success: true,

@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { sendToAdmins } from '../services/notificationService';
 
 // GET /profile - 프로필 조회
 export const getProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -164,6 +165,17 @@ export const addCertificate = async (req: AuthRequest, res: Response, next: Next
         imageUrl,
       },
     });
+
+    // 관리자에게 검증 요청 알림
+    const userInfo = await prisma.user.findUnique({
+      where: { id: caregiver.userId },
+      select: { name: true },
+    });
+    await sendToAdmins({
+      key: 'CERTIFICATE_UPLOADED_ADMIN',
+      vars: { caregiverName: userInfo?.name || '간병인', certName: name },
+      data: { caregiverId: caregiver.id, certificateId: certificate.id },
+    }).catch(() => {});
 
     res.status(201).json({
       success: true,
@@ -493,6 +505,7 @@ export const uploadCriminalCheck = async (req: AuthRequest, res: Response, next:
     }
     const caregiver = await prisma.caregiver.findUnique({
       where: { userId: req.user!.id },
+      include: { user: { select: { name: true } } },
     });
     if (!caregiver) {
       throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
@@ -506,6 +519,12 @@ export const uploadCriminalCheck = async (req: AuthRequest, res: Response, next:
         criminalCheckDate: new Date(),
       },
     });
+    // 관리자에게 검증 요청 알림
+    await sendToAdmins({
+      key: 'CRIMINAL_CHECK_UPLOADED_ADMIN',
+      vars: { caregiverName: caregiver.user?.name || '간병인' },
+      data: { caregiverId: caregiver.id },
+    }).catch(() => {});
     res.json({ success: true, data: { url, caregiver: updated } });
   } catch (error) {
     next(error);
@@ -520,6 +539,7 @@ export const uploadIdCard = async (req: AuthRequest, res: Response, next: NextFu
     }
     const caregiver = await prisma.caregiver.findUnique({
       where: { userId: req.user!.id },
+      include: { user: { select: { name: true } } },
     });
     if (!caregiver) {
       throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
@@ -532,6 +552,12 @@ export const uploadIdCard = async (req: AuthRequest, res: Response, next: NextFu
         identityVerified: true,
       },
     });
+    // 관리자에게 본인 인증 알림
+    await sendToAdmins({
+      key: 'ID_CARD_UPLOADED_ADMIN',
+      vars: { caregiverName: caregiver.user?.name || '간병인' },
+      data: { caregiverId: caregiver.id },
+    }).catch(() => {});
     res.json({ success: true, data: { url, caregiver: updated } });
   } catch (error) {
     next(error);

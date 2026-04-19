@@ -277,6 +277,30 @@ export async function renderTemplate(key: string, vars: TemplateVars = {}): Prom
   };
 }
 
+/**
+ * 관리자 전원에게 템플릿 기반 알림 발송 (adminAlert=true 자동 포함)
+ */
+export async function sendToAdmins(params: {
+  key: string;
+  vars?: TemplateVars;
+  data?: Record<string, any>;
+}) {
+  const admins = await prisma.user.findMany({
+    where: { role: 'ADMIN', isActive: true },
+    select: { id: true },
+  });
+  await Promise.all(
+    admins.map((a) =>
+      sendFromTemplate({
+        userId: a.id,
+        key: params.key,
+        vars: params.vars,
+        data: { ...(params.data || {}), adminAlert: true, forAdmin: true },
+      }).catch(() => {}),
+    ),
+  );
+}
+
 export async function sendFromTemplate(params: {
   userId: string;
   key: string;

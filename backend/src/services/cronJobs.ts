@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { sendExtensionReminder } from './notificationService';
+import { sendExtensionReminder, sendToAdmins } from './notificationService';
 import { settleEarning } from './paymentService';
 import { prisma } from '../app';
 
@@ -196,15 +196,34 @@ export function setupCronJobs() {
   cron.schedule('*/2 * * * *', async () => {
     try {
       const cutoff = new Date(Date.now() - 5 * 60 * 1000);
-      const result = await prisma.payment.updateMany({
+      const expiredPayments = await prisma.payment.findMany({
         where: {
           status: 'PENDING',
           createdAt: { lt: cutoff },
         },
-        data: { status: 'FAILED' },
+        include: {
+          guardian: { include: { user: true } },
+        },
       });
-      if (result.count > 0) {
-        console.log(`[CRON] PENDING 결제 만료 처리: ${result.count}건`);
+
+      if (expiredPayments.length > 0) {
+        await prisma.payment.updateMany({
+          where: { id: { in: expiredPayments.map((p) => p.id) } },
+          data: { status: 'FAILED' },
+        });
+
+        for (const p of expiredPayments) {
+          await sendToAdmins({
+            key: 'PAYMENT_AUTO_EXPIRED_ADMIN',
+            vars: {
+              guardianName: p.guardian?.user?.name || '알 수 없음',
+              amount: p.totalAmount.toLocaleString(),
+            },
+            data: { paymentId: p.id, guardianId: p.guardianId },
+          }).catch(() => {});
+        }
+
+        console.log(`[CRON] PENDING 결제 만료 처리: ${expiredPayments.length}건`);
       }
     } catch (error) {
       console.error('[CRON] PENDING 결제 만료 오류:', error);
@@ -225,6 +244,7 @@ export function setupCronJobs() {
           noShowCount: { gte: threshold },
           status: 'APPROVED',
         },
+        include: { user: true },
       });
 
       for (const cg of caregiversToSuspend) {
@@ -241,6 +261,16 @@ export function setupCronJobs() {
             isAutomatic: true,
           },
         });
+
+        await sendToAdmins({
+          key: 'CAREGIVER_AUTO_SUSPENDED_ADMIN',
+          vars: {
+            caregiverName: cg.user?.name || '알 수 없음',
+            phone: cg.user?.phone || '-',
+            reason: `노쇼 ${cg.noShowCount}회 누적`,
+          },
+          data: { caregiverId: cg.id },
+        }).catch(() => {});
       }
 
       console.log(`[CRON] 노쇼 패널티 처리: ${caregiversToSuspend.length}명`);
