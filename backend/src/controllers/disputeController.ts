@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { sendFromTemplate } from '../services/notificationService';
 
 const VALID_CATEGORIES = ['CARE_QUALITY', 'CANCELLATION', 'PAYMENT', 'ABUSE', 'NO_SHOW', 'OTHER'] as const;
 const VALID_STATUSES = ['PENDING', 'PROCESSING', 'RESOLVED', 'ESCALATED', 'REJECTED'] as const;
@@ -53,17 +54,15 @@ export const createDispute = async (req: AuthRequest, res: Response, next: NextF
 
     // 관리자 전원에게 알림
     const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } });
-    for (const admin of admins) {
-      await prisma.notification.create({
-        data: {
-          userId: admin.id,
-          type: 'SYSTEM',
-          title: '새 분쟁 접수',
-          body: `${title}`,
-          data: { disputeId: dispute.id, category },
-        },
-      }).catch(() => {});
-    }
+    const reporter = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { name: true } });
+    await Promise.all(admins.map((admin) =>
+      sendFromTemplate({
+        userId: admin.id,
+        key: 'DISPUTE_CREATED_ADMIN',
+        vars: { category, reporterName: reporter?.name || '신고자' },
+        data: { disputeId: dispute.id, category },
+      }).catch(() => {}),
+    ));
 
     res.status(201).json({ success: true, data: dispute });
   } catch (error) {
@@ -168,19 +167,16 @@ export const adminUpdateDispute = async (req: AuthRequest, res: Response, next: 
     // 신고자에게 알림
     if (status && status !== dispute.status) {
       const msg =
-        status === 'PROCESSING' ? '분쟁이 처리 중입니다.' :
-        status === 'RESOLVED' ? '분쟁이 해결 처리되었습니다.' :
-        status === 'REJECTED' ? '분쟁 신고가 기각되었습니다.' :
-        status === 'ESCALATED' ? '분쟁이 에스컬레이션되었습니다.' :
-        '분쟁 상태가 변경되었습니다.';
-      await prisma.notification.create({
-        data: {
-          userId: dispute.reporterId,
-          type: 'SYSTEM',
-          title: '분쟁 처리 상태 변경',
-          body: msg,
-          data: { disputeId: id, status },
-        },
+        status === 'PROCESSING' ? '처리 중' :
+        status === 'RESOLVED' ? '해결 완료' :
+        status === 'REJECTED' ? '기각' :
+        status === 'ESCALATED' ? '에스컬레이션' :
+        '변경';
+      await sendFromTemplate({
+        userId: dispute.reporterId,
+        key: 'DISPUTE_STATUS_UPDATED',
+        vars: { statusLabel: msg, resolution: (updated as any).resolution || '' },
+        data: { disputeId: id, status },
       }).catch(() => {});
     }
 

@@ -7,7 +7,7 @@ import { AuthRequest } from '../middlewares/auth';
 import { config } from '../config';
 import { generateOrderId } from '../utils/generateCode';
 import { sendEmail, emailPaymentCompleted } from '../services/emailService';
-import { sendFromTemplate } from '../services/notificationService';
+import { sendFromTemplate, renderTemplate } from '../services/notificationService';
 
 // POST / - 결제 생성
 export const createPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -520,27 +520,34 @@ async function executeRefund(
       }
     }
 
-    // 보호자 + 간병인 알림
+    // 보호자 + 간병인 알림 (템플릿 기반 — 트랜잭션 내부라 renderTemplate 사용)
     const notifications: any[] = [];
+    const refundFormatted = refundAmount.toLocaleString();
     if (payment.guardian?.userId) {
-      notifications.push({
-        userId: payment.guardian.userId,
-        type: 'PAYMENT' as const,
-        title: isPartialRefund ? '부분 환불 완료' : '환불 완료',
-        body: `${refundAmount.toLocaleString()}원이 환불 처리되었습니다.`,
-        data: { paymentId: payment.id } as any,
-      });
+      const gKey = isPartialRefund ? 'REFUND_PARTIAL_GUARDIAN' : 'REFUND_APPROVED_GUARDIAN';
+      const gTpl = await renderTemplate(gKey, { refundAmount: refundFormatted });
+      if (gTpl && gTpl.enabled) {
+        notifications.push({
+          userId: payment.guardian.userId,
+          type: gTpl.type,
+          title: gTpl.title,
+          body: gTpl.body,
+          data: { paymentId: payment.id } as any,
+        });
+      }
     }
     if (payment.contract?.caregiver?.userId) {
-      notifications.push({
-        userId: payment.contract.caregiver.userId,
-        type: 'PAYMENT' as const,
-        title: isPartialRefund ? '계약 일부 환불 알림' : '계약 환불 및 취소',
-        body: isPartialRefund
-          ? `계약 결제 중 ${refundAmount.toLocaleString()}원이 보호자에게 환불되었습니다. 정산 금액이 조정됩니다.`
-          : `보호자의 환불로 인해 계약이 취소되었습니다.`,
-        data: { paymentId: payment.id, contractId: payment.contractId } as any,
-      });
+      const cKey = isPartialRefund ? 'REFUND_PARTIAL_CAREGIVER' : 'REFUND_APPROVED_CAREGIVER';
+      const cTpl = await renderTemplate(cKey, { refundAmount: refundFormatted });
+      if (cTpl && cTpl.enabled) {
+        notifications.push({
+          userId: payment.contract.caregiver.userId,
+          type: cTpl.type,
+          title: cTpl.title,
+          body: cTpl.body,
+          data: { paymentId: payment.id, contractId: payment.contractId } as any,
+        });
+      }
     }
     if (notifications.length > 0) {
       await tx.notification.createMany({ data: notifications });

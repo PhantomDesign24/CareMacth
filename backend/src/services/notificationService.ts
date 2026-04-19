@@ -252,6 +252,31 @@ export interface TemplateVars {
   [key: string]: string | number | undefined | null;
 }
 
+/**
+ * 템플릿 조회 + 변수 치환만 수행 (저장/발송 X) — 트랜잭션 내부에서 쓸 때
+ * 반환: { title, body, type, enabled } | null
+ */
+export async function renderTemplate(key: string, vars: TemplateVars = {}): Promise<{
+  title: string;
+  body: string;
+  type: NotificationType;
+  enabled: boolean;
+} | null> {
+  const template = await prisma.notificationTemplate.findUnique({ where: { key } });
+  if (!template) return null;
+  const render = (s: string): string =>
+    s.replace(/\{\{(\w+)\}\}/g, (_, varName) => {
+      const v = vars[varName];
+      return v == null ? '' : String(v);
+    });
+  return {
+    title: render(template.title),
+    body: render(template.body),
+    type: template.type as NotificationType,
+    enabled: template.enabled,
+  };
+}
+
 export async function sendFromTemplate(params: {
   userId: string;
   key: string;

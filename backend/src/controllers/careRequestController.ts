@@ -11,6 +11,7 @@ import {
   getRehireScore,
   getCancelPenalty,
 } from '../utils/matchingScores';
+import { sendFromTemplate, renderTemplate } from '../services/notificationService';
 
 // POST / - 간병 요청 생성
 export const createCareRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -674,19 +675,14 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
     });
 
     if (guardian) {
-      const notifBody = finalIsAccepted
-        ? `${caregiver.user?.name || '간병인'}님이 제시 금액을 수락하고 지원했습니다.`
-        : `${caregiver.user?.name || '간병인'}님이 일당 ${finalProposedRate?.toLocaleString()}원을 제안했습니다.`;
-
-      await prisma.notification.create({
-        data: {
-          userId: guardian.userId,
-          type: 'APPLICATION',
-          title: '새로운 간병인 지원',
-          body: notifBody,
-          data: { careRequestId, applicationId: application.id },
-        },
-      });
+      // 보호자에게 새 지원자 알림 (템플릿 기반)
+      const patientName = caregiver.user?.name || '간병인';
+      await sendFromTemplate({
+        userId: guardian.userId,
+        key: 'APPLICATION_GUARDIAN_NEW',
+        vars: { patientName },
+        data: { careRequestId, applicationId: application.id },
+      }).catch(() => {});
     }
 
     res.status(201).json({

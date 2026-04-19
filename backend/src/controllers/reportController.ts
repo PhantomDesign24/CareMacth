@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { sendFromTemplate } from '../services/notificationService';
 
 // POST /reports - 신고 등록
 export const createReport = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -52,15 +53,14 @@ export const createReport = async (req: AuthRequest, res: Response, next: NextFu
       select: { id: true },
     });
     if (admins.length > 0) {
-      await prisma.notification.createMany({
-        data: admins.map((a) => ({
+      await Promise.all(admins.map((a) =>
+        sendFromTemplate({
           userId: a.id,
-          type: 'SYSTEM' as const,
-          title: '신고 접수',
-          body: `${targetType} (${reason}) 신고가 접수되었습니다.`,
+          key: 'REPORT_CREATED_ADMIN',
+          vars: { targetType, reason },
           data: { reportId: report.id, targetType, targetId } as any,
-        })),
-      });
+        }).catch(() => {}),
+      ));
     }
 
     res.status(201).json({ success: true, data: report });

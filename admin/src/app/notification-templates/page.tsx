@@ -195,6 +195,80 @@ export default function NotificationTemplatesPage() {
               <button onClick={() => setEditing(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
             </div>
 
+            {/* 사용 가능 변수 + 미리보기 */}
+            {(() => {
+              // title+body에서 {{var}} 추출
+              const extractVars = (s: string) => {
+                const matches = s.match(/\{\{(\w+)\}\}/g) || [];
+                return Array.from(new Set(matches.map((m) => m.replace(/[{}]/g, ""))));
+              };
+              const vars = Array.from(new Set([
+                ...extractVars(editForm.title),
+                ...extractVars(editForm.body),
+              ]));
+              const SAMPLE_VALUES: Record<string, string> = {
+                patientName: "홍길동",
+                caregiverName: "김간병",
+                guardianName: "이보호",
+                reporterName: "박신고",
+                amount: "500,000",
+                refundAmount: "450,000",
+                netAmount: "4,000,000",
+                netEarning: "3,500,000",
+                total: "1,200,000",
+                reason: "추가 간병 필요",
+                reasonText: "서류 미비",
+                reasonSuffix: " 사유: 추가 간병 필요",
+                documentType: "간병확인서",
+                insuranceCompany: "삼성생명",
+                docLabel: "보험청구용 간병확인서",
+                additionalDays: "7",
+                billDays: "10",
+                count: "3",
+                daysLeft: "3",
+                address: "서울 강남구 테헤란로",
+                scheduleType: "24시간",
+                newRate: "150,000",
+                regions: "서울, 경기",
+                category: "간병 불성실",
+                statusLabel: "해결 완료",
+                resolution: "관리자 조정",
+                targetType: "리뷰",
+                penaltyType: "취소",
+                usedDays: "5",
+              };
+              const renderPreview = (s: string) =>
+                s.replace(/\{\{(\w+)\}\}/g, (_, v) => SAMPLE_VALUES[v] || `[${v}]`);
+              const previewTitle = renderPreview(editForm.title);
+              const previewBody = renderPreview(editForm.body);
+              return (
+                <div className="mb-4 space-y-3">
+                  {vars.length > 0 && (
+                    <div className="rounded-lg p-3 bg-blue-50 border border-blue-100">
+                      <div className="text-xs font-semibold text-blue-700 mb-1">📝 사용 가능 변수</div>
+                      <div className="flex flex-wrap gap-1">
+                        {vars.map((v) => (
+                          <code key={v} className="text-[11px] px-2 py-0.5 bg-white border border-blue-200 rounded text-blue-700">
+                            {"{{"}{v}{"}}"}
+                          </code>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-blue-600 mt-1.5">
+                        변수는 코드에서 자동 치환됩니다. 새 변수를 쓰려면 개발자에게 문의.
+                      </p>
+                    </div>
+                  )}
+                  <div className="rounded-lg p-3 bg-amber-50 border border-amber-100">
+                    <div className="text-xs font-semibold text-amber-700 mb-2">👁 실시간 미리보기 (예시 값)</div>
+                    <div className="bg-white rounded-md p-2 border border-amber-100">
+                      <div className="text-sm font-semibold text-gray-900">{previewTitle}</div>
+                      <div className="text-xs text-gray-700 whitespace-pre-wrap mt-1">{previewBody}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="space-y-3 mb-5">
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-700">제목</label>

@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { sendFromTemplate, renderTemplate } from '../services/notificationService';
 
 // GET /dashboard - 대시보드 통계
 export const getDashboard = async (_req: AuthRequest, res: Response, next: NextFunction) => {
@@ -1974,25 +1975,18 @@ export const forceCancelContract = async (req: AuthRequest, res: Response, next:
         where: { id: contract.caregiverId },
         data: { workStatus: 'AVAILABLE' },
       });
-      // 양쪽 알림
-      await tx.notification.createMany({
-        data: [
-          {
-            userId: contract.guardian.userId,
-            type: 'CONTRACT' as const,
-            title: '계약이 관리자에 의해 취소됨',
-            body: `관리자에 의해 계약이 취소되었습니다. ${reason ? '사유: ' + reason : ''}`,
-            data: { contractId } as any,
-          },
-          {
-            userId: contract.caregiver.userId,
-            type: 'CONTRACT' as const,
-            title: '계약이 관리자에 의해 취소됨',
-            body: `관리자에 의해 계약이 취소되었습니다. ${reason ? '사유: ' + reason : ''}`,
-            data: { contractId } as any,
-          },
-        ],
+      // 양쪽 알림 (템플릿)
+      const tpl = await renderTemplate('CONTRACT_FORCE_CANCELLED', {
+        reasonText: reason ? '사유: ' + reason : '',
       });
+      if (tpl && tpl.enabled) {
+        await tx.notification.createMany({
+          data: [
+            { userId: contract.guardian.userId, type: tpl.type, title: tpl.title, body: tpl.body, data: { contractId } as any },
+            { userId: contract.caregiver.userId, type: tpl.type, title: tpl.title, body: tpl.body, data: { contractId } as any },
+          ],
+        });
+      }
     });
 
     res.json({ success: true, message: '계약이 강제 취소되었습니다.' });
@@ -2185,17 +2179,20 @@ export const paySettlement = async (req: AuthRequest, res: Response, next: NextF
         where: { id },
         data: { isPaid: true, paidAt: new Date() },
       });
-      // 간병인에게 알림
+      // 간병인에게 알림 (템플릿)
       if (earning.caregiver?.userId) {
-        await tx.notification.create({
-          data: {
-            userId: earning.caregiver.userId,
-            type: 'PAYMENT',
-            title: '정산 완료',
-            body: `${earning.netAmount.toLocaleString()}원이 정산 처리되었습니다.`,
-            data: { earningId: id } as any,
-          },
-        });
+        const tpl = await renderTemplate('SETTLEMENT_PAID', { netAmount: earning.netAmount.toLocaleString() });
+        if (tpl && tpl.enabled) {
+          await tx.notification.create({
+            data: {
+              userId: earning.caregiver.userId,
+              type: tpl.type,
+              title: tpl.title,
+              body: tpl.body,
+              data: { earningId: id } as any,
+            },
+          });
+        }
       }
     });
 
@@ -2234,15 +2231,27 @@ export const bulkPaySettlements = async (req: AuthRequest, res: Response, next: 
         cur.count += 1;
         byCaregiver.set(t.caregiverId, cur);
       }
-      await tx.notification.createMany({
-        data: Array.from(byCaregiver.values()).map((v) => ({
-          userId: v.userId,
-          type: 'PAYMENT' as const,
-          title: '정산 완료',
-          body: `${v.count}건 · 총 ${v.total.toLocaleString()}원이 정산 처리되었습니다.`,
-          data: { bulk: true } as any,
-        })),
-      });
+      // 간병인별 일괄 정산 알림 (템플릿)
+      const values = Array.from(byCaregiver.values());
+      const notifData: any[] = [];
+      for (const v of values) {
+        const tpl = await renderTemplate('SETTLEMENT_BULK_PAID', {
+          count: String(v.count),
+          total: v.total.toLocaleString(),
+        });
+        if (tpl && tpl.enabled) {
+          notifData.push({
+            userId: v.userId,
+            type: tpl.type,
+            title: tpl.title,
+            body: tpl.body,
+            data: { bulk: true } as any,
+          });
+        }
+      }
+      if (notifData.length > 0) {
+        await tx.notification.createMany({ data: notifData });
+      }
     });
 
     res.json({ success: true, data: { processed: targets.length } });

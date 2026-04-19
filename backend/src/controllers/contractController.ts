@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { renderTemplate, sendFromTemplate } from '../services/notificationService';
 
 // POST / - 계약 생성 (보호자가 간병인 선택 후)
 export const createContract = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -158,25 +159,26 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
         data: { status: 'CANCELLED' },
       });
 
-      // 알림 발송 - 간병인 + 보호자
-      await tx.notification.createMany({
-        data: [
-          {
-            userId: caregiver.userId,
-            type: 'CONTRACT',
-            title: '계약이 체결되었습니다',
-            body: `${newContract.careRequest.patient.name} 환자의 간병 계약이 체결되었습니다. 시작일: ${startDate.toLocaleDateString('ko-KR')}`,
-            data: { contractId: newContract.id } as any,
-          },
-          {
-            userId: guardian.userId,
-            type: 'CONTRACT',
-            title: '매칭이 완료되었습니다',
-            body: `${caregiver.user.name} 간병인과 매칭되었습니다. 시작일: ${startDate.toLocaleDateString('ko-KR')}`,
-            data: { contractId: newContract.id } as any,
-          },
-        ],
+      // 알림 발송 - 간병인 + 보호자 (템플릿)
+      const startDateStr = startDate.toLocaleDateString('ko-KR');
+      const cgTpl = await renderTemplate('CONTRACT_SIGNED_CAREGIVER', {
+        patientName: newContract.careRequest.patient.name,
+        startDate: startDateStr,
       });
+      const gTpl = await renderTemplate('CONTRACT_SIGNED_GUARDIAN', {
+        caregiverName: caregiver.user.name,
+        startDate: startDateStr,
+      });
+      const notifData: any[] = [];
+      if (cgTpl && cgTpl.enabled) {
+        notifData.push({ userId: caregiver.userId, type: cgTpl.type, title: cgTpl.title, body: cgTpl.body, data: { contractId: newContract.id } as any });
+      }
+      if (gTpl && gTpl.enabled) {
+        notifData.push({ userId: guardian.userId, type: gTpl.type, title: gTpl.title, body: gTpl.body, data: { contractId: newContract.id } as any });
+      }
+      if (notifData.length > 0) {
+        await tx.notification.createMany({ data: notifData });
+      }
 
       return newContract;
     });
@@ -418,29 +420,38 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
           penaltyWarning = '취소 3회 이상으로 활동이 정지되었습니다.';
         }
 
-        // 보호자에게 알림 발송
-        await tx.notification.create({
-          data: {
-            userId: contract.guardian.userId,
-            type: 'CONTRACT',
-            title: '간병인이 계약을 취소했습니다',
-            body: `간병인이 계약을 취소했습니다. 사유: ${reason}`,
-            data: { contractId: id },
-          },
-        });
+        // 보호자에게 알림 발송 (템플릿 기반)
+        const tpl = await renderTemplate('CONTRACT_CANCELLED_BY_CAREGIVER', { reason: reason || '' });
+        if (tpl && tpl.enabled) {
+          await tx.notification.create({
+            data: {
+              userId: contract.guardian.userId,
+              type: tpl.type,
+              title: tpl.title,
+              body: tpl.body,
+              data: { contractId: id },
+            },
+          });
+        }
       }
 
       // 보호자가 취소한 경우: 간병인에게 알림
       if (isGuardianCancel || req.user!.role === 'ADMIN') {
-        await tx.notification.create({
-          data: {
-            userId: contract.caregiver.userId,
-            type: 'CONTRACT',
-            title: '보호자가 계약을 취소했습니다',
-            body: `보호자가 계약을 취소했습니다. 사용일: ${usedDays}일, 정산금액: ${netEarning.toLocaleString()}원`,
-            data: { contractId: id },
-          },
+        const tpl = await renderTemplate('CONTRACT_CANCELLED_BY_GUARDIAN', {
+          usedDays: String(usedDays),
+          netEarning: netEarning.toLocaleString(),
         });
+        if (tpl && tpl.enabled) {
+          await tx.notification.create({
+            data: {
+              userId: contract.caregiver.userId,
+              type: tpl.type,
+              title: tpl.title,
+              body: tpl.body,
+              data: { contractId: id },
+            },
+          });
+        }
       }
 
       // ── 부분 정산: 기존 미정산 Earning 재조정 (DIRECT 결제는 생성 시 full amount로 기록됨)
