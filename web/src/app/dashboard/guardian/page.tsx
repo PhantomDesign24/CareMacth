@@ -2118,126 +2118,175 @@ function GuardianAdditionalFeesBanner({ onChanged }: { onChanged: () => void }) 
 
   if (loading || (pending.length === 0 && history.length === 0)) return null;
 
+  const hasPending = pending.length > 0;
+
   return (
-    <div ref={bannerRef} className={`mx-4 sm:mx-6 mt-4 p-4 rounded-xl ${pending.length > 0 ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
-      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className={`font-bold text-sm ${pending.length > 0 ? "text-amber-700" : "text-gray-700"}`}>
-            💰 추가 간병비
-            {pending.length > 0 && <span className="ml-1">· 대기 {pending.length}건</span>}
-            {history.length > 0 && <span className="ml-1 text-xs text-gray-500">(이력 {history.length}건)</span>}
-          </span>
-          {pending.length > 0 && (
-            <span className="text-xs text-amber-600">간병인이 간병 중 추가로 청구한 비용입니다.</span>
+    <div ref={bannerRef} className="mx-4 sm:mx-6 mt-4">
+      <div className={`rounded-2xl overflow-hidden border ${hasPending ? "border-amber-200 shadow-sm" : "border-gray-200"}`}>
+        {/* 헤더 */}
+        <div className={`px-4 sm:px-5 py-3.5 flex items-center justify-between gap-3 ${
+          hasPending ? "bg-gradient-to-r from-amber-50 to-amber-50/60" : "bg-gray-50"
+        }`}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+              hasPending ? "bg-amber-500 text-white shadow-sm" : "bg-gray-200 text-gray-500"
+            }`}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="text-sm font-bold text-gray-900">추가 간병비</h3>
+                {hasPending && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                    대기 {pending.length}건
+                  </span>
+                )}
+                {history.length > 0 && (
+                  <span className="text-[11px] text-gray-500">이력 {history.length}</span>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                {hasPending ? "간병인이 간병 중 추가로 청구한 비용입니다. 승인 시 결제가 진행됩니다." : "과거 처리된 추가 간병비 내역"}
+              </p>
+            </div>
+          </div>
+          {history.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((v) => !v)}
+              className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-white/70 px-2 py-1 rounded-lg transition-colors"
+            >
+              {historyOpen ? "이력 접기" : "이력 보기"}
+              <svg className={`w-3 h-3 transition-transform ${historyOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
           )}
         </div>
-        {history.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setHistoryOpen((v) => !v)}
-            className="text-xs text-gray-600 hover:text-gray-800 font-medium flex items-center gap-1"
-          >
-            {historyOpen ? "이력 숨기기 ▲" : "이력 보기 ▼"}
-          </button>
-        )}
-      </div>
-      <div className="space-y-2">
-        {pending.map((f: any) => {
-          const isHighlighted = highlightFeeId === f.id;
-          return (
-            <div
-              key={f.id}
-              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-white rounded-lg border transition-all ${
-                isHighlighted ? "border-orange-500 ring-2 ring-orange-200 shadow-md" : "border-amber-100"
-              }`}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="font-semibold text-gray-900">
-                    {f.contract?.careRequest?.patient?.name || "-"} 환자
-                  </span>
-                  <span className="font-bold text-orange-600">
-                    +{f.amount?.toLocaleString()}원
-                  </span>
-                  {isHighlighted && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500 text-white font-semibold">
-                      알림에서 이동
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-600 mt-1">사유: {f.reason}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">
-                  {new Date(f.createdAt).toLocaleDateString("ko-KR")} 요청
-                </p>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <button
-                  type="button"
-                  disabled={actionLoading === f.id}
-                  onClick={() => handleReject(f.id)}
-                  className="text-xs px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
-                >
-                  거절
-                </button>
-                <button
-                  type="button"
-                  disabled={actionLoading === f.id}
-                  onClick={() => handleApprove(f.id)}
-                  className="text-xs px-3 py-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
-                >
-                  {actionLoading === f.id ? "처리중..." : "승인"}
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
 
-      {/* 처리 이력 (승인/거절) */}
-      {historyOpen && history.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <div className="text-xs font-semibold text-gray-500 mb-2">처리 이력</div>
-          <div className="space-y-1.5">
-            {history
-              .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-              .map((f: any) => {
-                const statusBadge = f.rejected
-                  ? { label: "거절됨", cls: "bg-red-100 text-red-700" }
-                  : f.paid
-                  ? { label: "지급완료", cls: "bg-green-100 text-green-700" }
-                  : f.approvedByGuardian
-                  ? { label: "승인됨", cls: "bg-blue-100 text-blue-700" }
-                  : { label: "대기", cls: "bg-amber-100 text-amber-700" };
-                return (
-                  <div key={f.id} className="flex items-center justify-between gap-2 p-2.5 bg-white rounded-lg border border-gray-100 text-xs">
+        {/* 대기 중 요청 */}
+        {hasPending && (
+          <div className="divide-y divide-gray-100 bg-white">
+            {pending.map((f: any) => {
+              const isHighlighted = highlightFeeId === f.id;
+              return (
+                <div
+                  key={f.id}
+                  className={`p-4 sm:p-5 transition-all ${isHighlighted ? "bg-orange-50 ring-2 ring-orange-300 ring-inset" : ""}`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-gray-800">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-700">
                           {f.contract?.careRequest?.patient?.name || "-"}
                         </span>
-                        <span className="font-bold text-gray-900">
-                          {f.amount?.toLocaleString()}원
+                        <span className="text-[11px] text-gray-400">
+                          {new Date(f.createdAt).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" })} 요청
                         </span>
-                        <span className={`px-1.5 py-0.5 rounded-full font-semibold text-[10px] ${statusBadge.cls}`}>
-                          {statusBadge.label}
+                        {isHighlighted && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-500 text-white">
+                            알림에서 이동
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-baseline gap-1 mb-2">
+                        <span className="text-2xl font-bold text-amber-600 tabular-nums">
+                          +{f.amount?.toLocaleString()}
                         </span>
+                        <span className="text-sm font-semibold text-gray-500">원</span>
                       </div>
-                      <div className="text-gray-500 mt-0.5 truncate">
-                        사유: {f.reason}
+                      <div className="flex items-start gap-1.5 text-sm text-gray-700">
+                        <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                        </svg>
+                        <div className="min-w-0 flex-1 break-words">{f.reason}</div>
                       </div>
-                      {f.rejected && f.rejectReason && (
-                        <div className="text-red-600 mt-0.5 text-[10px]">거절 사유: {f.rejectReason}</div>
-                      )}
                     </div>
-                    <div className="text-right shrink-0 text-[10px] text-gray-400">
-                      {new Date(f.createdAt).toLocaleDateString("ko-KR")}
+                    <div className="flex gap-2 sm:flex-col sm:gap-1.5 sm:w-28 flex-shrink-0">
+                      <button
+                        type="button"
+                        disabled={actionLoading === f.id}
+                        onClick={() => handleApprove(f.id)}
+                        className="flex-1 sm:w-full inline-flex items-center justify-center gap-1 px-3 py-2 text-xs font-bold text-white bg-emerald-500 rounded-lg hover:bg-emerald-600 shadow-sm shadow-emerald-500/20 disabled:opacity-50 transition-colors"
+                      >
+                        {actionLoading === f.id ? (
+                          <>처리중...</>
+                        ) : (
+                          <>
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                            </svg>
+                            승인
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={actionLoading === f.id}
+                        onClick={() => handleReject(f.id)}
+                        className="flex-1 sm:w-full inline-flex items-center justify-center gap-1 px-3 py-2 text-xs font-semibold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                        거절
+                      </button>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              );
+            })}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* 처리 이력 */}
+        {historyOpen && history.length > 0 && (
+          <div className="bg-white border-t border-gray-100">
+            <div className="px-4 sm:px-5 py-3 bg-gray-50/60">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">처리 이력</span>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {history
+                .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .map((f: any) => {
+                  const statusBadge = f.rejected
+                    ? { label: "거절", cls: "bg-red-50 text-red-700 border-red-200", icon: "×" }
+                    : f.paid
+                    ? { label: "지급완료", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "✓" }
+                    : f.approvedByGuardian
+                    ? { label: "승인", cls: "bg-blue-50 text-blue-700 border-blue-200", icon: "✓" }
+                    : { label: "대기", cls: "bg-amber-50 text-amber-700 border-amber-200", icon: "⏱" };
+                  return (
+                    <div key={f.id} className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${statusBadge.cls}`}>
+                            {statusBadge.icon} {statusBadge.label}
+                          </span>
+                          <span className="text-sm font-semibold text-gray-900">
+                            {f.contract?.careRequest?.patient?.name || "-"}
+                          </span>
+                          <span className="text-sm font-bold text-gray-900 tabular-nums">
+                            {f.amount?.toLocaleString()}원
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">{f.reason}</div>
+                        {f.rejected && f.rejectReason && (
+                          <div className="text-[11px] text-red-600 mt-0.5">거절 사유: {f.rejectReason}</div>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-400 flex-shrink-0 tabular-nums">
+                        {new Date(f.createdAt).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" })}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
