@@ -706,14 +706,14 @@ function GuardianDashboard() {
     `${v.toLocaleString()}원`;
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-primary-50/30 via-gray-50 to-gray-50 py-6 sm:py-8 px-4">
+    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-primary-50/30 via-gray-50 to-gray-50 py-4 sm:py-6 px-4">
       <div className="max-w-6xl mx-auto">
         {/* Hero 카드 */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-          <div className="bg-gradient-to-br from-primary-500 to-primary-600 px-6 py-5 text-white relative">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-4 min-w-0">
-                <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur text-white flex items-center justify-center text-xl font-bold shadow-sm flex-shrink-0 border-2 border-white/30">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+          <div className="bg-gradient-to-br from-primary-500 to-primary-600 px-5 py-4 text-white relative">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur text-white flex items-center justify-center text-lg font-bold shadow-sm flex-shrink-0 border-2 border-white/30">
                   {userName?.[0] || "보"}
                 </div>
                 <div className="min-w-0">
@@ -738,7 +738,7 @@ function GuardianDashboard() {
 
           <Link
             href="/care-request"
-            className="sm:hidden flex items-center justify-center gap-1.5 m-4 px-3 py-2.5 rounded-xl text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 transition-colors"
+            className="sm:hidden flex items-center justify-center gap-1.5 mx-3 my-3 px-3 py-2 rounded-xl text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
             새 간병 요청하기
@@ -746,10 +746,10 @@ function GuardianDashboard() {
         </div>
 
         {/* 통계 카드 */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mb-4">
           {/* 진행 중 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
-            <div className="w-9 h-9 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center mb-3">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4">
+            <div className="w-8 h-8 rounded-lg bg-primary-100 text-primary-600 flex items-center justify-center mb-2">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
             </div>
             <div className="text-xs text-gray-500 mb-1">진행 중</div>
@@ -759,8 +759,8 @@ function GuardianDashboard() {
           </div>
 
           {/* 완료 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-3">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
             </div>
             <div className="text-xs text-gray-500 mb-1">완료</div>
@@ -770,8 +770,8 @@ function GuardianDashboard() {
           </div>
 
           {/* 이번 달 비용 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
-            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center mb-2">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
             </div>
             <div className="text-xs text-gray-500 mb-1">이번 달 비용</div>
@@ -781,8 +781,8 @@ function GuardianDashboard() {
           </div>
 
           {/* 추천 적립금 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
-            <div className="w-9 h-9 rounded-xl bg-accent-100 text-accent-600 flex items-center justify-center mb-3">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4">
+            <div className="w-8 h-8 rounded-lg bg-accent-100 text-accent-600 flex items-center justify-center mb-2">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 1 0 9.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1 1 14.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" /></svg>
             </div>
             <div className="text-xs text-gray-500 mb-1">추천 적립금</div>
@@ -793,7 +793,7 @@ function GuardianDashboard() {
         </div>
 
         {/* Tabs — 가로 스크롤 + 아이콘 */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6 overflow-x-auto scrollbar-hide">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 overflow-x-auto scrollbar-hide">
           <div className="flex items-center gap-1 p-1.5 min-w-max">
             {tabs.map((tab) => {
               const active = activeTab === tab.key;
@@ -2150,14 +2150,14 @@ function GuardianAdditionalFeesBanner({ onChanged }: { onChanged: () => void }) 
   const hasPending = pending.length > 0;
 
   return (
-    <div ref={bannerRef} className="mx-4 sm:mx-6 mt-4">
+    <div ref={bannerRef} className="mx-4 sm:mx-6 mt-4 mb-4">
       <div className={`rounded-2xl overflow-hidden border ${hasPending ? "border-amber-200 shadow-sm" : "border-gray-200"}`}>
         {/* 헤더 */}
         <div className={`px-4 sm:px-5 py-3.5 flex items-center justify-between gap-3 ${
           hasPending ? "bg-gradient-to-r from-amber-50 to-amber-50/60" : "bg-gray-50"
         }`}>
           <div className="flex items-center gap-3 min-w-0">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
               hasPending ? "bg-amber-500 text-white shadow-sm" : "bg-gray-200 text-gray-500"
             }`}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">

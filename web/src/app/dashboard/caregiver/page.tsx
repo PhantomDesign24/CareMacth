@@ -643,14 +643,14 @@ function CaregiverDashboard() {
   const trendUp = earnings.thisMonth >= earnings.lastMonth;
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-primary-50/30 via-gray-50 to-gray-50 py-6 sm:py-8 px-4">
+    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-primary-50/30 via-gray-50 to-gray-50 py-4 sm:py-6 px-4">
       <div className="max-w-6xl mx-auto">
         {/* Hero 카드 — 프로필 + 상태 + 빠른 액션 */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-          <div className="bg-gradient-to-br from-primary-500 to-primary-600 px-6 py-5 text-white relative">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+          <div className="bg-gradient-to-br from-primary-500 to-primary-600 px-5 py-4 text-white relative">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4 min-w-0">
-                <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur text-white flex items-center justify-center text-xl font-bold shadow-sm flex-shrink-0 border-2 border-white/30">
+                <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur text-white flex items-center justify-center text-lg font-bold shadow-sm flex-shrink-0 border-2 border-white/30">
                   {userName?.[0] || "간"}
                 </div>
                 <div className="min-w-0">
@@ -675,7 +675,7 @@ function CaregiverDashboard() {
           </div>
 
           {/* 상태 변경 세그먼트 */}
-          <div className="px-5 py-4 border-t border-gray-100">
+          <div className="px-4 py-3 border-t border-gray-100">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold text-gray-500">근무 상태</span>
@@ -709,11 +709,11 @@ function CaregiverDashboard() {
         </div>
 
         {/* 통계 카드 */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mb-4">
           {/* 이번 달 수익 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4">
             <div className="flex items-start justify-between mb-3">
-              <div className="w-9 h-9 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-primary-100 text-primary-600 flex items-center justify-center">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" /></svg>
               </div>
               {trendPercent !== null && (
@@ -729,8 +729,8 @@ function CaregiverDashboard() {
           </div>
 
           {/* 정산 대기 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
-            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center mb-2">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
             </div>
             <div className="text-xs text-gray-500 mb-1">정산 대기</div>
@@ -740,8 +740,8 @@ function CaregiverDashboard() {
           </div>
 
           {/* 누적 수익 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-3">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
             </div>
             <div className="text-xs text-gray-500 mb-1">누적 수익</div>
@@ -751,8 +751,8 @@ function CaregiverDashboard() {
           </div>
 
           {/* 패널티 점수 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${
               penaltyScore === 0 ? "bg-gray-100 text-gray-500" : penaltyScore < 3 ? "bg-amber-100 text-amber-600" : "bg-red-100 text-red-600"
             }`}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.98 10.503 10.503 0 0 1-9.694 6.46c-5.799 0-10.5-4.7-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 0 1 .818.162Z" /></svg>
@@ -766,7 +766,7 @@ function CaregiverDashboard() {
         </div>
 
         {/* Tabs — 가로 스크롤 + 아이콘 */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6 overflow-x-auto scrollbar-hide">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 overflow-x-auto scrollbar-hide">
           <div className="flex items-center gap-1 p-1.5 min-w-max">
             {tabs.map((tab) => {
               const active = activeTab === tab.key;
