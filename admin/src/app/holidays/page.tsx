@@ -24,6 +24,14 @@ const TYPE_LABEL: Record<string, { label: string; cls: string; desc: string }> =
 
 const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
+// 로컬 기준 YYYY-MM-DD 문자열 (toISOString이 UTC로 바꿔 날짜가 밀리는 문제 회피)
+function toLocalYMD(dt: Date): string {
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 // 월별 달력 날짜 배열 생성 (이전 달 회색 채움 포함)
 function buildMonthGrid(year: number, month: number /* 1-12 */): { date: string; inMonth: boolean }[] {
   const first = new Date(year, month - 1, 1);
@@ -35,22 +43,26 @@ function buildMonthGrid(year: number, month: number /* 1-12 */): { date: string;
   // 이전 달 채움
   for (let i = firstWeekday - 1; i >= 0; i--) {
     const d = prevMonthDays - i;
-    const dt = new Date(year, month - 2, d);
-    cells.push({ date: dt.toISOString().slice(0, 10), inMonth: false });
+    cells.push({ date: toLocalYMD(new Date(year, month - 2, d)), inMonth: false });
   }
   // 현재 달
   for (let d = 1; d <= daysInMonth; d++) {
-    const dt = new Date(year, month - 1, d);
-    cells.push({ date: dt.toISOString().slice(0, 10), inMonth: true });
+    cells.push({ date: toLocalYMD(new Date(year, month - 1, d)), inMonth: true });
   }
   // 다음 달 채움 (6행 맞추기)
   while (cells.length % 7 !== 0 || cells.length < 42) {
-    const last = new Date(cells[cells.length - 1].date);
-    last.setDate(last.getDate() + 1);
-    cells.push({ date: last.toISOString().slice(0, 10), inMonth: false });
+    const [ly, lm, ld] = cells[cells.length - 1].date.split("-").map((x) => parseInt(x, 10));
+    const nextDt = new Date(ly, lm - 1, ld + 1);
+    cells.push({ date: toLocalYMD(nextDt), inMonth: false });
     if (cells.length >= 42) break;
   }
   return cells;
+}
+
+// 로컬 기준으로 YMD 문자열을 Date 객체로 (new Date("2026-04-01")은 UTC 자정으로 해석되어 시간대 차이 발생)
+function parseLocalYMD(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map((x) => parseInt(x, 10));
+  return new Date(y, m - 1, d);
 }
 
 export default function HolidaysPage() {
@@ -196,7 +208,7 @@ export default function HolidaysPage() {
           else setCalMonth(calMonth + 1);
         };
         const goToday = () => { setYear(now.getFullYear()); setCalMonth(now.getMonth() + 1); };
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = toLocalYMD(new Date());
 
         return (
           <div className="card">
@@ -241,7 +253,7 @@ export default function HolidaysPage() {
             {/* 날짜 셀 */}
             <div className="grid grid-cols-7 gap-1.5">
               {grid.map((cell) => {
-                const d = new Date(cell.date);
+                const d = parseLocalYMD(cell.date);
                 const dow = d.getDay();
                 const libNames = libMap.get(cell.date);
                 const override = overrideByDate.get(cell.date);
