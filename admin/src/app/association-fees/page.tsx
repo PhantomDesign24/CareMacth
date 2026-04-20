@@ -22,7 +22,7 @@ export default function AssociationFeesPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [defaultAmount, setDefaultAmount] = useState(30000); // PlatformConfig 로드 후 업데이트
+  const [defaultAmount, setDefaultAmount] = useState<number | null>(null); // PlatformConfig 로드 후 설정
   const [memoModal, setMemoModal] = useState<AssociationFeeRow | null>(null);
   const [detailModal, setDetailModal] = useState<AssociationFeeRow | null>(null);
   const [memoText, setMemoText] = useState("");
@@ -84,6 +84,10 @@ export default function AssociationFeesPage() {
   }, [rows]);
 
   const togglePaid = async (row: AssociationFeeRow) => {
+    if (defaultAmount == null) {
+      alert("기본 협회비 금액을 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.");
+      return;
+    }
     try {
       await updateAssociationFee(row.caregiverId, {
         year, month,
@@ -104,6 +108,10 @@ export default function AssociationFeesPage() {
 
   const bulkMarkPaid = async () => {
     if (selected.size === 0) return;
+    if (defaultAmount == null) {
+      alert("기본 협회비 금액을 불러오지 못했습니다.");
+      return;
+    }
     if (!confirm(`선택된 ${selected.size}명을 일괄 납부 처리하시겠습니까?\n금액: ${defaultAmount.toLocaleString()}원`)) return;
     setSaving(true);
     try {
@@ -271,11 +279,13 @@ export default function AssociationFeesPage() {
             <label className="text-gray-500">기본 금액:</label>
             <input
               type="number"
-              value={defaultAmount}
+              value={defaultAmount ?? ""}
+              placeholder={defaultAmount == null ? "로딩..." : ""}
               onChange={(e) => setDefaultAmount(parseInt(e.target.value) || 0)}
               className="w-28 border border-gray-200 rounded-lg px-2 py-1 text-sm"
             />
             <span className="text-gray-500">원</span>
+            <span className="text-[10px] text-gray-400">(플랫폼 설정 기본값)</span>
           </div>
         </div>
 
@@ -416,7 +426,7 @@ export default function AssociationFeesPage() {
                       onClick={() => {
                         setMemoModal(r);
                         setMemoText(r.feeNote || "");
-                        setMemoAmount(r.feeAmount || defaultAmount);
+                        setMemoAmount(r.feeAmount || defaultAmount || 0);
                       }}
                       className={`w-7 h-7 text-xs rounded ${r.feeNote ? "bg-orange-100 text-orange-600" : "bg-gray-100 text-gray-600"} hover:opacity-80`}
                       title="메모"
