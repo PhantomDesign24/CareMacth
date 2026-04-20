@@ -48,15 +48,23 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+        const res = await axios.post(`${API_BASE_URL}/auth/refresh`, {
           refresh_token: refreshToken,
         });
+        // 백엔드 응답: { success, data: { access_token, refresh_token, token } }
+        const payload = res.data?.data || res.data || {};
+        const newAccess = payload.access_token || payload.token;
+        const newRefresh = payload.refresh_token;
+        if (!newAccess) {
+          logout();
+          return Promise.reject(error);
+        }
 
-        localStorage.setItem("cm_access_token", data.access_token);
-        localStorage.setItem("cm_refresh_token", data.refresh_token);
+        localStorage.setItem("cm_access_token", newAccess);
+        if (newRefresh) localStorage.setItem("cm_refresh_token", newRefresh);
 
         if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
+          originalRequest.headers.Authorization = `Bearer ${newAccess}`;
         }
         return api(originalRequest);
       } catch {
