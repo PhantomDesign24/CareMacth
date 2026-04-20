@@ -200,75 +200,138 @@ export default function HolidaysPage() {
 
         return (
           <div className="card">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={goPrev} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">‹</button>
-                <h3 className="text-lg font-semibold text-gray-900 min-w-[110px] text-center">
-                  {year}년 {calMonth}월
+            {/* 헤더 */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={goPrev} aria-label="이전 달" className="h-9 w-9 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
+                </button>
+                <h3 className="text-xl font-bold text-gray-900 min-w-[130px] text-center tabular-nums">
+                  {year}.{String(calMonth).padStart(2, "0")}
                 </h3>
-                <button type="button" onClick={goNext} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">›</button>
-                <button type="button" onClick={goToday} className="ml-1 px-3 py-1.5 border border-gray-300 rounded-lg text-xs hover:bg-gray-50">오늘</button>
+                <button type="button" onClick={goNext} aria-label="다음 달" className="h-9 w-9 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+                </button>
+                <button type="button" onClick={goToday} className="ml-2 px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                  오늘
+                </button>
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-gray-500">
-                <span className="inline-flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-100 border border-red-300" /> 휴일</span>
-                <span className="inline-flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-100 border border-amber-300" /> 추가</span>
-                <span className="inline-flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-100 border border-gray-300" /> 제외</span>
+              <div className="flex items-center gap-4 text-xs text-gray-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block w-1 h-4 rounded-full bg-rose-500" /> 공휴일
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block w-1 h-4 rounded-full bg-amber-500" /> 회사 휴무
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block w-1 h-4 rounded-full bg-gray-400" /> 영업일 지정
+                </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden text-sm">
+            {/* 요일 헤더 */}
+            <div className="grid grid-cols-7 mb-2">
               {WEEK_DAYS.map((w, i) => (
-                <div key={w} className={`bg-gray-50 text-center py-2 text-xs font-semibold ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-600"}`}>{w}</div>
+                <div key={w} className={`text-center py-2 text-xs font-bold tracking-wider ${i === 0 ? "text-rose-500" : i === 6 ? "text-sky-500" : "text-gray-400"}`}>
+                  {w}
+                </div>
               ))}
+            </div>
+
+            {/* 날짜 셀 */}
+            <div className="grid grid-cols-7 gap-1.5">
               {grid.map((cell) => {
                 const d = new Date(cell.date);
                 const dow = d.getDay();
                 const libNames = libMap.get(cell.date);
                 const override = overrideByDate.get(cell.date);
                 const isWeekend = dow === 0 || dow === 6;
-                // 실제 휴일 여부: EXCLUDE면 false, CUSTOM이면 true, 그 외 라이브러리/주말
-                const effectiveHoliday = override?.type === "EXCLUDE"
-                  ? false
-                  : !!(override?.type === "CUSTOM" || libNames || isWeekend);
-
-                let bgClass = cell.inMonth ? "bg-white" : "bg-gray-50";
-                let borderAccent = "";
-                if (cell.inMonth) {
-                  if (override?.type === "EXCLUDE") {
-                    bgClass = "bg-gray-100";
-                    borderAccent = "ring-1 ring-gray-400";
-                  } else if (override?.type === "CUSTOM") {
-                    bgClass = "bg-amber-50";
-                    borderAccent = "ring-1 ring-amber-400";
-                  } else if (libNames) {
-                    bgClass = "bg-red-50";
-                  }
-                }
+                const isSunday = dow === 0;
                 const isToday = cell.date === todayStr;
-                const dayColor =
-                  !cell.inMonth ? "text-gray-400" :
-                  dow === 0 ? "text-red-500" :
-                  dow === 6 ? "text-blue-500" :
-                  "text-gray-800";
+                // 실효 휴일 여부: EXCLUDE면 false, 그 외 라이브러리/CUSTOM/주말
+                const isLibHoliday = !!libNames;
+                const isHolidayByDefault = isLibHoliday || isWeekend || override?.type === "CUSTOM";
+                const effectiveHoliday = override?.type === "EXCLUDE" ? false : isHolidayByDefault;
+
+                // 색상 결정 (우선순위: EXCLUDE → CUSTOM → 라이브러리 → 주말)
+                let accentColor = ""; // 왼쪽 세로 accent
+                let dayNumColor = "text-gray-800";
+                let subLabelColor = "";
+                let subLabel = "";
+                let bgClass = "bg-white";
+                let strike = false;
+
+                if (!cell.inMonth) {
+                  dayNumColor = "text-gray-300";
+                  bgClass = "bg-transparent";
+                } else if (override?.type === "EXCLUDE") {
+                  accentColor = "bg-gray-400";
+                  dayNumColor = "text-gray-400";
+                  subLabelColor = "text-gray-500 bg-gray-100";
+                  subLabel = "영업일";
+                  bgClass = "bg-gray-50/40";
+                  strike = true;
+                } else if (override?.type === "CUSTOM") {
+                  accentColor = "bg-amber-500";
+                  dayNumColor = "text-amber-700 font-bold";
+                  subLabelColor = "text-amber-800 bg-amber-100";
+                  subLabel = override.name;
+                  bgClass = "bg-amber-50/50";
+                } else if (libNames) {
+                  accentColor = "bg-rose-500";
+                  dayNumColor = "text-rose-600 font-bold";
+                  subLabelColor = "text-rose-700 bg-rose-100";
+                  subLabel = libNames.join(", ");
+                  bgClass = "bg-rose-50/50";
+                } else if (isSunday) {
+                  dayNumColor = "text-rose-500 font-semibold";
+                } else if (isWeekend) {
+                  dayNumColor = "text-sky-500 font-semibold";
+                }
 
                 const handleClick = async () => {
                   if (!cell.inMonth) return;
+                  // override가 있으면 삭제
                   if (override) {
-                    if (confirm(`${cell.date} "${override.name}" override를 삭제하시겠습니까?`)) {
+                    const typeLabel = override.type === "CUSTOM" ? "회사 휴무" : "영업일 지정";
+                    if (confirm(`${cell.date} [${typeLabel}] "${override.name}" 을(를) 삭제하시겠습니까?`)) {
                       try { await deleteHoliday(override.id); await fetchData(); }
                       catch (err: any) { alert(err?.message || "삭제 실패"); }
                     }
                     return;
                   }
+                  // 라이브러리 공휴일 → EXCLUDE 등록
                   if (libNames) {
-                    if (confirm(`${cell.date} "${libNames.join(', ')}" 을(를) 영업일로 지정하시겠습니까?`)) {
+                    if (confirm(`${cell.date} 공휴일 "${libNames.join(", ")}" 을(를) 이 날만 영업일로 지정하시겠습니까?`)) {
                       try {
-                        await createHoliday({ date: cell.date, name: libNames.join(', '), type: "EXCLUDE", description: "라이브러리 공휴일 예외 영업" });
+                        await createHoliday({
+                          date: cell.date,
+                          name: libNames.join(", "),
+                          type: "EXCLUDE",
+                          description: "공휴일 예외 영업",
+                        });
                         await fetchData();
                       } catch (err: any) { alert(err?.message || "등록 실패"); }
                     }
                     return;
                   }
+                  // 주말 → EXCLUDE 등록 (토/일)
+                  if (isWeekend) {
+                    const dayName = isSunday ? "일요일" : "토요일";
+                    if (confirm(`${cell.date} (${dayName})을 이 날만 영업일로 지정하시겠습니까?\n(주말은 기본적으로 휴무로 처리됩니다)`)) {
+                      try {
+                        await createHoliday({
+                          date: cell.date,
+                          name: dayName,
+                          type: "EXCLUDE",
+                          description: "주말 예외 영업",
+                        });
+                        await fetchData();
+                      } catch (err: any) { alert(err?.message || "등록 실패"); }
+                    }
+                    return;
+                  }
+                  // 평일 빈 날짜 → CUSTOM 추가
                   const name = window.prompt(`${cell.date} 회사 휴무로 추가합니다. 이름을 입력해주세요.`, "회사 휴무");
                   if (!name || !name.trim()) return;
                   try {
@@ -283,32 +346,51 @@ export default function HolidaysPage() {
                     type="button"
                     onClick={handleClick}
                     disabled={!cell.inMonth}
-                    className={`relative text-left p-2 min-h-[78px] transition-colors ${bgClass} ${borderAccent} ${cell.inMonth ? "hover:bg-opacity-80 cursor-pointer" : "cursor-default"}`}
+                    className={`group relative text-left rounded-lg border overflow-hidden transition-all min-h-[92px] ${
+                      cell.inMonth
+                        ? `${bgClass} border-gray-200 hover:border-primary-400 hover:shadow-sm cursor-pointer`
+                        : "bg-transparent border-transparent cursor-default"
+                    } ${isToday ? "ring-2 ring-primary-500 border-primary-500" : ""}`}
                   >
-                    <div className={`flex items-center justify-between`}>
-                      <span className={`text-xs font-semibold ${dayColor} ${isToday ? "inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-600 text-white" : ""}`}>
-                        {d.getDate()}
-                      </span>
-                      {cell.inMonth && effectiveHoliday && (
-                        <span className="text-[9px] font-bold text-red-500">휴</span>
+                    {/* 왼쪽 accent 바 */}
+                    {accentColor && (
+                      <span className={`absolute left-0 top-0 bottom-0 w-1 ${accentColor}`} />
+                    )}
+
+                    <div className="p-2 pl-3">
+                      {/* 상단: 날짜 + today */}
+                      <div className="flex items-center justify-between">
+                        <span className={`text-sm tabular-nums ${dayNumColor} ${strike ? "line-through decoration-1" : ""}`}>
+                          {d.getDate()}
+                        </span>
+                        {isToday && (
+                          <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-[9px] font-bold text-white bg-primary-600 rounded-full">
+                            오늘
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 서브 라벨 (공휴일 이름 / 회사 휴무 이름 / 영업일 지정) */}
+                      {cell.inMonth && subLabel && (
+                        <div className={`mt-1.5 inline-block max-w-full px-1.5 py-0.5 rounded text-[10px] font-medium truncate ${subLabelColor}`} title={subLabel}>
+                          {subLabel}
+                        </div>
+                      )}
+
+                      {/* 하단: 휴일 마커 */}
+                      {cell.inMonth && effectiveHoliday && !subLabel && (
+                        <div className="mt-1.5 text-[10px] text-rose-500 font-medium">
+                          휴무
+                        </div>
                       )}
                     </div>
-                    {cell.inMonth && libNames && (
-                      <div className="mt-1 text-[10px] text-red-600 truncate" title={libNames.join(', ')}>
-                        {libNames.join(', ')}
-                      </div>
-                    )}
-                    {cell.inMonth && override && (
-                      <div className={`mt-0.5 text-[10px] truncate ${override.type === "CUSTOM" ? "text-amber-700" : "text-gray-500"}`} title={override.name}>
-                        {override.type === "CUSTOM" ? "+ " : "× "}{override.name}
-                      </div>
-                    )}
                   </button>
                 );
               })}
             </div>
-            <p className="mt-2 text-[11px] text-gray-400">
-              날짜 클릭 — 빈 날짜: 회사 휴무 추가 · 라이브러리 공휴일: 영업일 지정 · override: 삭제
+
+            <p className="mt-4 text-[11px] text-gray-400 border-t border-gray-100 pt-3">
+              날짜를 클릭해서 관리하세요 — <span className="text-rose-600">공휴일·주말</span>: 이 날만 영업일 지정 · <span className="text-gray-600">평일</span>: 회사 휴무 추가 · <span className="text-amber-700">override</span>: 삭제
             </p>
           </div>
         );
