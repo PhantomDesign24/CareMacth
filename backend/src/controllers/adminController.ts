@@ -926,6 +926,7 @@ export const getPatients = async (req: AuthRequest, res: Response, next: NextFun
         select: {
           careRequest: { select: { patientId: true } },
           platformFee: true,
+          platformFeeFixed: true,
           totalAmount: true,
           payments: {
             where: { status: { in: ['ESCROW', 'COMPLETED'] } },
@@ -934,15 +935,15 @@ export const getPatients = async (req: AuthRequest, res: Response, next: NextFun
         },
       });
 
-      for (const contract of contractsWithPayments) {
+      for (const contract of contractsWithPayments as any[]) {
         const pid = contract.careRequest.patientId;
         if (!patientPaymentData[pid]) {
           patientPaymentData[pid] = { totalSpent: 0, totalFees: 0 };
         }
-        const paymentSum = contract.payments.reduce((s, p) => s + p.totalAmount, 0);
+        const paymentSum = contract.payments.reduce((s: number, p: any) => s + p.totalAmount, 0);
         patientPaymentData[pid].totalSpent += paymentSum;
-        // platformFee is a percentage, calculate fee from payment amounts
-        patientPaymentData[pid].totalFees += Math.round(paymentSum * (contract.platformFee / 100));
+        // fee = % * amount + fixed
+        patientPaymentData[pid].totalFees += Math.round(paymentSum * (contract.platformFee / 100)) + (contract.platformFeeFixed || 0);
       }
     }
 
@@ -1656,8 +1657,9 @@ export const getPayments = async (req: AuthRequest, res: Response, next: NextFun
         .reduce((s: number, f: any) => s + (f.approvedByGuardian ? f.amount : 0), 0);
       // 간병인 실수령 계산 (Payment 결제 금액 기준, 계약 수수료·세율 반영)
       const platformFeePercent = p.contract?.platformFee ?? 10;
+      const platformFeeFixed = (p.contract as any)?.platformFeeFixed ?? 0;
       const taxRate = p.contract?.taxRate ?? 3.3;
-      const platformFeeAmt = p.contract ? Math.round(p.totalAmount * (platformFeePercent / 100)) : 0;
+      const platformFeeAmt = p.contract ? Math.round(p.totalAmount * (platformFeePercent / 100)) + platformFeeFixed : 0;
       const taxAmt = p.contract ? Math.round((p.totalAmount - platformFeeAmt) * (taxRate / 100)) : 0;
       return {
         id: p.id,
@@ -1823,7 +1825,7 @@ export const createMidSettlement = async (req: AuthRequest, res: Response, next:
     const billDays = days && days > 0 ? Math.min(days, availableDays) : availableDays;
 
     const amount = contract.dailyRate * billDays;
-    const platformFee = Math.round(amount * (contract.platformFee / 100));
+    const platformFee = Math.round(amount * (contract.platformFee / 100)) + (contract.platformFeeFixed || 0);
     const taxAmount = Math.round(amount * (contract.taxRate / 100));
     const netAmount = amount - platformFee - taxAmount;
 

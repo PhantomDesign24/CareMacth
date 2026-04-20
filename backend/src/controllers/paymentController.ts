@@ -142,8 +142,8 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
 
       // 직접 결제의 경우 즉시 완료 처리
       if (method === 'DIRECT') {
-        // 간병인 정산 생성
-        const platformFeeAmount = Math.round(amount * (contract.platformFee / 100));
+        // 간병인 정산 생성 (% 수수료 + 고정 수수료)
+        const platformFeeAmount = Math.round(amount * (contract.platformFee / 100)) + ((contract as any).platformFeeFixed || 0);
         const taxAmount = Math.round(amount * (contract.taxRate / 100));
         const netAmount = amount - platformFeeAmount - taxAmount;
 
@@ -503,7 +503,7 @@ async function executeRefund(
             remaining -= e.amount;
           } else {
             const newAmount = e.amount - remaining;
-            const newPlatformFee = Math.round(newAmount * ((payment.contract.platformFee || 10) / 100));
+            const newPlatformFee = Math.round(newAmount * ((payment.contract.platformFee || 10) / 100)) + ((payment.contract as any).platformFeeFixed || 0);
             const newTax = Math.round((newAmount - newPlatformFee) * ((payment.contract.taxRate || 3.3) / 100));
             await tx.earning.update({
               where: { id: e.id },

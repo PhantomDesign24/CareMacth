@@ -196,15 +196,19 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
         whereClause.status = status;
       }
     } else if (req.user!.role === 'CAREGIVER') {
+      // 간병인: OPEN 상태 일감만 (미승인 간병인은 차단)
+      const me = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+      if (!me || me.status !== 'APPROVED') {
+        throw new AppError('승인된 간병인만 일감을 조회할 수 있습니다.', 403);
+      }
       whereClause.status = status || 'OPEN';
-      // 지역 필터는 프론트의 regions 쿼리를 단일 진실원으로 사용 (아래 공통 처리).
-      // 이전엔 regions 쿼리 비어있으면 선호지역을 서버에서 자동 적용했으나,
-      // 프론트가 "전체 지역"을 명시적으로 선택하는 경우와 구분 안 돼서 제거.
-      // 선호지역 초기값은 프론트에서 caregiverAPI.list()로 받아 regionFilter에 세팅함.
     } else if (req.user!.role === 'ADMIN') {
       if (status) {
         whereClause.status = status;
       }
+    } else {
+      // 그 외 역할(HOSPITAL 등)은 차단
+      throw new AppError('일감 목록에 접근할 수 없습니다.', 403);
     }
 
     // 지역 필터 — 모든 역할 공통

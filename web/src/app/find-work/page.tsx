@@ -110,6 +110,17 @@ export default function FindWorkPage() {
     }
   }, []);
 
+  // 역할 가드: 간병인/관리자 이외 접근 제한
+  useEffect(() => {
+    if (userRole && userRole !== "CAREGIVER" && userRole !== "ADMIN") {
+      // 보호자/병원 등은 접근 불가 → 홈 or 대시보드로
+      if (typeof window !== "undefined") {
+        alert("이 페이지는 간병인 회원만 이용할 수 있습니다.");
+        window.location.href = userRole === "GUARDIAN" ? "/dashboard/guardian" : "/";
+      }
+    }
+  }, [userRole]);
+
   const regionKey = regionFilter.join(",");
   const fetchRequests = useCallback(async () => {
     setLoading(true);

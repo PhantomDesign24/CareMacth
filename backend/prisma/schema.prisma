@@ -367,6 +367,7 @@ model Contract {
   dailyRate       Int            // 일당
   totalAmount     Int            // 총 금액
   platformFee     Float          // 플랫폼 수수료 (%)
+  platformFeeFixed Int           @default(0) // 플랫폼 고정 수수료 (원)
   taxRate         Float          @default(3.3) // 세율 (%)
 
   status          ContractStatus @default(ACTIVE)

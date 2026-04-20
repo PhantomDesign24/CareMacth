@@ -233,7 +233,7 @@ export async function settleEarning(contractId: string) {
     return null;
   }
 
-  const platformFee = Math.round(remainingAmount * (contract.platformFee / 100));
+  const platformFee = Math.round(remainingAmount * (contract.platformFee / 100)) + ((contract as any).platformFeeFixed || 0);
   const taxAmount = Math.round((remainingAmount - platformFee) * (contract.taxRate / 100));
   const netAmount = remainingAmount - platformFee - taxAmount;
 

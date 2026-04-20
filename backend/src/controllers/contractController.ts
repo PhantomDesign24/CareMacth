@@ -62,6 +62,9 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
     const feePercent = careRequest.careType === 'INDIVIDUAL'
       ? (platformConfig?.individualFeePercent ?? 10)
       : (platformConfig?.familyFeePercent ?? 15);
+    const feeFixed = careRequest.careType === 'INDIVIDUAL'
+      ? (platformConfig?.individualFeeFixed ?? 0)
+      : (platformConfig?.familyFeeFixed ?? 0);
 
     const taxRate = platformConfig?.taxRate ?? 3.3;
 
@@ -103,6 +106,7 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
           dailyRate,
           totalAmount,
           platformFee: feePercent,
+          platformFeeFixed: feeFixed,
           taxRate,
           medicalActClause: careRequest.medicalActAgreed,
         },
@@ -333,8 +337,8 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
     // 환불 금액
     const refundAmount = contract.dailyRate * remainingDays;
 
-    // 간병인 정산 금액 계산
-    const platformFeeAmount = Math.round(usedAmount * (contract.platformFee / 100));
+    // 간병인 정산 금액 계산 (% 수수료 + 고정 수수료)
+    const platformFeeAmount = Math.round(usedAmount * (contract.platformFee / 100)) + (contract.platformFeeFixed || 0);
     const taxAmount = Math.round(usedAmount * (contract.taxRate / 100));
     const netEarning = usedAmount - platformFeeAmount - taxAmount;
 
@@ -787,7 +791,10 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     drawTableRow('간병 기간', `${new Date(contract.startDate).toLocaleDateString('ko-KR')} ~ ${new Date(contract.endDate).toLocaleDateString('ko-KR')}`);
     drawTableRow('일당', `${contract.dailyRate.toLocaleString()}원`);
     drawTableRow('총 금액', `${contract.totalAmount.toLocaleString()}원 (VAT 별도)`);
-    drawTableRow('플랫폼 수수료', `${contract.platformFee}%`);
+    const feeText = (contract as any).platformFeeFixed
+      ? `${contract.platformFee}% + ${(contract as any).platformFeeFixed.toLocaleString()}원`
+      : `${contract.platformFee}%`;
+    drawTableRow('플랫폼 수수료', feeText);
     drawTableRow('세율 (원천징수)', `${contract.taxRate}%`);
     y += 20;
 
