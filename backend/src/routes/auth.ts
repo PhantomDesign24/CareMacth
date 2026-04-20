@@ -28,17 +28,11 @@ router.post('/login', [
   body('password').notEmpty().withMessage('비밀번호를 입력해주세요.'),
 ], authController.login);
 
-// 카카오 간편가입
-router.post('/kakao', [
-  authLimiter,
-  body('accessToken').notEmpty().withMessage('카카오 액세스 토큰이 필요합니다.'),
-], authController.kakaoAuth);
+// 카카오 간편가입/로그인 (accessToken 또는 code 지원)
+router.post('/kakao', [authLimiter], authController.kakaoAuth);
 
-// 네이버 간편가입
-router.post('/naver', [
-  authLimiter,
-  body('accessToken').notEmpty().withMessage('네이버 액세스 토큰이 필요합니다.'),
-], authController.naverAuth);
+// 네이버 간편가입/로그인 (accessToken 또는 code 지원)
+router.post('/naver', [authLimiter], authController.naverAuth);
 
 // 내 정보 조회
 router.get('/me', authenticate, authController.getMe);

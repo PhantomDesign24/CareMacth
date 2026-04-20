@@ -165,21 +165,26 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* TODO: 카카오/네이버 OAuth 연동 후 활성화 */}
-          {false && (
           <div className="flex items-center gap-4 my-6">
             <div className="flex-1 h-px bg-gray-200" />
             <span className="text-xs text-gray-400 font-medium">또는</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
-          )}
 
-          {/* TODO: 카카오/네이버 OAuth 연동 후 활성화 */}
-          {false && (
           <div className="space-y-3">
             <button
               type="button"
-              className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl font-medium transition-colors text-sm"
+              onClick={() => {
+                const clientId = process.env.NEXT_PUBLIC_KAKAO_CLIENT_ID || "";
+                const redirectUri = `${window.location.origin}/auth/kakao/callback`;
+                if (!clientId) {
+                  setError("NEXT_PUBLIC_KAKAO_CLIENT_ID 환경변수가 설정되지 않았습니다.");
+                  return;
+                }
+                const url = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=account_email,profile_nickname,phone_number`;
+                window.location.href = url;
+              }}
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl font-medium transition-colors text-sm hover:opacity-90"
               style={{ backgroundColor: "#FEE500", color: "#191919" }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="#191919">
@@ -190,7 +195,19 @@ export default function LoginPage() {
 
             <button
               type="button"
-              className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl font-medium transition-colors text-sm text-white"
+              onClick={() => {
+                const clientId = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID || "";
+                const redirectUri = `${window.location.origin}/auth/naver/callback`;
+                if (!clientId) {
+                  setError("NEXT_PUBLIC_NAVER_CLIENT_ID 환경변수가 설정되지 않았습니다.");
+                  return;
+                }
+                const state = Math.random().toString(36).slice(2);
+                sessionStorage.setItem("naver_oauth_state", state);
+                const url = `https://nid.naver.com/oauth2.0/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+                window.location.href = url;
+              }}
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl font-medium transition-colors text-sm text-white hover:opacity-90"
               style={{ backgroundColor: "#03C75A" }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
@@ -199,7 +216,6 @@ export default function LoginPage() {
               네이버로 로그인
             </button>
           </div>
-          )}
         </div>
 
         {/* Register link */}

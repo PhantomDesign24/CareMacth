@@ -185,7 +185,34 @@ export const kakaoAuth = async (req: Request, res: Response, next: NextFunction)
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { accessToken, role } = req.body;
+    const { accessToken: bodyToken, code, redirectUri, role } = req.body;
+    let accessToken = bodyToken;
+
+    // code 플로우: 카카오 /oauth/token 교환
+    if (!accessToken && code) {
+      const clientId = process.env.KAKAO_CLIENT_ID;
+      const clientSecret = process.env.KAKAO_CLIENT_SECRET;
+      if (!clientId) {
+        throw new AppError('KAKAO_CLIENT_ID 환경변수가 설정되지 않았습니다.', 500);
+      }
+      const params = new URLSearchParams();
+      params.append('grant_type', 'authorization_code');
+      params.append('client_id', clientId);
+      if (clientSecret) params.append('client_secret', clientSecret);
+      params.append('redirect_uri', redirectUri || '');
+      params.append('code', code);
+
+      const tokenRes = await axios.post(
+        'https://kauth.kakao.com/oauth/token',
+        params.toString(),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+      );
+      accessToken = tokenRes.data.access_token;
+    }
+
+    if (!accessToken) {
+      throw new AppError('accessToken 또는 code가 필요합니다.', 400);
+    }
 
     // 카카오 사용자 정보 조회
     const kakaoUser = await axios.get('https://kapi.kakao.com/v2/user/me', {
@@ -246,7 +273,31 @@ export const naverAuth = async (req: Request, res: Response, next: NextFunction)
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { accessToken, role } = req.body;
+    const { accessToken: bodyToken, code, state, role } = req.body;
+    let accessToken = bodyToken;
+
+    // code 플로우: 네이버 /oauth2.0/token 교환
+    if (!accessToken && code) {
+      const clientId = process.env.NAVER_CLIENT_ID;
+      const clientSecret = process.env.NAVER_CLIENT_SECRET;
+      if (!clientId || !clientSecret) {
+        throw new AppError('NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 환경변수가 설정되지 않았습니다.', 500);
+      }
+      const tokenRes = await axios.get('https://nid.naver.com/oauth2.0/token', {
+        params: {
+          grant_type: 'authorization_code',
+          client_id: clientId,
+          client_secret: clientSecret,
+          code,
+          state: state || '',
+        },
+      });
+      accessToken = tokenRes.data.access_token;
+    }
+
+    if (!accessToken) {
+      throw new AppError('accessToken 또는 code가 필요합니다.', 400);
+    }
 
     const naverUser = await axios.get('https://openapi.naver.com/v1/nid/me', {
       headers: { Authorization: `Bearer ${accessToken}` },
