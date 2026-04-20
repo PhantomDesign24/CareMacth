@@ -679,46 +679,94 @@ function GuardianDashboard() {
   const referralCredits = summary?.referralCredits ?? 0;
   const patients = summary?.patients ?? [];
 
+  const fmtWon = (v: number) =>
+    v >= 100000000 ? `${(v / 100000000).toFixed(1)}억` :
+    v >= 10000 ? `${Math.round(v / 10000).toLocaleString()}만원` :
+    `${v.toLocaleString()}원`;
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-gray-50 py-8 px-4">
+    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-primary-50/30 via-gray-50 to-gray-50 py-6 sm:py-8 px-4">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">보호자 대시보드</h1>
-            <p className="text-gray-500 mt-1">안녕하세요, {userName}님</p>
+        {/* Hero 카드 */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+          <div className="bg-gradient-to-br from-primary-500 to-primary-600 px-6 py-5 text-white relative">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur text-white flex items-center justify-center text-xl font-bold shadow-sm flex-shrink-0 border-2 border-white/30">
+                  {userName?.[0] || "보"}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-lg sm:text-xl font-bold truncate">{userName}</h1>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/20 backdrop-blur">
+                      보호자
+                    </span>
+                  </div>
+                  <p className="text-sm text-white/80 mt-0.5">보호자 마이페이지</p>
+                </div>
+              </div>
+              <Link
+                href="/care-request"
+                className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-white text-primary-600 hover:bg-white/90 transition-colors flex-shrink-0 shadow-sm"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                새 간병 요청
+              </Link>
+            </div>
           </div>
-          <Link href="/care-request" className="btn-primary">
+
+          <Link
+            href="/care-request"
+            className="sm:hidden flex items-center justify-center gap-1.5 m-4 px-3 py-2.5 rounded-xl text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
             새 간병 요청하기
           </Link>
         </div>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-6 sm:mb-8">
-          <div className="card p-3 sm:p-5">
-            <div className="text-xs sm:text-sm text-gray-500 mb-1">진행 중</div>
-            <div className="text-lg sm:text-2xl font-bold text-primary-600 whitespace-nowrap">{activeCareCount}건</div>
-          </div>
-          <div className="card p-3 sm:p-5">
-            <div className="text-xs sm:text-sm text-gray-500 mb-1">완료</div>
-            <div className="text-lg sm:text-2xl font-bold text-gray-900 whitespace-nowrap">{completedCareCount}건</div>
-          </div>
-          <div className="card p-3 sm:p-5">
-            <div className="text-xs sm:text-sm text-gray-500 mb-1">이번 달 비용</div>
-            <div className="text-lg sm:text-2xl font-bold text-gray-900 whitespace-nowrap">
-              {monthlyExpense >= 100000000
-                ? `${(monthlyExpense / 100000000).toFixed(1)}억`
-                : monthlyExpense >= 10000
-                ? `${Math.round(monthlyExpense / 10000).toLocaleString()}만원`
-                : `${monthlyExpense.toLocaleString()}원`}
+        {/* 통계 카드 */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          {/* 진행 중 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+            <div className="w-9 h-9 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center mb-3">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+            </div>
+            <div className="text-xs text-gray-500 mb-1">진행 중</div>
+            <div className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums">
+              {activeCareCount}<span className="text-sm font-semibold text-gray-500 ml-0.5">건</span>
             </div>
           </div>
-          <div className="card p-3 sm:p-5">
-            <div className="text-xs sm:text-sm text-gray-500 mb-1">추천 적립금</div>
-            <div className="text-lg sm:text-2xl font-bold text-accent-500 whitespace-nowrap">
-              {referralCredits >= 10000
-                ? `${Math.round(referralCredits / 10000).toLocaleString()}만원`
-                : `${referralCredits.toLocaleString()}원`}
+
+          {/* 완료 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-3">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+            </div>
+            <div className="text-xs text-gray-500 mb-1">완료</div>
+            <div className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums">
+              {completedCareCount}<span className="text-sm font-semibold text-gray-500 ml-0.5">건</span>
+            </div>
+          </div>
+
+          {/* 이번 달 비용 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+            </div>
+            <div className="text-xs text-gray-500 mb-1">이번 달 비용</div>
+            <div className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums whitespace-nowrap">
+              {fmtWon(monthlyExpense)}
+            </div>
+          </div>
+
+          {/* 추천 적립금 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+            <div className="w-9 h-9 rounded-xl bg-accent-100 text-accent-600 flex items-center justify-center mb-3">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 1 0 9.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1 1 14.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" /></svg>
+            </div>
+            <div className="text-xs text-gray-500 mb-1">추천 적립금</div>
+            <div className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums whitespace-nowrap">
+              {fmtWon(referralCredits)}
             </div>
           </div>
         </div>
