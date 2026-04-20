@@ -31,8 +31,23 @@ api.interceptors.request.use(
 );
 
 // Response interceptor: handle 401 and token refresh
+// 백엔드가 { success: true, data: ... } 래퍼를 일관적으로 사용하므로
+// 성공 응답은 response.data를 실제 payload로 자동 언래핑한다.
+// (호출부에서 res.data?.data 중복 작성 제거 목적)
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const body = response.data;
+    if (
+      body &&
+      typeof body === "object" &&
+      !Array.isArray(body) &&
+      "success" in body &&
+      "data" in body
+    ) {
+      response.data = (body as { data: unknown }).data;
+    }
+    return response;
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
