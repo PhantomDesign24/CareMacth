@@ -8,11 +8,39 @@ import { formatDate, formatContractStatus, formatCareType, formatLocation, forma
 import { showToast } from "@/components/Toast";
 import NotificationPrefsSection from "@/components/NotificationPrefsSection";
 
+interface EarningItem {
+  id: string;
+  contractId: string;
+  amount: number;
+  platformFee: number;
+  taxAmount: number;
+  netAmount: number;
+  isPaid: boolean;
+  paidAt?: string | null;
+  createdAt: string;
+  patientName?: string;
+}
+
+interface AdditionalFeeSummary {
+  totalAmount: number;
+  totalNetAmount: number;
+  unpaidAmount: number;
+  pendingCount: number;
+  approvedCount: number;
+}
+
 interface Earnings {
   thisMonth: number;
   lastMonth: number;
   total: number;
   pending: number;
+  // 상세
+  totalGross: number;        // 총 매출(수수료·세금 차감 전)
+  totalPlatformFee: number;
+  totalTax: number;
+  totalNetAmount: number;
+  recent: EarningItem[];     // 최근 정산 내역
+  additionalFees: AdditionalFeeSummary;
 }
 
 interface ActivityHistory {
@@ -171,7 +199,12 @@ function CaregiverDashboard() {
   const [additionalFeeLoading, setAdditionalFeeLoading] = useState(false);
 
   const [summary, setSummary] = useState<CaregiverSummary | null>(null);
-  const [earnings, setEarnings] = useState<Earnings>({ thisMonth: 0, lastMonth: 0, total: 0, pending: 0 });
+  const [earnings, setEarnings] = useState<Earnings>({
+    thisMonth: 0, lastMonth: 0, total: 0, pending: 0,
+    totalGross: 0, totalPlatformFee: 0, totalTax: 0, totalNetAmount: 0,
+    recent: [],
+    additionalFees: { totalAmount: 0, totalNetAmount: 0, unpaidAmount: 0, pendingCount: 0, approvedCount: 0 },
+  });
   const [activityHistory, setActivityHistory] = useState<ActivityHistory[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
   const [openRequests, setOpenRequests] = useState<OpenRequest[]>([]);
@@ -212,11 +245,52 @@ function CaregiverDashboard() {
       }
 
       const earningsData = earningsRes.data?.data || earningsRes.data || {};
-      const earningsList = earningsData.earnings || [];
+      const earningsList: any[] = earningsData.earnings || [];
       const earningSummary = earningsData.summary || {};
-      const totalEarned = earningSummary.totalNetAmount || earningsList.reduce((s: number, e: any) => s + (e.netAmount || 0), 0);
-      const unpaidAmount = earningSummary.unpaidAmount || 0;
-      setEarnings({ thisMonth: totalEarned, lastMonth: 0, total: totalEarned, pending: unpaidAmount });
+      const addFeesSummary = earningsData.additionalFeesSummary || {};
+
+      // 이번 달 / 지난 달 계산 (netAmount 기준 createdAt)
+      const nowDt = new Date();
+      const thisYM = `${nowDt.getFullYear()}-${String(nowDt.getMonth() + 1).padStart(2, "0")}`;
+      const lastDt = new Date(nowDt.getFullYear(), nowDt.getMonth() - 1, 1);
+      const lastYM = `${lastDt.getFullYear()}-${String(lastDt.getMonth() + 1).padStart(2, "0")}`;
+      let monthSum = 0;
+      let lastSum = 0;
+      for (const e of earningsList) {
+        const ym = (e.createdAt || "").slice(0, 7);
+        const net = e.netAmount || 0;
+        if (ym === thisYM) monthSum += net;
+        else if (ym === lastYM) lastSum += net;
+      }
+
+      setEarnings({
+        thisMonth: monthSum,
+        lastMonth: lastSum,
+        total: earningSummary.totalNetAmount || 0,
+        pending: earningSummary.unpaidAmount || 0,
+        totalGross: earningSummary.totalAmount || 0,
+        totalPlatformFee: earningSummary.totalPlatformFee || 0,
+        totalTax: earningSummary.totalTax || 0,
+        totalNetAmount: earningSummary.totalNetAmount || 0,
+        recent: earningsList.slice(0, 10).map((e: any) => ({
+          id: e.id,
+          contractId: e.contractId,
+          amount: e.amount || 0,
+          platformFee: e.platformFee || 0,
+          taxAmount: e.taxAmount || 0,
+          netAmount: e.netAmount || 0,
+          isPaid: !!e.isPaid,
+          paidAt: e.paidAt,
+          createdAt: e.createdAt,
+        })),
+        additionalFees: {
+          totalAmount: addFeesSummary.totalAmount || 0,
+          totalNetAmount: addFeesSummary.totalNetAmount || 0,
+          unpaidAmount: addFeesSummary.unpaidAmount || 0,
+          pendingCount: addFeesSummary.pendingCount || 0,
+          approvedCount: addFeesSummary.approvedCount || 0,
+        },
+      });
 
       // 활동 이력 (계약 기반)
       const activityData = activityRes.data?.data || activityRes.data || {};
@@ -693,43 +767,171 @@ function CaregiverDashboard() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
           {/* Earnings */}
           {activeTab === "earnings" && (
-            <div className="p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-6">수익 현황</h3>
-
-              {/* Monthly breakdown */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <div>
-                    <div className="font-medium text-gray-900">이번 달</div>
-                    <div className="text-xs text-gray-400">진행 중</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-lg text-primary-600">
-                      {earnings.thisMonth.toLocaleString()}원
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      정산 대기: {earnings.pending.toLocaleString()}원
-                    </div>
-                  </div>
+            <div className="p-4 sm:p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">수익 현황</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">정산 내역 · 공제 내역 · 추가 간병비</p>
                 </div>
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <div>
-                    <div className="font-medium text-gray-900">지난 달</div>
-                    <div className="text-xs text-gray-400">정산 완료</div>
+              </div>
+
+              {/* 월별 비교 */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-2xl p-4 bg-gradient-to-br from-primary-50 to-white border border-primary-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-primary-700">이번 달</span>
+                    {earnings.lastMonth > 0 && (() => {
+                      const pct = Math.round(((earnings.thisMonth - earnings.lastMonth) / earnings.lastMonth) * 100);
+                      const up = pct >= 0;
+                      return (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${up ? "text-emerald-700 bg-emerald-100" : "text-red-700 bg-red-100"}`}>
+                          {up ? "▲" : "▼"} {Math.abs(pct)}%
+                        </span>
+                      );
+                    })()}
                   </div>
-                  <div className="text-right">
-                    <div className="font-bold text-lg text-gray-900">
-                      {earnings.lastMonth.toLocaleString()}원
+                  <div className="text-2xl font-bold text-gray-900 mt-2 tabular-nums">
+                    {earnings.thisMonth.toLocaleString()}<span className="text-sm font-semibold text-gray-500 ml-0.5">원</span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 mt-1">실수령액 기준</div>
+                </div>
+
+                <div className="rounded-2xl p-4 bg-white border border-gray-100">
+                  <span className="text-xs font-semibold text-gray-600">지난 달</span>
+                  <div className="text-2xl font-bold text-gray-900 mt-2 tabular-nums">
+                    {earnings.lastMonth.toLocaleString()}<span className="text-sm font-semibold text-gray-500 ml-0.5">원</span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 mt-1">정산 완료</div>
+                </div>
+
+                <div className="rounded-2xl p-4 bg-gradient-to-br from-amber-50 to-white border border-amber-200">
+                  <span className="text-xs font-semibold text-amber-700">정산 대기</span>
+                  <div className="text-2xl font-bold text-gray-900 mt-2 tabular-nums">
+                    {earnings.pending.toLocaleString()}<span className="text-sm font-semibold text-gray-500 ml-0.5">원</span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 mt-1">지급 예정</div>
+                </div>
+              </div>
+
+              {/* 공제 내역 (누적 기준) */}
+              <div className="rounded-2xl border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-gray-900">누적 공제 내역</h4>
+                  <span className="text-[11px] text-gray-500">계산 기준 plaform fee + 세금</span>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
+                      <span className="text-sm text-gray-700">총 매출</span>
                     </div>
+                    <span className="text-sm font-semibold text-gray-900 tabular-nums">
+                      {earnings.totalGross.toLocaleString()}원
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400" />
+                      <span className="text-sm text-gray-700">플랫폼 수수료</span>
+                    </div>
+                    <span className="text-sm font-semibold text-red-600 tabular-nums">
+                      -{earnings.totalPlatformFee.toLocaleString()}원
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400" />
+                      <span className="text-sm text-gray-700">원천세 (3.3%)</span>
+                    </div>
+                    <span className="text-sm font-semibold text-red-600 tabular-nums">
+                      -{earnings.totalTax.toLocaleString()}원
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3 bg-emerald-50/40">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                      <span className="text-sm font-bold text-gray-900">실수령 (누적)</span>
+                    </div>
+                    <span className="text-lg font-bold text-emerald-700 tabular-nums">
+                      {earnings.totalNetAmount.toLocaleString()}원
+                    </span>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-8 p-5 bg-gray-50 rounded-2xl">
-                <div className="text-sm text-gray-500 mb-1">누적 총 수익</div>
-                <div className="text-3xl font-bold text-gray-900">
-                  {earnings.total.toLocaleString()}원
+              {/* 추가 간병비 */}
+              {(earnings.additionalFees.approvedCount > 0 || earnings.additionalFees.pendingCount > 0) && (
+                <div className="rounded-2xl border border-gray-100 overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-gray-900">추가 간병비</h4>
+                    <span className="text-[11px] text-gray-500">
+                      승인 {earnings.additionalFees.approvedCount}건 · 대기 {earnings.additionalFees.pendingCount}건
+                    </span>
+                  </div>
+                  <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div>
+                      <div className="text-[11px] text-gray-500 mb-1">청구 총액</div>
+                      <div className="text-base font-bold text-gray-900 tabular-nums">
+                        {earnings.additionalFees.totalAmount.toLocaleString()}원
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-gray-500 mb-1">실수령 합계</div>
+                      <div className="text-base font-bold text-emerald-700 tabular-nums">
+                        {earnings.additionalFees.totalNetAmount.toLocaleString()}원
+                      </div>
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                      <div className="text-[11px] text-gray-500 mb-1">미지급</div>
+                      <div className="text-base font-bold text-amber-600 tabular-nums">
+                        {earnings.additionalFees.unpaidAmount.toLocaleString()}원
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              )}
+
+              {/* 최근 정산 내역 */}
+              <div className="rounded-2xl border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                  <h4 className="text-sm font-bold text-gray-900">최근 정산 내역</h4>
+                </div>
+                {earnings.recent.length === 0 ? (
+                  <div className="py-10 text-center text-sm text-gray-400">
+                    아직 정산된 내역이 없습니다.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {earnings.recent.map((e) => (
+                      <div key={e.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-900 tabular-nums">
+                              {new Date(e.createdAt).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })}
+                            </span>
+                            {e.isPaid ? (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                                지급완료
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                                대기중
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-gray-500 mt-0.5 truncate">
+                            매출 {e.amount.toLocaleString()}원 − 수수료 {e.platformFee.toLocaleString()}원 − 세금 {e.taxAmount.toLocaleString()}원
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-base font-bold text-gray-900 tabular-nums">
+                            {e.netAmount.toLocaleString()}<span className="text-xs font-semibold text-gray-500 ml-0.5">원</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
