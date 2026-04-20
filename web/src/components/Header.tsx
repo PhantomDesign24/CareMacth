@@ -68,8 +68,9 @@ export default function Header() {
   ];
 
   return (
+    <>
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+      className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
         scrolled
           ? "bg-white/95 backdrop-blur-xl shadow-[0_2px_20px_rgba(0,0,0,0.06)]"
           : "bg-white border-b border-[#dcdcdc]"
@@ -237,23 +238,24 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Mobile drawer backdrop */}
-      <div
-        className={`lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity duration-300 ${
-          mobileOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
-        onClick={() => setMobileOpen(false)}
-        aria-hidden="true"
-      />
+    </header>
 
-      {/* Mobile drawer */}
-      <aside
-        className={`lg:hidden fixed top-0 right-0 bottom-0 w-[86%] max-w-sm bg-white shadow-2xl z-50 transition-transform duration-300 ease-out flex flex-col ${
-          mobileOpen ? "translate-x-0" : "translate-x-full"
-        }`}
-        role="dialog"
-        aria-modal="true"
-      >
+    {/* Mobile drawer (header 밖으로 빼서 stacking context 독립) */}
+    <div
+      className={`lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] transition-opacity duration-300 ${
+        mobileOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}
+      onClick={() => setMobileOpen(false)}
+      aria-hidden="true"
+    />
+
+    <aside
+      className={`lg:hidden fixed top-0 right-0 bottom-0 w-[86%] max-w-sm bg-white shadow-2xl z-[70] transition-transform duration-300 ease-out flex flex-col ${
+        mobileOpen ? "translate-x-0" : "translate-x-full"
+      }`}
+      role="dialog"
+      aria-modal="true"
+    >
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <Link href="/" onClick={() => setMobileOpen(false)} className="flex items-center">
@@ -447,7 +449,7 @@ export default function Header() {
             </button>
           </div>
         )}
-      </aside>
-    </header>
+    </aside>
+    </>
   );
 }
