@@ -6,6 +6,38 @@ import DataTable, { Column } from "@/components/DataTable";
 import { getDashboard, getStats, approveCaregiver, rejectCaregiver, DashboardData, Caregiver, Dispute, MonthlyStats } from "@/lib/api";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
+function formatKoreanDate(v: unknown): string {
+  if (!v) return "-";
+  const d = new Date(String(v));
+  if (isNaN(d.getTime())) return "-";
+  return d.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+const DISPUTE_STATUS_LABEL: Record<string, { label: string; cls: string }> = {
+  PENDING: { label: "접수", cls: "badge-yellow" },
+  PROCESSING: { label: "처리중", cls: "badge-blue" },
+  RESOLVED: { label: "해결", cls: "badge-green" },
+  ESCALATED: { label: "에스컬레이션", cls: "badge-red" },
+  REJECTED: { label: "기각", cls: "badge-gray" },
+};
+
+const DISPUTE_CATEGORY_LABEL: Record<string, string> = {
+  CARE_QUALITY: "간병 품질",
+  CANCELLATION: "취소 관련",
+  PAYMENT: "결제 관련",
+  ABUSE: "욕설/폭언",
+  NO_SHOW: "노쇼",
+  OTHER: "기타",
+};
+
 export default function DashboardPage() {
   const [revenuePeriod, setRevenuePeriod] = useState("monthly");
   const [data, setData] = useState<DashboardData | null>(null);
@@ -83,7 +115,15 @@ export default function DashboardPage() {
   const pendingColumns: Column<Caregiver>[] = [
     { key: "name", label: "이름" },
     { key: "phone", label: "연락처" },
-    { key: "appliedAt", label: "신청일시", render: (v) => <span>{(v as string) || (data as Record<string, unknown>)?.createdAt as string || "-"}</span> },
+    {
+      key: "appliedAt",
+      label: "신청일시",
+      render: (v, row) => (
+        <span className="text-xs text-gray-600">
+          {formatKoreanDate(v || (row as any)?.createdAt || (row as any)?.user?.createdAt)}
+        </span>
+      ),
+    },
     {
       key: "certificates",
       label: "자격증",
@@ -124,37 +164,41 @@ export default function DashboardPage() {
   ];
 
   const disputeColumns: Column<Dispute>[] = [
-    { key: "id", label: "ID" },
     {
-      key: "type",
+      key: "id",
+      label: "ID",
+      render: (value) => (
+        <span className="font-mono text-[10px] text-gray-500">
+          {String(value || "").substring(0, 8)}
+        </span>
+      ),
+    },
+    {
+      key: "category",
       label: "유형",
-      render: (value) => <span className="font-medium">{(value as string) || "-"}</span>,
+      render: (value, row) => {
+        const raw = String(value || (row as any)?.type || "-");
+        return <span className="font-medium">{DISPUTE_CATEGORY_LABEL[raw] || raw}</span>;
+      },
     },
     { key: "patientName", label: "환자" },
     { key: "caregiverName", label: "간병인" },
-    {
-      key: "priority",
-      label: "긴급도",
-      align: "center",
-      render: (value) => {
-        const v = value as string;
-        if (!v) return <span className="badge-gray">-</span>;
-        const cls = v === "긴급" || v === "urgent" ? "badge-red" : v === "높음" || v === "high" ? "badge-yellow" : "badge-gray";
-        return <span className={cls}>{v}</span>;
-      },
-    },
     {
       key: "status",
       label: "상태",
       align: "center",
       render: (value) => {
-        const v = value as string;
-        if (!v) return <span className="badge-gray">-</span>;
-        const cls = v === "처리중" || v === "in_progress" ? "badge-blue" : "badge-yellow";
-        return <span className={cls}>{v}</span>;
+        const raw = String(value || "");
+        const info = DISPUTE_STATUS_LABEL[raw];
+        if (!info) return <span className="badge-gray">{raw || "-"}</span>;
+        return <span className={info.cls}>{info.label}</span>;
       },
     },
-    { key: "createdAt", label: "접수일시" },
+    {
+      key: "createdAt",
+      label: "접수일시",
+      render: (v) => <span className="text-xs text-gray-600">{formatKoreanDate(v)}</span>,
+    },
   ];
 
   if (loading) {

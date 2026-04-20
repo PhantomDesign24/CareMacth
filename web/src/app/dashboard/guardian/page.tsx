@@ -25,6 +25,7 @@ interface CareHistory {
   dailyRate: number;
   careRequestId: string;
   applicantCount: number;
+  selectableApplicantCount: number;
   contractStatus: string;
   hasReview: boolean;
   isVirtual: boolean; // 계약 없는 케어리퀘스트 (매칭 전)
@@ -364,6 +365,7 @@ function GuardianDashboard() {
           dailyRate: c.dailyRate || 0,
           careRequestId: c.careRequest?.id || c.careRequestId || '',
           applicantCount: c.careRequest?._count?.applications ?? c.careRequest?.applications?.length ?? 0,
+          selectableApplicantCount: c.careRequest?._count?.selectableApplications ?? c.careRequest?._count?.applications ?? 0,
           contractStatus: c.status || '',
           hasReview: !!c.review,
           isVirtual,
@@ -830,8 +832,10 @@ function GuardianDashboard() {
                           const createdMs = care.createdAtRaw ? new Date(care.createdAtRaw).getTime() : 0;
                           const elapsedMin = createdMs ? Math.floor((nowTick - createdMs) / 60000) : 0;
                           const isStale = elapsedMin >= 60;
+                          // 선택 가능한 지원자(근무중 제외) 0명일 때만 상담 옵션 노출
+                          const noSelectableApplicants = care.selectableApplicantCount === 0;
                           const showConsultationButtons =
-                            isStale && !contactInfo.isNonBusinessDay && !!contactInfo.companyPhone;
+                            isStale && noSelectableApplicants && !contactInfo.isNonBusinessDay && !!contactInfo.companyPhone;
                           return (
                             <>
                               <Link

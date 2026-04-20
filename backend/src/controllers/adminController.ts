@@ -51,15 +51,23 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
     });
 
     // 최근 분쟁
-    const recentDisputes = await prisma.contract.findMany({
-      where: { status: 'CANCELLED' },
+    const recentDisputes = await prisma.dispute.findMany({
       include: {
-        guardian: { include: { user: true } },
-        caregiver: { include: { user: true } },
-        careRequest: { include: { patient: true } },
+        reporter: { select: { name: true, role: true } },
+        target: { select: { name: true, role: true } },
+        contract: {
+          include: {
+            careRequest: { include: { patient: { select: { name: true } } } },
+            caregiver: { include: { user: { select: { name: true } } } },
+            guardian: { include: { user: { select: { name: true } } } },
+          },
+        },
       },
       take: 10,
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
+    });
+    const activeDisputesCount = await prisma.dispute.count({
+      where: { status: { in: ['PENDING', 'PROCESSING', 'ESCALATED'] } },
     });
 
     res.json({
@@ -75,7 +83,7 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
         activeCaregivers,
         totalGuardians,
         activeContracts,
-        activeDisputes: 0,
+        activeDisputes: activeDisputesCount,
         revenue: todayPayments._sum.totalAmount || 0,
         todayRevenue: todayPayments._sum.totalAmount || 0,
         monthlyRevenue: monthlyPayments._sum.totalAmount || 0,
@@ -87,28 +95,15 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
           certificates: cg.certificates.length,
           status: cg.status,
         })),
-        recentDisputes: recentDisputes.map(c => {
-          let priority = '일반';
-          if (c.cancellationReason && c.cancellationReason.includes('긴급')) {
-            priority = '긴급';
-          } else if (c.cancelledAt && c.careRequest?.startDate) {
-            const cancelTime = new Date(c.cancelledAt).getTime();
-            const startTime = new Date(c.careRequest.startDate).getTime();
-            const hoursDiff = (startTime - cancelTime) / (1000 * 60 * 60);
-            if (hoursDiff >= 0 && hoursDiff <= 24) {
-              priority = '높음';
-            }
-          }
-          return {
-            id: c.id,
-            patientName: c.careRequest?.patient?.name || '-',
-            caregiverName: c.caregiver?.user?.name || '-',
-            type: c.cancellationReason || '기타',
-            createdAt: c.updatedAt,
-            status: c.status,
-            priority,
-          };
-        }),
+        recentDisputes: recentDisputes.map((d: any) => ({
+          id: d.id,
+          patientName: d.contract?.careRequest?.patient?.name || '-',
+          caregiverName: d.contract?.caregiver?.user?.name || d.target?.name || '-',
+          category: d.category,
+          title: d.title,
+          status: d.status,
+          createdAt: d.createdAt,
+        })),
       },
     });
   } catch (error) {

@@ -281,7 +281,11 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
           patient: { select: { name: true, diagnosis: true } },
           applications: {
             where: { status: { in: ['PENDING', 'ACCEPTED'] } },
-            select: { id: true, status: true },
+            select: {
+              id: true,
+              status: true,
+              caregiver: { select: { workStatus: true } },
+            },
           },
           contracts: {
             orderBy: { createdAt: 'desc' },
@@ -309,6 +313,11 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
 
     // 기존 contract 기반 응답 형식에 맞춰 매핑 (프론트 호환)
     const contracts = careRequests.map((cr: any) => {
+      // 선택 가능한 지원자 수 = PENDING/ACCEPTED 중 간병인이 WORKING 아닌 것만
+      const apps = Array.isArray(cr.applications) ? cr.applications : [];
+      const selectableApplicantCount = apps.filter(
+        (a: any) => a.caregiver?.workStatus !== 'WORKING'
+      ).length;
       // 활성 계약 = CANCELLED 이외의 가장 최근 계약
       const activeContract = (cr.contracts || []).find((c: any) => c.status !== 'CANCELLED');
       const latestContract = activeContract || (cr.contracts || [])[0];
@@ -328,7 +337,7 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
             ...cr,
             contracts: undefined,
             applications: undefined,
-            _count: cr._count,
+            _count: { ...cr._count, selectableApplications: selectableApplicantCount },
           },
         };
       }
@@ -353,7 +362,7 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
           ...cr,
           contract: undefined,
           applications: undefined,
-          _count: cr._count,
+          _count: { ...cr._count, selectableApplications: selectableApplicantCount },
         },
         caregiver: null,
       };

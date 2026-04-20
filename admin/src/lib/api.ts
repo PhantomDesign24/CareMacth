@@ -245,9 +245,22 @@ export async function getPatients(params?: { search?: string; status?: string; p
 
 // ─── Stats ────────────────────────────────────────────
 export async function getStats(params?: { year?: string | number }) {
-  return apiRequest<StatsData>("/admin/stats", {
+  const raw = await apiRequest<any>("/admin/stats", {
     params: params as Record<string, string | number>,
   });
+  // 백엔드가 historicalStats로 주면 monthlyData 형태로 정규화
+  if (raw?.historicalStats && !raw?.monthlyData) {
+    raw.monthlyData = (raw.historicalStats as any[]).map((s) => ({
+      month: `${s.year}-${String(s.month).padStart(2, "0")}`,
+      matchings: s.totalMatches ?? 0,
+      revenue: s.totalRevenue ?? 0,
+      fees: s.totalPlatformFee ?? 0,
+      disputes: 0,
+      newCaregivers: s.activeCaregivers ?? 0,
+      newPatients: s.activeGuardians ?? 0,
+    }));
+  }
+  return raw as StatsData;
 }
 
 export async function exportCaregivers() {
@@ -605,6 +618,8 @@ export interface Dispute {
   patientName?: string;
   caregiverName?: string;
   type?: string;
+  category?: string;
+  title?: string;
   description?: string;
   status?: string;
   priority?: string;
