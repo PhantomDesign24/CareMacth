@@ -40,7 +40,7 @@ export default function SettingsPage() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const handleChange = (field: keyof PlatformSettings, value: number) => {
+  const handleChange = (field: keyof PlatformSettings, value: number | string | null) => {
     setSettings((prev) => ({ ...prev, [field]: value }));
     setSaved(false);
   };
@@ -296,6 +296,27 @@ export default function SettingsPage() {
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">원</span>
             </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">상담사 연결 대표번호</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              간병 요청 1시간 경과 후 보호자에게 노출되는 "상담사와 연결" 버튼에 연결되는 회사 대표번호입니다.
+              평일에만 노출되며, 주말·공휴일에는 자동 매칭 실패로 처리됩니다.
+            </p>
+          </div>
+          <div className="max-w-md">
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">전화번호</label>
+            <input
+              type="tel"
+              value={settings.companyPhone ?? ""}
+              onChange={(e) => handleChange("companyPhone", e.target.value)}
+              placeholder="02-1234-5678"
+              className="input-field"
+            />
+            <p className="mt-1 text-xs text-gray-400">비워두면 "상담사 연결" 버튼이 표시되지 않습니다.</p>
           </div>
         </div>
 

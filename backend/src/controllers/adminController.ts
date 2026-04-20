@@ -1427,6 +1427,7 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
       badgeThreshold,
       associationFeeDefault,
       cancellationFee,
+      companyPhone,
     } = req.body;
 
     // 수수료 범위 검증 (0~100%)
@@ -1472,6 +1473,7 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
         ...(badgeThreshold !== undefined && { badgeThreshold: parseInt(badgeThreshold) }),
         ...(associationFeeDefault !== undefined && { associationFeeDefault: parseInt(associationFeeDefault) }),
         ...(cancellationFee !== undefined && { cancellationFee: parseInt(cancellationFee) }),
+        ...(companyPhone !== undefined && { companyPhone: companyPhone === '' ? null : String(companyPhone) }),
       },
       create: {
         id: 'default',
@@ -1485,6 +1487,7 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
         badgeThreshold: badgeThreshold ?? 10,
         associationFeeDefault: associationFeeDefault ?? 120000,
         cancellationFee: cancellationFee ?? 0,
+        companyPhone: companyPhone || null,
       },
     });
 

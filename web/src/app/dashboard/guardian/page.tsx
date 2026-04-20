@@ -30,6 +30,7 @@ interface CareHistory {
   isVirtual: boolean; // 계약 없는 케어리퀘스트 (매칭 전)
   requestStatus: string; // CareRequest.status (OPEN/MATCHING/MATCHED/CANCELLED/COMPLETED)
   isPaid: boolean; // 결제 완료 여부
+  createdAtRaw: string; // 요청 생성 시각
 }
 
 interface Payment {
@@ -148,6 +149,11 @@ function GuardianDashboard() {
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [careHistory, setCareHistory] = useState<CareHistory[]>([]);
+  const [contactInfo, setContactInfo] = useState<{ companyPhone: string | null; isNonBusinessDay: boolean }>({
+    companyPhone: null,
+    isNonBusinessDay: false,
+  });
+  const [nowTick, setNowTick] = useState(Date.now());
   const [payments, setPayments] = useState<Payment[]>([]);
   const [paymentSummary, setPaymentSummary] = useState<{
     totalPaid: number;
@@ -363,6 +369,7 @@ function GuardianDashboard() {
           isVirtual,
           requestStatus: crStatus,
           isPaid,
+          createdAtRaw: c.careRequest?.createdAt || c.createdAt || '',
         };
       }));
 
@@ -393,6 +400,22 @@ function GuardianDashboard() {
     }
     fetchData();
   }, [fetchData, router]);
+
+  // 상담사 연결용 회사 번호 + 주말/공휴일 여부
+  useEffect(() => {
+    fetch('/api/public/contact')
+      .then((r) => r.json())
+      .then((res) => {
+        if (res?.success && res?.data) setContactInfo(res.data);
+      })
+      .catch(() => {});
+  }, []);
+
+  // 1분 단위 재렌더링 (경과 시간 갱신용)
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const referralCode = summary?.referralCode ?? "";
 
@@ -802,40 +825,60 @@ function GuardianDashboard() {
                             💳 결제하기
                           </Link>
                         )}
-                        {/* OPEN 상태: 공고 관리 (지원자 유무 관계없이 접근 가능) */}
-                        {care.isVirtual && care.requestStatus === 'OPEN' && care.careRequestId && (
-                          <>
-                            <Link
-                              href={`/dashboard/guardian/applicants/${care.careRequestId}`}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
-                            >
-                              {care.applicantCount > 0 ? '지원자 보기' : '공고 관리'}
-                              {care.applicantCount > 0 && (
-                                <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-primary-500 text-white rounded-full">
-                                  {care.applicantCount}
+                        {/* OPEN/MATCHING 상태: 공고 관리 (지원자 유무 관계없이 접근 가능) */}
+                        {care.isVirtual && ['OPEN', 'MATCHING'].includes(care.requestStatus) && care.careRequestId && (() => {
+                          const createdMs = care.createdAtRaw ? new Date(care.createdAtRaw).getTime() : 0;
+                          const elapsedMin = createdMs ? Math.floor((nowTick - createdMs) / 60000) : 0;
+                          const isStale = elapsedMin >= 60;
+                          const showConsultationButtons =
+                            isStale && !contactInfo.isNonBusinessDay && !!contactInfo.companyPhone;
+                          return (
+                            <>
+                              <Link
+                                href={`/dashboard/guardian/applicants/${care.careRequestId}`}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
+                              >
+                                {care.applicantCount > 0 ? '지원자 보기' : '공고 관리'}
+                                {care.applicantCount > 0 && (
+                                  <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-primary-500 text-white rounded-full">
+                                    {care.applicantCount}
+                                  </span>
+                                )}
+                              </Link>
+                              {isStale && (
+                                <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded-md">
+                                  ⏱ {Math.floor(elapsedMin / 60)}시간 {elapsedMin % 60}분 경과
                                 </span>
                               )}
-                            </Link>
-                            {care.applicantCount === 0 && (
-                              <button
-                                type="button"
-                                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                                onClick={async () => {
-                                  if (!confirm('이 공고를 취소하시겠습니까?')) return;
-                                  try {
-                                    await careRequestAPI.cancel(care.careRequestId!);
-                                    showToast('공고가 취소되었습니다.', 'success');
-                                    fetchData();
-                                  } catch {
-                                    showToast('공고 취소에 실패했습니다.', 'error');
-                                  }
-                                }}
-                              >
-                                공고 취소
-                              </button>
-                            )}
-                          </>
-                        )}
+                              {showConsultationButtons && (
+                                <a
+                                  href={`tel:${contactInfo.companyPhone}`}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors"
+                                >
+                                  📞 상담사와 연결하기
+                                </a>
+                              )}
+                              {(care.applicantCount === 0 || showConsultationButtons) && (
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                                  onClick={async () => {
+                                    if (!confirm(showConsultationButtons ? '매칭을 취소하시겠습니까?' : '이 공고를 취소하시겠습니까?')) return;
+                                    try {
+                                      await careRequestAPI.cancel(care.careRequestId!);
+                                      showToast(showConsultationButtons ? '매칭이 취소되었습니다.' : '공고가 취소되었습니다.', 'success');
+                                      fetchData();
+                                    } catch {
+                                      showToast('취소에 실패했습니다.', 'error');
+                                    }
+                                  }}
+                                >
+                                  {showConsultationButtons ? '매칭 취소' : '공고 취소'}
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()}
                         {/* 매칭 이후: 지원자 보기 */}
                         {care.careRequestId && !care.isVirtual && care.applicantCount > 0 && (
                           <Link

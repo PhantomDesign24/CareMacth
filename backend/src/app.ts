@@ -96,6 +96,23 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// 공개: 상담사 연결용 회사 대표번호 + 영업일 여부
+import { isNonBusinessDay } from './services/cronJobs';
+app.get('/api/public/contact', async (_req, res, next) => {
+  try {
+    const cfg = await prisma.platformConfig.findUnique({ where: { id: 'default' } });
+    res.json({
+      success: true,
+      data: {
+        companyPhone: cfg?.companyPhone || null,
+        isNonBusinessDay: isNonBusinessDay(),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/guardian', guardianRoutes);

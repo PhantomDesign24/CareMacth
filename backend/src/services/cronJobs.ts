@@ -1,7 +1,17 @@
 import cron from 'node-cron';
-import { sendExtensionReminder, sendToAdmins } from './notificationService';
+import Holidays from 'date-holidays';
+import { sendExtensionReminder, sendToAdmins, sendFromTemplate } from './notificationService';
 import { settleEarning } from './paymentService';
 import { prisma } from '../app';
+
+const hd = new Holidays('KR');
+
+// 한국 기준 주말/공휴일 판정
+export function isNonBusinessDay(date: Date = new Date()): boolean {
+  const day = date.getDay();
+  if (day === 0 || day === 6) return true; // 일(0), 토(6)
+  return !!hd.isHoliday(date);
+}
 
 export function setupCronJobs() {
   // 매일 오전 9시: 간병 종료 3일 전, 1일 전 알림
@@ -276,6 +286,56 @@ export function setupCronJobs() {
       console.log(`[CRON] 노쇼 패널티 처리: ${caregiversToSuspend.length}명`);
     } catch (error) {
       console.error('[CRON] 노쇼 패널티 오류:', error);
+    }
+  });
+
+  // 매 5분: 주말/공휴일 미선택 간병 요청 1시간 경과 시 자동 실패
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      if (!isNonBusinessDay()) return; // 평일은 보호자가 직접 선택
+
+      const cutoff = new Date(Date.now() - 60 * 60 * 1000);
+      const stale = await prisma.careRequest.findMany({
+        where: {
+          status: { in: ['OPEN', 'MATCHING'] },
+          createdAt: { lt: cutoff },
+        },
+        include: {
+          guardian: { include: { user: { select: { id: true, name: true } } } },
+          patient: { select: { name: true } },
+        },
+      });
+
+      if (stale.length === 0) return;
+
+      for (const r of stale) {
+        await prisma.$transaction([
+          prisma.careRequest.update({
+            where: { id: r.id },
+            data: { status: 'CANCELLED' },
+          }),
+          prisma.careApplication.updateMany({
+            where: { careRequestId: r.id, status: 'PENDING' },
+            data: { status: 'CANCELLED' },
+          }),
+        ]);
+
+        if (r.guardian?.user?.id) {
+          await sendFromTemplate({
+            userId: r.guardian.user.id,
+            key: 'CARE_REQUEST_AUTO_FAILED',
+            vars: { patientName: r.patient?.name || '환자' },
+            fallbackTitle: '매칭 자동 실패',
+            fallbackBody: `${r.patient?.name || '환자'} 환자의 간병 요청이 1시간 내 매칭되지 않아 자동 실패 처리되었습니다. (주말/공휴일)`,
+            fallbackType: 'MATCHING',
+            data: { careRequestId: r.id, autoFailed: true },
+          }).catch(() => {});
+        }
+      }
+
+      console.log(`[CRON] 주말/공휴일 자동 매칭 실패 처리: ${stale.length}건`);
+    } catch (error) {
+      console.error('[CRON] 자동 매칭 실패 처리 오류:', error);
     }
   });
 

@@ -614,6 +614,7 @@ export interface PlatformSettings {
   excellentBadgeThreshold?: number;
   associationFeeDefault?: number;
   cancellationFee?: number;
+  companyPhone?: string | null;
   // API field aliases
   individualFeePercent?: number;
   individualFeeFixed?: number;
