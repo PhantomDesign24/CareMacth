@@ -535,76 +535,132 @@ function CaregiverDashboard() {
 
   const userName = summary?.userName ?? "간병인";
 
+  const currentStatusOpt = statusOptions.find((o) => o.value === currentStatus) || statusOptions[1];
+  const trendPercent = earnings.lastMonth > 0
+    ? (((earnings.thisMonth - earnings.lastMonth) / earnings.lastMonth) * 100).toFixed(0)
+    : null;
+  const trendUp = earnings.thisMonth >= earnings.lastMonth;
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-gray-50 py-8 px-4">
+    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-primary-50/30 via-gray-50 to-gray-50 py-6 sm:py-8 px-4">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">간병인 대시보드</h1>
-            <p className="text-gray-500 mt-1">안녕하세요, {userName}님</p>
+        {/* Hero 카드 — 프로필 + 상태 + 빠른 액션 */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+          <div className="bg-gradient-to-br from-primary-500 to-primary-600 px-6 py-5 text-white relative">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur text-white flex items-center justify-center text-xl font-bold shadow-sm flex-shrink-0 border-2 border-white/30">
+                  {userName?.[0] || "간"}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-lg sm:text-xl font-bold truncate">{userName}</h1>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/20 backdrop-blur">
+                      <span className={`w-1.5 h-1.5 rounded-full ${currentStatusOpt.dotColor}`} />
+                      {currentStatusOpt.label}
+                    </span>
+                  </div>
+                  <p className="text-sm text-white/80 mt-0.5">간병인 마이페이지</p>
+                </div>
+              </div>
+              <Link
+                href="/dashboard/caregiver/documents"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white/20 backdrop-blur hover:bg-white/30 transition-colors flex-shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                서류 관리
+              </Link>
+            </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <Link href="/dashboard/caregiver/documents" className="btn-secondary text-sm px-4 py-2">
-              서류 관리
-            </Link>
-            <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500 mr-1">현재 상태:</span>
-            {statusOptions.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => handleStatusChange(opt.value)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
-                  currentStatus === opt.value
-                    ? opt.color
-                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full ${
-                  currentStatus === opt.value ? opt.dotColor : "bg-gray-300"
-                }`} />
-                {opt.label}
-              </button>
-            ))}
+          {/* 상태 변경 세그먼트 */}
+          <div className="px-5 py-4 border-t border-gray-100">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-gray-500">근무 상태</span>
+              </div>
+              <div className="inline-flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+                {statusOptions.map((opt) => {
+                  const active = currentStatus === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleStatusChange(opt.value)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        active ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${active ? opt.dotColor : "bg-gray-300"}`} />
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+            <Link
+              href="/dashboard/caregiver/documents"
+              className="sm:hidden mt-3 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 transition-colors"
+            >
+              서류 관리로 이동
+            </Link>
           </div>
         </div>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">이번 달 수익</div>
-            <div className="text-2xl font-bold text-primary-600">
-              {(earnings.thisMonth / 10000).toFixed(0)}만원
-            </div>
-            {earnings.lastMonth > 0 && (
-              <div className="text-xs text-green-600 mt-1">
-                {earnings.thisMonth >= earnings.lastMonth ? "+" : ""}
-                {(((earnings.thisMonth - earnings.lastMonth) / earnings.lastMonth) * 100).toFixed(0)}% vs 지난달
+        {/* 통계 카드 */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          {/* 이번 달 수익 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-9 h-9 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" /></svg>
               </div>
-            )}
-          </div>
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">정산 대기</div>
-            <div className="text-2xl font-bold text-accent-500">
-              {(earnings.pending / 10000).toFixed(0)}만원
+              {trendPercent !== null && (
+                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${trendUp ? "text-emerald-700 bg-emerald-50" : "text-red-700 bg-red-50"}`}>
+                  {trendUp ? "▲" : "▼"} {Math.abs(parseInt(trendPercent))}%
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-gray-500 mb-1">이번 달 수익</div>
+            <div className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums">
+              {(earnings.thisMonth / 10000).toFixed(0)}<span className="text-sm font-semibold text-gray-500 ml-0.5">만원</span>
             </div>
           </div>
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">누적 수익</div>
-            <div className="text-2xl font-bold text-gray-900">
-              {(earnings.total / 10000).toFixed(0)}만원
+
+          {/* 정산 대기 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+            </div>
+            <div className="text-xs text-gray-500 mb-1">정산 대기</div>
+            <div className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums">
+              {(earnings.pending / 10000).toFixed(0)}<span className="text-sm font-semibold text-gray-500 ml-0.5">만원</span>
             </div>
           </div>
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">패널티 점수</div>
-            <div className="text-2xl font-bold text-gray-900">
-              {penaltyScore}점
+
+          {/* 누적 수익 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-3">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
             </div>
-            <div className="text-xs text-gray-400 mt-1">최근 6개월</div>
+            <div className="text-xs text-gray-500 mb-1">누적 수익</div>
+            <div className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums">
+              {(earnings.total / 10000).toFixed(0)}<span className="text-sm font-semibold text-gray-500 ml-0.5">만원</span>
+            </div>
+          </div>
+
+          {/* 패널티 점수 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${
+              penaltyScore === 0 ? "bg-gray-100 text-gray-500" : penaltyScore < 3 ? "bg-amber-100 text-amber-600" : "bg-red-100 text-red-600"
+            }`}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.98 10.503 10.503 0 0 1-9.694 6.46c-5.799 0-10.5-4.7-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 0 1 .818.162Z" /></svg>
+            </div>
+            <div className="text-xs text-gray-500 mb-1">패널티 점수</div>
+            <div className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums">
+              {penaltyScore}<span className="text-sm font-semibold text-gray-500 ml-0.5">점</span>
+            </div>
+            <div className="text-[10px] text-gray-400 mt-0.5">최근 6개월</div>
           </div>
         </div>
 
