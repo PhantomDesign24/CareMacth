@@ -22,9 +22,42 @@ const TYPE_LABEL: Record<string, { label: string; cls: string; desc: string }> =
   },
 };
 
+const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+// 월별 달력 날짜 배열 생성 (이전 달 회색 채움 포함)
+function buildMonthGrid(year: number, month: number /* 1-12 */): { date: string; inMonth: boolean }[] {
+  const first = new Date(year, month - 1, 1);
+  const firstWeekday = first.getDay(); // 0(일) ~ 6(토)
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const prevMonthDays = new Date(year, month - 1, 0).getDate();
+
+  const cells: { date: string; inMonth: boolean }[] = [];
+  // 이전 달 채움
+  for (let i = firstWeekday - 1; i >= 0; i--) {
+    const d = prevMonthDays - i;
+    const dt = new Date(year, month - 2, d);
+    cells.push({ date: dt.toISOString().slice(0, 10), inMonth: false });
+  }
+  // 현재 달
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = new Date(year, month - 1, d);
+    cells.push({ date: dt.toISOString().slice(0, 10), inMonth: true });
+  }
+  // 다음 달 채움 (6행 맞추기)
+  while (cells.length % 7 !== 0 || cells.length < 42) {
+    const last = new Date(cells[cells.length - 1].date);
+    last.setDate(last.getDate() + 1);
+    cells.push({ date: last.toISOString().slice(0, 10), inMonth: false });
+    if (cells.length >= 42) break;
+  }
+  return cells;
+}
+
 export default function HolidaysPage() {
-  const currentYear = new Date().getFullYear();
+  const now = new Date();
+  const currentYear = now.getFullYear();
   const [year, setYear] = useState(currentYear);
+  const [calMonth, setCalMonth] = useState<number>(now.getMonth() + 1);
   const [overrides, setOverrides] = useState<AdminHoliday[]>([]);
   const [library, setLibrary] = useState<{ date: string; names: string[] }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,9 +183,140 @@ export default function HolidaysPage() {
         </p>
       </div>
 
+      {/* 달력 뷰 */}
+      {(() => {
+        const libMap = new Map(library.map((l) => [l.date, l.names]));
+        const grid = buildMonthGrid(year, calMonth);
+        const goPrev = () => {
+          if (calMonth === 1) { setCalMonth(12); setYear(year - 1); }
+          else setCalMonth(calMonth - 1);
+        };
+        const goNext = () => {
+          if (calMonth === 12) { setCalMonth(1); setYear(year + 1); }
+          else setCalMonth(calMonth + 1);
+        };
+        const goToday = () => { setYear(now.getFullYear()); setCalMonth(now.getMonth() + 1); };
+        const todayStr = new Date().toISOString().slice(0, 10);
+
+        return (
+          <div className="card">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={goPrev} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">‹</button>
+                <h3 className="text-lg font-semibold text-gray-900 min-w-[110px] text-center">
+                  {year}년 {calMonth}월
+                </h3>
+                <button type="button" onClick={goNext} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">›</button>
+                <button type="button" onClick={goToday} className="ml-1 px-3 py-1.5 border border-gray-300 rounded-lg text-xs hover:bg-gray-50">오늘</button>
+              </div>
+              <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                <span className="inline-flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-100 border border-red-300" /> 휴일</span>
+                <span className="inline-flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-100 border border-amber-300" /> 추가</span>
+                <span className="inline-flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-100 border border-gray-300" /> 제외</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden text-sm">
+              {WEEK_DAYS.map((w, i) => (
+                <div key={w} className={`bg-gray-50 text-center py-2 text-xs font-semibold ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-600"}`}>{w}</div>
+              ))}
+              {grid.map((cell) => {
+                const d = new Date(cell.date);
+                const dow = d.getDay();
+                const libNames = libMap.get(cell.date);
+                const override = overrideByDate.get(cell.date);
+                const isWeekend = dow === 0 || dow === 6;
+                // 실제 휴일 여부: EXCLUDE면 false, CUSTOM이면 true, 그 외 라이브러리/주말
+                const effectiveHoliday = override?.type === "EXCLUDE"
+                  ? false
+                  : !!(override?.type === "CUSTOM" || libNames || isWeekend);
+
+                let bgClass = cell.inMonth ? "bg-white" : "bg-gray-50";
+                let borderAccent = "";
+                if (cell.inMonth) {
+                  if (override?.type === "EXCLUDE") {
+                    bgClass = "bg-gray-100";
+                    borderAccent = "ring-1 ring-gray-400";
+                  } else if (override?.type === "CUSTOM") {
+                    bgClass = "bg-amber-50";
+                    borderAccent = "ring-1 ring-amber-400";
+                  } else if (libNames) {
+                    bgClass = "bg-red-50";
+                  }
+                }
+                const isToday = cell.date === todayStr;
+                const dayColor =
+                  !cell.inMonth ? "text-gray-400" :
+                  dow === 0 ? "text-red-500" :
+                  dow === 6 ? "text-blue-500" :
+                  "text-gray-800";
+
+                const handleClick = async () => {
+                  if (!cell.inMonth) return;
+                  if (override) {
+                    if (confirm(`${cell.date} "${override.name}" override를 삭제하시겠습니까?`)) {
+                      try { await deleteHoliday(override.id); await fetchData(); }
+                      catch (err: any) { alert(err?.message || "삭제 실패"); }
+                    }
+                    return;
+                  }
+                  if (libNames) {
+                    if (confirm(`${cell.date} "${libNames.join(', ')}" 을(를) 영업일로 지정하시겠습니까?`)) {
+                      try {
+                        await createHoliday({ date: cell.date, name: libNames.join(', '), type: "EXCLUDE", description: "라이브러리 공휴일 예외 영업" });
+                        await fetchData();
+                      } catch (err: any) { alert(err?.message || "등록 실패"); }
+                    }
+                    return;
+                  }
+                  const name = window.prompt(`${cell.date} 회사 휴무로 추가합니다. 이름을 입력해주세요.`, "회사 휴무");
+                  if (!name || !name.trim()) return;
+                  try {
+                    await createHoliday({ date: cell.date, name: name.trim(), type: "CUSTOM" });
+                    await fetchData();
+                  } catch (err: any) { alert(err?.message || "등록 실패"); }
+                };
+
+                return (
+                  <button
+                    key={cell.date}
+                    type="button"
+                    onClick={handleClick}
+                    disabled={!cell.inMonth}
+                    className={`relative text-left p-2 min-h-[78px] transition-colors ${bgClass} ${borderAccent} ${cell.inMonth ? "hover:bg-opacity-80 cursor-pointer" : "cursor-default"}`}
+                  >
+                    <div className={`flex items-center justify-between`}>
+                      <span className={`text-xs font-semibold ${dayColor} ${isToday ? "inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-600 text-white" : ""}`}>
+                        {d.getDate()}
+                      </span>
+                      {cell.inMonth && effectiveHoliday && (
+                        <span className="text-[9px] font-bold text-red-500">휴</span>
+                      )}
+                    </div>
+                    {cell.inMonth && libNames && (
+                      <div className="mt-1 text-[10px] text-red-600 truncate" title={libNames.join(', ')}>
+                        {libNames.join(', ')}
+                      </div>
+                    )}
+                    {cell.inMonth && override && (
+                      <div className={`mt-0.5 text-[10px] truncate ${override.type === "CUSTOM" ? "text-amber-700" : "text-gray-500"}`} title={override.name}>
+                        {override.type === "CUSTOM" ? "+ " : "× "}{override.name}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[11px] text-gray-400">
+              날짜 클릭 — 빈 날짜: 회사 휴무 추가 · 라이브러리 공휴일: 영업일 지정 · override: 삭제
+            </p>
+          </div>
+        );
+      })()}
+
       <div className="card">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-gray-900">{year}년 공휴일</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{year}년 공휴일 목록</h3>
           <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="input-field w-auto">
             {[currentYear - 1, currentYear, currentYear + 1].map((y) => (
               <option key={y} value={y}>{y}년</option>
