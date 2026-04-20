@@ -3513,3 +3513,126 @@ export const getCareRequestDetail = async (req: AuthRequest, res: Response, next
     next(error);
   }
 };
+
+// ==================== 공휴일 override 관리 ====================
+import krHolidaysData from '../data/kr-holidays.json';
+const KR_HOLIDAY_MAP = krHolidaysData as Record<string, string[]>;
+
+function parseDateYMD(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '');
+  if (!m) return null;
+  const y = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10) - 1;
+  const d = parseInt(m[3], 10);
+  const dt = new Date(Date.UTC(y, mo, d));
+  if (isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+// GET /holidays - override 목록 + 라이브러리 기본 공휴일 (year 쿼리 지원)
+export const getHolidays = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const start = new Date(Date.UTC(year, 0, 1));
+    const end = new Date(Date.UTC(year, 11, 31));
+
+    const overrides = await prisma.holiday.findMany({
+      where: { date: { gte: start, lte: end } },
+      orderBy: { date: 'asc' },
+    });
+
+    // 라이브러리 기본 공휴일 (해당 연도)
+    const library: { date: string; names: string[] }[] = [];
+    const yearPrefix = `${year}-`;
+    for (const dateStr of Object.keys(KR_HOLIDAY_MAP)) {
+      if (dateStr.startsWith(yearPrefix)) {
+        library.push({ date: dateStr, names: [...KR_HOLIDAY_MAP[dateStr]] });
+      }
+    }
+    library.sort((a, b) => a.date.localeCompare(b.date));
+
+    res.json({
+      success: true,
+      data: {
+        year,
+        overrides: overrides.map((o) => ({
+          ...o,
+          date: o.date.toISOString().slice(0, 10),
+        })),
+        library,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /holidays - 새 override 생성
+export const createHoliday = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { date, name, type, description } = req.body;
+    const dt = parseDateYMD(date);
+    if (!dt) throw new AppError('유효한 날짜(YYYY-MM-DD)를 입력해주세요.', 400);
+    if (!name || typeof name !== 'string') throw new AppError('이름을 입력해주세요.', 400);
+    if (type && !['CUSTOM', 'EXCLUDE'].includes(type)) {
+      throw new AppError('유효한 type(CUSTOM/EXCLUDE)을 선택해주세요.', 400);
+    }
+
+    const existing = await prisma.holiday.findUnique({ where: { date: dt } });
+    if (existing) throw new AppError('이미 등록된 날짜입니다.', 400);
+
+    const holiday = await prisma.holiday.create({
+      data: {
+        date: dt,
+        name: name.trim(),
+        type: (type as any) || 'CUSTOM',
+        description: description ? String(description).trim() : null,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: { ...holiday, date: holiday.date.toISOString().slice(0, 10) },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /holidays/:id - override 수정
+export const updateHoliday = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { name, type, description } = req.body;
+    if (type && !['CUSTOM', 'EXCLUDE'].includes(type)) {
+      throw new AppError('유효한 type(CUSTOM/EXCLUDE)을 선택해주세요.', 400);
+    }
+
+    const holiday = await prisma.holiday.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name: String(name).trim() }),
+        ...(type !== undefined && { type: type as any }),
+        ...(description !== undefined && { description: description ? String(description).trim() : null }),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: { ...holiday, date: holiday.date.toISOString().slice(0, 10) },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /holidays/:id - override 삭제
+export const deleteHoliday = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    await prisma.holiday.delete({ where: { id } });
+    res.json({ success: true, message: '삭제되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};

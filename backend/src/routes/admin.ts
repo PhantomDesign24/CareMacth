@@ -154,6 +154,12 @@ router.put('/association-fees/:caregiverId', [
   body('amount').optional().isInt({ min: 0 }).withMessage('납부액은 0 이상이어야 합니다.'),
 ], adminController.updateAssociationFee);
 
+// 공휴일 override
+router.get('/holidays', adminController.getHolidays);
+router.post('/holidays', adminController.createHoliday);
+router.put('/holidays/:id', adminController.updateHoliday);
+router.delete('/holidays/:id', adminController.deleteHoliday);
+
 // 교육 관리
 router.get('/education', adminController.getAdminEducations);
 router.post('/education', [

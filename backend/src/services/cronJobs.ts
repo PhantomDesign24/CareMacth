@@ -1,16 +1,37 @@
 import cron from 'node-cron';
-import Holidays from 'date-holidays';
+import krHolidays from '../data/kr-holidays.json';
+
+const KR_HOLIDAY_MAP: Record<string, string[]> = krHolidays as any;
+function isKrHoliday(date: Date): boolean {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return !!KR_HOLIDAY_MAP[`${y}-${m}-${d}`];
+}
 import { sendExtensionReminder, sendToAdmins, sendFromTemplate } from './notificationService';
 import { settleEarning } from './paymentService';
 import { prisma } from '../app';
 
-const hd = new Holidays('KR');
+function toYMD(date: Date): Date {
+  // UTC 기준 날짜만 남기기 (시간 00:00:00Z)
+  const y = date.getFullYear();
+  const m = date.getMonth();
+  const d = date.getDate();
+  return new Date(Date.UTC(y, m, d));
+}
 
-// 한국 기준 주말/공휴일 판정
-export function isNonBusinessDay(date: Date = new Date()): boolean {
+// 한국 기준 주말/공휴일 판정 (관리자 override 적용)
+// 우선순위: EXCLUDE override → 주말 → CUSTOM override → 공식 공휴일 라이브러리
+export async function isNonBusinessDay(date: Date = new Date()): Promise<boolean> {
+  const ymd = toYMD(date);
+  const override = await prisma.holiday.findUnique({ where: { date: ymd } });
+  if (override?.type === 'EXCLUDE') return false;
+  if (override?.type === 'CUSTOM') return true;
+
   const day = date.getDay();
-  if (day === 0 || day === 6) return true; // 일(0), 토(6)
-  return !!hd.isHoliday(date);
+  if (day === 0 || day === 6) return true;
+
+  return isKrHoliday(date);
 }
 
 export function setupCronJobs() {
@@ -292,7 +313,7 @@ export function setupCronJobs() {
   // 매 5분: 주말/공휴일 미선택 간병 요청 1시간 경과 시 자동 실패
   cron.schedule('*/5 * * * *', async () => {
     try {
-      if (!isNonBusinessDay()) return; // 평일은 보호자가 직접 선택
+      if (!(await isNonBusinessDay())) return; // 평일은 보호자가 직접 선택
 
       const cutoff = new Date(Date.now() - 60 * 60 * 1000);
       const stale = await prisma.careRequest.findMany({

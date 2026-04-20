@@ -863,6 +863,25 @@ model PlatformConfig {
   updatedAt             DateTime @updatedAt
 }
 
+// 공휴일 override (라이브러리 기본값 위에 관리자 추가/제외)
+enum HolidayType {
+  CUSTOM   // 추가 휴일 (회사 휴무 등)
+  EXCLUDE  // 라이브러리엔 공휴일이지만 이 날은 영업
+}
+
+model Holiday {
+  id          String      @id @default(uuid())
+  date        DateTime    @db.Date
+  name        String
+  type        HolidayType @default(CUSTOM)
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([date])
+  @@index([date])
+}
+
 // ==========================================
 // 16. 간병보험 서류 신청
 // ==========================================

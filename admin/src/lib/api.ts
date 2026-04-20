@@ -186,6 +186,41 @@ export async function verifyCriminalCheck(caregiverId: string) {
   return apiRequest(`/admin/caregivers/${caregiverId}/verify-criminal-check`, { method: "PUT" });
 }
 
+// ─── Holidays ─────────────────────────────────────────
+export interface AdminHoliday {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+  type: "CUSTOM" | "EXCLUDE";
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminHolidaysResponse {
+  year: number;
+  overrides: AdminHoliday[];
+  library: { date: string; names: string[] }[];
+}
+
+export async function getHolidays(year?: number) {
+  return apiRequest<AdminHolidaysResponse>("/admin/holidays", {
+    params: year ? { year } : undefined,
+  });
+}
+
+export async function createHoliday(data: { date: string; name: string; type?: "CUSTOM" | "EXCLUDE"; description?: string }) {
+  return apiRequest<AdminHoliday>("/admin/holidays", { method: "POST", body: data });
+}
+
+export async function updateHoliday(id: string, data: { name?: string; type?: "CUSTOM" | "EXCLUDE"; description?: string }) {
+  return apiRequest<AdminHoliday>(`/admin/holidays/${id}`, { method: "PUT", body: data });
+}
+
+export async function deleteHoliday(id: string) {
+  return apiRequest(`/admin/holidays/${id}`, { method: "DELETE" });
+}
+
 // ─── Notifications ───────────────────────────────────
 export async function getAdminNotifications(params?: { type?: string; page?: number; limit?: number }) {
   return apiRequest<AdminNotificationsResponse>("/admin/notifications", {

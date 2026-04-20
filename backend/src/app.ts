@@ -105,7 +105,7 @@ app.get('/api/public/contact', async (_req, res, next) => {
       success: true,
       data: {
         companyPhone: cfg?.companyPhone || null,
-        isNonBusinessDay: isNonBusinessDay(),
+        isNonBusinessDay: await isNonBusinessDay(),
       },
     });
   } catch (error) {
