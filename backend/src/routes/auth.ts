@@ -48,8 +48,8 @@ router.delete('/me', authenticate, [
   body('reason').optional().trim().isLength({ max: 500 }).withMessage('사유는 500자 이내여야 합니다.'),
 ], authController.deleteAccount);
 
-// 토큰 갱신
-router.post('/refresh', authenticate, authController.refreshToken);
+// 토큰 갱신 (refresh_token body 필요, 액세스 토큰 만료 여부 무관)
+router.post('/refresh', authController.refreshToken);
 
 // 비밀번호 재설정 (임시 비밀번호 발급)
 router.post('/reset-password', [

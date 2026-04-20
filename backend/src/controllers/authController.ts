@@ -18,6 +18,20 @@ const generateToken = (user: { id: string; email: string; role: string }) => {
   );
 };
 
+const generateRefreshToken = (user: { id: string; email: string; role: string }) => {
+  return jwt.sign(
+    { id: user.id, email: user.email, role: user.role, type: 'refresh' },
+    config.jwt.secret,
+    { expiresIn: '30d' }
+  );
+};
+
+const tokenPair = (user: { id: string; email: string; role: string }) => {
+  const access_token = generateToken(user);
+  const refresh_token = generateRefreshToken(user);
+  return { token: access_token, access_token, refresh_token };
+};
+
 // 일반 회원가입
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -100,7 +114,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       },
     });
 
-    const token = generateToken(user);
+    const tokens = tokenPair(user);
 
     // 간병인 가입 시 관리자 전원에게 알림
     if (role === 'CAREGIVER') {
@@ -113,7 +127,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 
     res.status(201).json({
       success: true,
-      data: { user: { ...user, password: undefined }, token },
+      data: { user: { ...user, password: undefined }, ...tokens },
     });
   } catch (error) {
     next(error);
@@ -152,11 +166,11 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       throw new AppError('관리자 승인 대기 중입니다.', 403);
     }
 
-    const token = generateToken(user);
+    const tokens = tokenPair(user);
 
     res.json({
       success: true,
-      data: { user: { ...user, password: undefined }, token },
+      data: { user: { ...user, password: undefined }, ...tokens },
     });
   } catch (error) {
     next(error);
@@ -213,11 +227,11 @@ export const kakaoAuth = async (req: Request, res: Response, next: NextFunction)
       });
     }
 
-    const token = generateToken(user);
+    const tokens = tokenPair(user);
 
     res.json({
       success: true,
-      data: { user: { ...user, password: undefined }, token, isNew: false },
+      data: { user: { ...user, password: undefined }, ...tokens, isNew: false },
     });
   } catch (error) {
     next(error);
@@ -270,11 +284,11 @@ export const naverAuth = async (req: Request, res: Response, next: NextFunction)
       });
     }
 
-    const token = generateToken(user);
+    const tokens = tokenPair(user);
 
     res.json({
       success: true,
-      data: { user: { ...user, password: undefined }, token, isNew: false },
+      data: { user: { ...user, password: undefined }, ...tokens, isNew: false },
     });
   } catch (error) {
     next(error);
@@ -303,10 +317,31 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
 };
 
 // 토큰 갱신
-export const refreshToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const refreshToken = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const token = generateToken(req.user!);
-    res.json({ success: true, data: { token } });
+    const refresh = req.body?.refresh_token || req.body?.refreshToken;
+    if (!refresh) {
+      throw new AppError('리프레시 토큰이 필요합니다.', 400);
+    }
+
+    let payload: any;
+    try {
+      payload = jwt.verify(refresh, config.jwt.secret);
+    } catch {
+      throw new AppError('유효하지 않거나 만료된 리프레시 토큰입니다.', 401);
+    }
+
+    if (payload?.type !== 'refresh') {
+      throw new AppError('리프레시 토큰이 아닙니다.', 401);
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: payload.id } });
+    if (!user || !user.isActive) {
+      throw new AppError('유효하지 않은 사용자입니다.', 401);
+    }
+
+    const tokens = tokenPair(user);
+    res.json({ success: true, data: tokens });
   } catch (error) {
     next(error);
   }

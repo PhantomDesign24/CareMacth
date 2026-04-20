@@ -235,7 +235,7 @@ export const careRecordAPI = {
 };
 
 export const extensionAPI = {
-  extend: (contractId: string, data: { newEndDate: string; isNewCaregiver?: boolean; additionalAmount?: number }) =>
+  extend: (contractId: string, data: { additionalDays: number; isNewCaregiver?: boolean }) =>
     api.post(`/contracts/${contractId}/extend`, data),
 };
 

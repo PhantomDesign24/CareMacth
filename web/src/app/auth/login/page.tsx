@@ -36,7 +36,10 @@ export default function LoginPage() {
         setError(data.message || "로그인에 실패했습니다.");
         return;
       }
-      localStorage.setItem("cm_access_token", data.data.token);
+      localStorage.setItem("cm_access_token", data.data.access_token || data.data.token);
+      if (data.data.refresh_token) {
+        localStorage.setItem("cm_refresh_token", data.data.refresh_token);
+      }
       localStorage.setItem("user", JSON.stringify(data.data.user));
       const role = data.data.user.role;
       if (role === "ADMIN") {

@@ -12,6 +12,8 @@ import {
   addPenalty,
   addMemo,
   verifyCertificate,
+  verifyIdCard,
+  verifyCriminalCheck,
 } from "@/lib/api";
 import {
   caregiverStatusLabel as statusLabel,
@@ -327,6 +329,32 @@ export default function CaregiverDetailPage() {
       await fetchData();
     } catch (err: any) {
       alert(err?.message || "자격증 검증 처리 중 오류가 발생했습니다.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleVerifyIdCard() {
+    if (!confirm("신분증 본인 확인을 완료하시겠습니까?")) return;
+    try {
+      setActionLoading(true);
+      await verifyIdCard(id);
+      await fetchData();
+    } catch (err: any) {
+      alert(err?.message || "신분증 검증 처리 중 오류가 발생했습니다.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleVerifyCriminalCheck() {
+    if (!confirm("범죄이력 조회서 검증을 완료하시겠습니까?")) return;
+    try {
+      setActionLoading(true);
+      await verifyCriminalCheck(id);
+      await fetchData();
+    } catch (err: any) {
+      alert(err?.message || "범죄이력 조회서 검증 처리 중 오류가 발생했습니다.");
     } finally {
       setActionLoading(false);
     }
@@ -745,9 +773,20 @@ export default function CaregiverDetailPage() {
                     <p className={`mt-1 text-sm font-medium ${data.identityVerified ? "text-emerald-600" : "text-amber-600"}`}>
                       {data.identityVerified ? "본인 확인 완료" : "본인 확인 미완료"}
                     </p>
-                    <a href={data.idCardImage} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm mt-2 inline-block">
-                      원본 보기
-                    </a>
+                    <div className="mt-2 flex gap-2">
+                      <a href={data.idCardImage} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm inline-block">
+                        원본 보기
+                      </a>
+                      {!data.identityVerified && (
+                        <button
+                          onClick={handleVerifyIdCard}
+                          disabled={actionLoading}
+                          className="btn-primary btn-sm"
+                        >
+                          {actionLoading ? "처리 중..." : "본인 확인"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -789,9 +828,20 @@ export default function CaregiverDetailPage() {
                         </p>
                       </div>
                     </div>
-                    <a href={data.criminalCheckDoc} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm mt-3 inline-block">
-                      원본 보기
-                    </a>
+                    <div className="mt-3 flex gap-2">
+                      <a href={data.criminalCheckDoc} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm inline-block">
+                        원본 보기
+                      </a>
+                      {!data.criminalCheckDone && (
+                        <button
+                          onClick={handleVerifyCriminalCheck}
+                          disabled={actionLoading}
+                          className="btn-primary btn-sm"
+                        >
+                          {actionLoading ? "처리 중..." : "검증 확인"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (

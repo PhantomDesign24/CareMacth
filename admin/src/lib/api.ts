@@ -178,6 +178,14 @@ export async function verifyCertificate(caregiverId: string, certId: string) {
   return apiRequest(`/admin/caregivers/${caregiverId}/certificates/${certId}/verify`, { method: "PUT" });
 }
 
+export async function verifyIdCard(caregiverId: string) {
+  return apiRequest(`/admin/caregivers/${caregiverId}/verify-id-card`, { method: "PUT" });
+}
+
+export async function verifyCriminalCheck(caregiverId: string) {
+  return apiRequest(`/admin/caregivers/${caregiverId}/verify-criminal-check`, { method: "PUT" });
+}
+
 // ─── Notifications ───────────────────────────────────
 export async function getAdminNotifications(params?: { type?: string; page?: number; limit?: number }) {
   return apiRequest<AdminNotificationsResponse>("/admin/notifications", {

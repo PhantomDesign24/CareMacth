@@ -2385,6 +2385,46 @@ export const verifyCertificate = async (req: AuthRequest, res: Response, next: N
   }
 };
 
+// PUT /caregivers/:id/verify-id-card - 신분증 본인 확인
+export const verifyIdCard = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const caregiver = await prisma.caregiver.findUnique({ where: { id } });
+    if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    if (!caregiver.idCardImage) throw new AppError('신분증이 업로드되지 않았습니다.', 400);
+    if (caregiver.identityVerified) throw new AppError('이미 본인 확인 완료된 간병인입니다.', 400);
+
+    await prisma.caregiver.update({
+      where: { id },
+      data: { identityVerified: true },
+    });
+
+    res.json({ success: true, message: '신분증 본인 확인이 완료되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /caregivers/:id/verify-criminal-check - 범죄이력 조회서 확인
+export const verifyCriminalCheck = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const caregiver = await prisma.caregiver.findUnique({ where: { id } });
+    if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    if (!caregiver.criminalCheckDoc) throw new AppError('범죄이력 조회서가 업로드되지 않았습니다.', 400);
+    if (caregiver.criminalCheckDone) throw new AppError('이미 검증된 범죄이력 조회서입니다.', 400);
+
+    await prisma.caregiver.update({
+      where: { id },
+      data: { criminalCheckDone: true, criminalCheckDate: new Date() },
+    });
+
+    res.json({ success: true, message: '범죄이력 조회서 검증이 완료되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // GET /notifications - 알림 목록 (관리자용)
 export const getNotifications = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

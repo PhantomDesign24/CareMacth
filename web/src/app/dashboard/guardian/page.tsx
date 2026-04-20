@@ -553,9 +553,8 @@ function GuardianDashboard() {
     setExtendError("");
     try {
       await extensionAPI.extend(extendTarget.id, {
-        newEndDate: new Date(extendEndDate).toISOString(),
+        additionalDays: extraDays,
         isNewCaregiver: extendNewCaregiver,
-        additionalAmount,
       });
       alert(
         extendNewCaregiver
