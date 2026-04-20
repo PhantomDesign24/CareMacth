@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { FiPhone, FiMenu, FiX, FiChevronDown, FiUser, FiLogOut } from "react-icons/fi";
+import { FiPhone, FiMenu, FiX, FiChevronDown, FiUser, FiLogOut, FiSearch, FiBriefcase, FiHome, FiHeart, FiBell, FiLogIn, FiUserPlus, FiClock, FiChevronRight, FiSettings } from "react-icons/fi";
 import { SITE } from "@/config/site";
 import NotificationBell from "@/components/NotificationBell";
 
@@ -61,10 +61,10 @@ export default function Header() {
   const roleInfo = user ? ROLE_LABELS[user.role] : null;
 
   const navItems = [
-    { href: "/care-request", label: "간병인 찾기" },
-    { href: "/find-work", label: "간병 일감 찾기" },
-    { href: "/business", label: "병원·기업회원" },
-    { href: "/home-care", label: "방문요양" },
+    { href: "/care-request", label: "간병인 찾기", icon: FiSearch, desc: "지금 간병인 매칭하기" },
+    { href: "/find-work", label: "간병 일감 찾기", icon: FiBriefcase, desc: "간병인이 일감 탐색" },
+    { href: "/business", label: "병원·기업회원", icon: FiHome, desc: "기업 단체 매칭 서비스" },
+    { href: "/home-care", label: "방문요양", icon: FiHeart, desc: "장기요양 방문서비스" },
   ];
 
   return (
@@ -237,87 +237,217 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile drawer backdrop */}
       <div
-        className={`lg:hidden overflow-hidden transition-all duration-300 ${
-          mobileOpen ? "max-h-[500px] border-t border-gray-100" : "max-h-0"
+        className={`lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity duration-300 ${
+          mobileOpen ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
+        onClick={() => setMobileOpen(false)}
+        aria-hidden="true"
+      />
+
+      {/* Mobile drawer */}
+      <aside
+        className={`lg:hidden fixed top-0 right-0 bottom-0 w-[86%] max-w-sm bg-white shadow-2xl z-50 transition-transform duration-300 ease-out flex flex-col ${
+          mobileOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+        role="dialog"
+        aria-modal="true"
       >
-        <div className="bg-white px-4 py-3 space-y-1 shadow-xl">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`block px-4 py-3.5 rounded-xl text-[15px] font-medium transition-colors ${
-                pathname === item.href
-                  ? "text-primary-600 bg-primary-50"
-                  : "text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-          <hr className="my-2 border-gray-100" />
+        {/* Drawer header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <Link href="/" onClick={() => setMobileOpen(false)} className="flex items-center">
+            <Image src="/img/care_logo.png" alt="케어매치" width={120} height={32} className="h-8 w-auto" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+            aria-label="닫기"
+          >
+            <FiX className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+          {/* User section / auth CTAs */}
           {user ? (
-            <div className="px-4 py-2 space-y-2">
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
-                <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-bold">
-                  {user.name?.[0]}
+            <div className="px-5 py-5 border-b border-gray-100 bg-gradient-to-br from-primary-50/50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 text-white flex items-center justify-center text-lg font-bold shadow-sm shadow-primary-500/30">
+                  {user.name?.[0] || "?"}
                 </div>
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${roleInfo?.color} ${roleInfo?.bg} border`}>
-                    {roleInfo?.label}
-                  </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base font-bold text-gray-900 truncate">{user.name}</span>
+                    {roleInfo && (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${roleInfo.color} ${roleInfo.bg} border flex-shrink-0`}>
+                        {roleInfo.label}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5 truncate">
+                    {user.email || user.phone || "로그인됨"}
+                  </div>
                 </div>
               </div>
-              <Link href={getDashboardLink()} className="block py-3 rounded-xl text-sm font-medium text-center border border-gray-200 hover:bg-gray-50">
-                마이페이지
-              </Link>
-              {user.role === "ADMIN" && (
-                <>
-                  <a href="/admin/" className="block py-3 rounded-xl text-sm font-medium text-center text-red-600 border border-red-200 hover:bg-red-50">
-                    관리자 패널
-                  </a>
-                  <Link href="/dashboard/guardian" className="block py-3 rounded-xl text-sm font-medium text-center border border-gray-200 hover:bg-gray-50">
-                    보호자 대시보드
-                  </Link>
-                  <Link href="/dashboard/caregiver" className="block py-3 rounded-xl text-sm font-medium text-center border border-gray-200 hover:bg-gray-50">
-                    간병인 대시보드
-                  </Link>
-                </>
-              )}
-              <button onClick={handleLogout} className="w-full py-3 rounded-xl text-sm font-medium text-red-600 text-center border border-red-200 hover:bg-red-50">
-                로그아웃
-              </button>
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                <Link
+                  href={getDashboardLink()}
+                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold text-primary-600 bg-white border border-primary-200 hover:bg-primary-50 transition-colors"
+                >
+                  <FiUser className="w-4 h-4" /> 마이페이지
+                </Link>
+                <Link
+                  href={user.role === "CAREGIVER" ? "/dashboard/caregiver?tab=notifications" : "/dashboard/guardian?tab=notifications"}
+                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
+                >
+                  <FiBell className="w-4 h-4" /> 알림
+                </Link>
+              </div>
             </div>
           ) : (
-            <div className="flex gap-2 px-4 py-2">
-              <Link
-                href="/auth/login"
-                className="flex-1 py-3 rounded-xl text-sm font-medium text-gray-700 text-center border border-gray-200 hover:bg-gray-50"
-              >
-                로그인
-              </Link>
-              <Link
-                href="/auth/register"
-                className="flex-1 py-3 rounded-xl text-sm font-semibold text-white bg-primary-500 text-center hover:bg-primary-600"
-              >
-                회원가입
-              </Link>
+            <div className="px-5 py-5 border-b border-gray-100 bg-gradient-to-br from-primary-50 to-white">
+              <p className="text-sm font-semibold text-gray-900 mb-0.5">간병 매칭, 케어매치로 시작하세요</p>
+              <p className="text-xs text-gray-500 mb-4">로그인하고 맞춤 서비스 이용</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Link
+                  href="/auth/login"
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl text-sm font-semibold text-primary-600 bg-white border border-primary-200 hover:bg-primary-50 transition-colors"
+                >
+                  <FiLogIn className="w-4 h-4" /> 로그인
+                </Link>
+                <Link
+                  href="/auth/register"
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 shadow-sm shadow-primary-500/20 transition-colors"
+                >
+                  <FiUserPlus className="w-4 h-4" /> 회원가입
+                </Link>
+              </div>
             </div>
           )}
-          <div className="px-4 py-2">
+
+          {/* Navigation */}
+          <nav className="px-3 py-3">
+            <div className="px-2 mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">메뉴</span>
+            </div>
+            <ul className="space-y-0.5">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href;
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${
+                        isActive
+                          ? "bg-primary-50 text-primary-600"
+                          : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        isActive ? "bg-primary-100 text-primary-600" : "bg-gray-100 text-gray-500"
+                      }`}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[15px] font-semibold ${isActive ? "text-primary-600" : "text-gray-900"}`}>
+                          {item.label}
+                        </div>
+                        <div className="text-[11px] text-gray-400 truncate">{item.desc}</div>
+                      </div>
+                      <FiChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          {/* Admin-only section */}
+          {user?.role === "ADMIN" && (
+            <div className="px-3 py-3 border-t border-gray-100">
+              <div className="px-2 mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-red-400">관리자</span>
+              </div>
+              <ul className="space-y-0.5">
+                <li>
+                  <a
+                    href="/admin/"
+                    className="flex items-center gap-3 px-3 py-3 rounded-xl text-gray-700 hover:bg-red-50 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-red-50 text-red-500 flex-shrink-0">
+                      <FiSettings className="w-4 h-4" />
+                    </div>
+                    <span className="flex-1 text-[15px] font-semibold text-gray-900">관리자 패널</span>
+                    <FiChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                  </a>
+                </li>
+                <li>
+                  <Link
+                    href="/dashboard/guardian"
+                    className="flex items-center gap-3 px-3 py-3 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-blue-50 text-blue-500 flex-shrink-0">
+                      <FiUser className="w-4 h-4" />
+                    </div>
+                    <span className="flex-1 text-[15px] font-semibold text-gray-900">보호자 대시보드</span>
+                    <FiChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/dashboard/caregiver"
+                    className="flex items-center gap-3 px-3 py-3 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-green-50 text-green-500 flex-shrink-0">
+                      <FiUser className="w-4 h-4" />
+                    </div>
+                    <span className="flex-1 text-[15px] font-semibold text-gray-900">간병인 대시보드</span>
+                    <FiChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          )}
+
+          {/* Customer support */}
+          <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50">
+            <div className="mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">고객센터</span>
+            </div>
             <a
               href={`tel:${SITE.phone}`}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-primary-600 bg-primary-50"
+              className="flex items-center gap-3 p-3 rounded-xl bg-white border border-gray-200 hover:border-primary-300 hover:shadow-sm transition-all"
             >
-              <FiPhone className="w-4 h-4" />
-              상담전화 {SITE.phone}
+              <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center flex-shrink-0">
+                <FiPhone className="w-4 h-4" />
+              </div>
+              <div className="flex-1">
+                <div className="text-base font-bold text-gray-900">{SITE.phone}</div>
+                <div className="flex items-center gap-1 text-[11px] text-gray-500 mt-0.5">
+                  <FiClock className="w-3 h-3" />
+                  평일 09:30~17:30 (점심 12~13시)
+                </div>
+              </div>
             </a>
           </div>
         </div>
-      </div>
+
+        {/* Drawer footer - logout for logged in users */}
+        {user && (
+          <div className="px-5 py-3 border-t border-gray-100 bg-white">
+            <button
+              onClick={() => { handleLogout(); setMobileOpen(false); }}
+              className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+            >
+              <FiLogOut className="w-4 h-4" /> 로그아웃
+            </button>
+          </div>
+        )}
+      </aside>
     </header>
   );
 }
