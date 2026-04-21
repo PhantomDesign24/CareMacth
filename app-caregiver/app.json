@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "kr.carematch.caregiver",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSFaceIDUsageDescription": "생체 인증으로 빠르게 로그인합니다.",
         "NSLocationWhenInUseUsageDescription": "출퇴근 체크를 위해 위치 정보가 필요합니다.",
