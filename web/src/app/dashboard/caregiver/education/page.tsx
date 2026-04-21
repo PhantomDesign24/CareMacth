@@ -74,6 +74,10 @@ export default function EducationPage() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const progressTimerRef = useRef<any>(null);
   const lastSavedRef = useRef<number>(0);
+  // 시청 시간 누적 (seek로 건너뛴 구간 제외)
+  const watchedSecRef = useRef<number>(0);
+  const lastTimeRef = useRef<number>(0);
+  const lastSampleAtRef = useRef<number>(0);
 
   const loadCourses = useCallback(async () => {
     setLoading(true);
@@ -137,8 +141,13 @@ export default function EducationPage() {
     if (!videoId) return;
 
     let mounted = true;
-    lastSavedRef.current = activeCourse.record?.progress ?? 0;
-    setCurrentProgress(activeCourse.record?.progress ?? 0);
+    const initialProgress = activeCourse.record?.progress ?? 0;
+    lastSavedRef.current = initialProgress;
+    setCurrentProgress(initialProgress);
+    // 이전 진도만큼 시청 시간 누적 시작 (duration은 onReady 후 알게 됨)
+    watchedSecRef.current = 0; // 아래 onReady에서 duration*initialProgress/100 로 채움
+    lastTimeRef.current = 0;
+    lastSampleAtRef.current = Date.now();
 
     (async () => {
       await loadYoutubeApi();
@@ -150,10 +159,12 @@ export default function EducationPage() {
         playerVars: { modestbranding: 1, rel: 0, playsinline: 1 },
         events: {
           onReady: () => {
-            // 이전 진도만큼 탐색 (선택적)
             try {
               const dur = playerRef.current.getDuration();
               const prev = (activeCourse.record?.progress ?? 0) / 100 * dur;
+              // 이전 진도만큼 이미 본 것으로 간주 (재시청 시 0부터 다시 쌓지 않도록)
+              watchedSecRef.current = Math.min(prev, dur);
+              lastTimeRef.current = prev;
               if (prev > 0 && prev < dur - 5) {
                 playerRef.current.seekTo(prev, true);
               }
@@ -162,26 +173,53 @@ export default function EducationPage() {
           onStateChange: (e: any) => {
             // 1=playing, 2=paused, 0=ended
             if (e.data === window.YT.PlayerState.ENDED) {
-              saveProgress(activeCourse.id, 100);
-              setCurrentProgress(100);
-              showToast("강의 시청을 완료했습니다.", "success");
-              setTimeout(() => loadCourses(), 500);
+              const dur = playerRef.current?.getDuration?.() || 0;
+              // 실제 시청 누적이 80% 이상일 때만 수료 인정
+              if (dur > 0 && watchedSecRef.current / dur >= 0.8) {
+                saveProgress(activeCourse.id, 100);
+                setCurrentProgress(100);
+                showToast("강의 시청을 완료했습니다.", "success");
+                setTimeout(() => loadCourses(), 500);
+              } else {
+                showToast("영상 전체를 시청해야 수료 처리됩니다. (건너뛴 구간은 제외)", "error");
+              }
             }
           },
         },
       });
 
-      // 5초마다 현재 재생 시간 체크
+      // 5초마다: 실제 재생된 시간만 누적 (seek 구간 제외)
       progressTimerRef.current = setInterval(() => {
         if (!playerRef.current) return;
         try {
+          const state = playerRef.current.getPlayerState?.();
+          // 1 = PLAYING 일 때만 누적
+          if (state !== window.YT.PlayerState.PLAYING) {
+            lastSampleAtRef.current = Date.now();
+            lastTimeRef.current = playerRef.current.getCurrentTime?.() || 0;
+            return;
+          }
           const cur = playerRef.current.getCurrentTime?.() || 0;
           const dur = playerRef.current.getDuration?.() || 0;
-          if (dur > 0) {
-            const pct = (cur / dur) * 100;
-            setCurrentProgress(pct);
-            saveProgress(activeCourse.id, pct);
+          if (dur <= 0) return;
+
+          const now = Date.now();
+          const wallElapsed = (now - lastSampleAtRef.current) / 1000; // 실제 경과 시간(초)
+          const videoElapsed = cur - lastTimeRef.current; // 비디오 시간 증가분
+
+          // 정상 재생: videoElapsed가 wallElapsed와 비슷 (±2초 허용, 1x 재생 가정)
+          // seek: videoElapsed가 wallElapsed보다 훨씬 크거나 음수
+          if (videoElapsed > 0 && Math.abs(videoElapsed - wallElapsed) < 3) {
+            watchedSecRef.current = Math.min(watchedSecRef.current + videoElapsed, dur);
           }
+          // seek한 경우엔 누적 X, 단 lastTime은 갱신해서 다음 주기부터 정상 측정
+
+          lastTimeRef.current = cur;
+          lastSampleAtRef.current = now;
+
+          const pct = (watchedSecRef.current / dur) * 100;
+          setCurrentProgress(pct);
+          saveProgress(activeCourse.id, pct);
         } catch {}
       }, 5000);
     })();
