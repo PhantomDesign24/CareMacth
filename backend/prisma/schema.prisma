@@ -708,6 +708,12 @@ model EducationRecord {
   completedAt  DateTime?
   certificateUrl String? // 수료증 URL
 
+  // 서버 기반 시청 시간 누적 (부정 방지)
+  watchedSeconds   Int       @default(0) // 실제 시청한 누적 초
+  lastHeartbeatAt  DateTime? // 마지막 heartbeat 시각 (서버 시계)
+  lastVideoTime    Int       @default(0) // 마지막 videoTime (seek 감지용)
+  videoDuration    Int?      // 영상 총 길이(초) — 첫 heartbeat에서 수신
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

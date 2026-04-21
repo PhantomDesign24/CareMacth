@@ -155,6 +155,93 @@ export const updateProgress = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
+// POST /:id/heartbeat - 서버 기반 시청 진도 누적 (부정 방지)
+// Body: { videoTime: number, duration: number, playing: boolean }
+// Server가 자체 시계로 wallclock delta 측정 → 실제 재생된 시간만 누적
+export const heartbeat = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { videoTime, duration, playing } = req.body;
+
+    if (typeof videoTime !== 'number' || typeof duration !== 'number' || duration <= 0) {
+      throw new AppError('유효한 videoTime / duration이 필요합니다.', 400);
+    }
+
+    const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+    if (!caregiver) throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+
+    const education = await prisma.education.findUnique({ where: { id } });
+    if (!education || !education.isActive) throw new AppError('교육을 찾을 수 없습니다.', 404);
+
+    const now = new Date();
+    const existing = await prisma.educationRecord.findUnique({
+      where: { caregiverId_educationId: { caregiverId: caregiver.id, educationId: id } },
+    });
+
+    let watchedSeconds = existing?.watchedSeconds ?? 0;
+    // 이미 완료된 과정은 더 집계 안 함
+    if (existing?.completed) {
+      return res.json({
+        success: true,
+        data: { watchedSeconds, progress: 100, completed: true, duration },
+      });
+    }
+
+    if (existing?.lastHeartbeatAt && existing?.lastVideoTime !== null && playing) {
+      const wallDelta = (now.getTime() - new Date(existing.lastHeartbeatAt).getTime()) / 1000;
+      const videoDelta = videoTime - (existing.lastVideoTime ?? 0);
+
+      // 방어: 너무 빠른 연속 호출 (<3초) 차단
+      if (wallDelta >= 3 && wallDelta <= 30) {
+        // 정상 재생: videoDelta ≈ wallDelta (±3초 허용)
+        if (videoDelta > 0 && Math.abs(videoDelta - wallDelta) < 3) {
+          watchedSeconds = Math.min(watchedSeconds + videoDelta, duration);
+        }
+        // seek / pause 중이면 누적 X
+      }
+    }
+
+    const progress = Math.min(100, (watchedSeconds / duration) * 100);
+    const completed = progress >= 80;
+
+    const record = await prisma.educationRecord.upsert({
+      where: { caregiverId_educationId: { caregiverId: caregiver.id, educationId: id } },
+      create: {
+        caregiverId: caregiver.id,
+        educationId: id,
+        progress,
+        completed,
+        completedAt: completed ? now : null,
+        watchedSeconds: Math.round(watchedSeconds),
+        lastHeartbeatAt: now,
+        lastVideoTime: Math.round(videoTime),
+        videoDuration: Math.round(duration),
+      },
+      update: {
+        progress,
+        completed: completed || existing?.completed || false,
+        completedAt: completed && !existing?.completed ? now : existing?.completedAt,
+        watchedSeconds: Math.round(watchedSeconds),
+        lastHeartbeatAt: now,
+        lastVideoTime: Math.round(videoTime),
+        videoDuration: Math.round(duration),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        watchedSeconds: record.watchedSeconds,
+        progress: record.progress,
+        completed: record.completed,
+        duration,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // GET /certificate/:id - 수료증 발급
 export const getCertificate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

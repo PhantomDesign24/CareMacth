@@ -12,10 +12,17 @@ router.use(authorize('CAREGIVER'));
 // GET / - 교육 목록
 router.get('/', educationController.getEducations);
 
-// POST /:id/progress - 수강 진행도 업데이트
+// POST /:id/progress - (레거시) 수강 진행도 직접 업데이트
 router.post('/:id/progress', [
   body('progress').isFloat({ min: 0, max: 100 }).withMessage('진행도는 0~100 사이의 값이어야 합니다.'),
 ], educationController.updateProgress);
+
+// POST /:id/heartbeat - 서버 기반 시청 진도 (부정 방지)
+router.post('/:id/heartbeat', [
+  body('videoTime').isFloat({ min: 0 }).withMessage('videoTime은 0 이상의 숫자여야 합니다.'),
+  body('duration').isFloat({ min: 1 }).withMessage('duration은 1 이상의 숫자여야 합니다.'),
+  body('playing').optional().isBoolean(),
+], educationController.heartbeat);
 
 // GET /certificate/:id - 수료증 발급
 router.get('/certificate/:id', educationController.getCertificate);

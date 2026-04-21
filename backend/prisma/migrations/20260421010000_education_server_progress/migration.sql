@@ -1,0 +1,5 @@
+-- 서버 기반 교육 진도 추적용 필드
+ALTER TABLE "EducationRecord" ADD COLUMN IF NOT EXISTS "watchedSeconds" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "EducationRecord" ADD COLUMN IF NOT EXISTS "lastHeartbeatAt" TIMESTAMP(3);
+ALTER TABLE "EducationRecord" ADD COLUMN IF NOT EXISTS "lastVideoTime" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "EducationRecord" ADD COLUMN IF NOT EXISTS "videoDuration" INTEGER;
