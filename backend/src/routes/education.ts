@@ -24,6 +24,9 @@ router.post('/:id/heartbeat', [
   body('playing').optional().isBoolean(),
 ], educationController.heartbeat);
 
+// POST /:id/complete - 명시적 수료 처리 (80% 이상 시청 필수)
+router.post('/:id/complete', educationController.completeEducation);
+
 // GET /certificate/:id - 수료증 발급
 router.get('/certificate/:id', educationController.getCertificate);
 

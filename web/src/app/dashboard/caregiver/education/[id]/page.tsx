@@ -70,6 +70,7 @@ export default function EducationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [currentProgress, setCurrentProgress] = useState(0);
   const [notFound, setNotFound] = useState(false);
+  const [completing, setCompleting] = useState(false);
 
   const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -114,6 +115,21 @@ export default function EducationDetailPage() {
   useEffect(() => {
     loadCourse();
   }, [loadCourse]);
+
+  const handleComplete = useCallback(async () => {
+    if (!id || completing) return;
+    setCompleting(true);
+    try {
+      await educationAPI.complete(id);
+      setCourse((c) => c ? { ...c, completed: true, completedAt: new Date().toISOString() } : c);
+      showToast("수료 처리가 완료되었습니다.", "success");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "수료 처리에 실패했습니다.";
+      showToast(msg, "error");
+    } finally {
+      setCompleting(false);
+    }
+  }, [id, completing]);
 
   const sendHeartbeat = useCallback(async (videoTime: number, duration: number, playing: boolean) => {
     if (!duration || duration <= 0 || !id) return;
@@ -216,6 +232,19 @@ export default function EducationDetailPage() {
                 playerRef.current.seekTo(prev, true);
               }
             } catch {}
+          },
+          onStateChange: (e: any) => {
+            // 영상 종료 시 최종 heartbeat — 샘플링 간격으로 놓친 마지막 구간 보정
+            if (e.data === window.YT.PlayerState.ENDED) {
+              try {
+                const dur = playerRef.current?.getDuration?.() || 0;
+                const cur = playerRef.current?.getCurrentTime?.() || dur;
+                if (dur > 0) {
+                  // playing=true 로 전송해야 서버가 누적 처리
+                  sendHeartbeat(cur, dur, true);
+                }
+              } catch {}
+            }
           },
         },
       });
@@ -362,8 +391,45 @@ export default function EducationDetailPage() {
             />
           </div>
           <p className="text-[11px] text-gray-400 mt-2">
-            영상 재생 시 자동으로 진도가 기록됩니다. 80% 이상 시청 시 수료 처리되며, 건너뛴 구간은 집계되지 않습니다. 시청 시간은 서버에서 5초 간격으로 검증됩니다.
+            영상 재생 시 자동으로 진도가 기록됩니다. 80% 이상 시청 후 아래 버튼을 눌러 수료 처리하세요. 건너뛴 구간은 집계되지 않으며 시청 시간은 서버에서 검증됩니다.
           </p>
+
+          {/* 수료 완료 버튼 */}
+          <div className="mt-4">
+            {course.completed ? (
+              <div className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-sm">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                </svg>
+                수료 완료됨
+              </div>
+            ) : currentProgress >= 80 ? (
+              <button
+                type="button"
+                onClick={handleComplete}
+                disabled={completing}
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition-colors shadow-sm disabled:opacity-60"
+              >
+                {completing ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    처리 중...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                    수료 완료 처리
+                  </>
+                )}
+              </button>
+            ) : (
+              <div className="w-full py-3 rounded-xl bg-gray-50 text-gray-400 text-sm text-center">
+                80% 이상 시청 시 수료 처리 가능 (현재 {Math.floor(currentProgress)}%)
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 설명 */}

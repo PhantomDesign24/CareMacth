@@ -202,7 +202,7 @@ export const heartbeat = async (req: AuthRequest, res: Response, next: NextFunct
     }
 
     const progress = Math.min(100, (watchedSeconds / duration) * 100);
-    const completed = progress >= 80;
+    // 자동 수료는 하지 않음 (명시적 /complete 버튼 필요)
 
     const record = await prisma.educationRecord.upsert({
       where: { caregiverId_educationId: { caregiverId: caregiver.id, educationId: id } },
@@ -210,8 +210,7 @@ export const heartbeat = async (req: AuthRequest, res: Response, next: NextFunct
         caregiverId: caregiver.id,
         educationId: id,
         progress,
-        completed,
-        completedAt: completed ? now : null,
+        completed: false,
         watchedSeconds: Math.round(watchedSeconds),
         lastHeartbeatAt: now,
         lastVideoTime: Math.round(videoTime),
@@ -219,8 +218,6 @@ export const heartbeat = async (req: AuthRequest, res: Response, next: NextFunct
       },
       update: {
         progress,
-        completed: completed || existing?.completed || false,
-        completedAt: completed && !existing?.completed ? now : existing?.completedAt,
         watchedSeconds: Math.round(watchedSeconds),
         lastHeartbeatAt: now,
         lastVideoTime: Math.round(videoTime),
@@ -234,8 +231,52 @@ export const heartbeat = async (req: AuthRequest, res: Response, next: NextFunct
         watchedSeconds: record.watchedSeconds,
         progress: record.progress,
         completed: record.completed,
+        eligibleForCompletion: progress >= 80 && !record.completed,
         duration,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /:id/complete - 명시적 수료 처리 (진도 80% 이상 필수)
+export const completeEducation = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+    if (!caregiver) throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+
+    const education = await prisma.education.findUnique({ where: { id } });
+    if (!education || !education.isActive) throw new AppError('교육을 찾을 수 없습니다.', 404);
+
+    const record = await prisma.educationRecord.findUnique({
+      where: { caregiverId_educationId: { caregiverId: caregiver.id, educationId: id } },
+    });
+    if (!record) {
+      throw new AppError('시청 기록이 없습니다. 먼저 영상을 시청해주세요.', 400);
+    }
+    if (record.completed) {
+      return res.json({
+        success: true,
+        data: { ...record, message: '이미 수료 처리된 교육입니다.' },
+      });
+    }
+    if (record.progress < 80) {
+      throw new AppError(`시청 진도 80% 이상일 때 수료 처리할 수 있습니다. (현재 ${Math.floor(record.progress)}%)`, 400);
+    }
+
+    const updated = await prisma.educationRecord.update({
+      where: { id: record.id },
+      data: {
+        completed: true,
+        completedAt: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: updated,
     });
   } catch (error) {
     next(error);

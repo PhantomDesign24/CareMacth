@@ -317,6 +317,7 @@ export const educationAPI = {
   list: () => api.get('/education'),
   heartbeat: (id: string, data: { videoTime: number; duration: number; playing: boolean }) =>
     api.post(`/education/${id}/heartbeat`, data),
+  complete: (id: string) => api.post(`/education/${id}/complete`),
   updateProgress: (id: string, progress: number) =>
     api.post(`/education/${id}/progress`, { progress }),
   getCertificate: (id: string) => api.get(`/education/certificate/${id}`),
