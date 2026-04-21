@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { educationAPI } from "@/lib/api";
 import { showToast } from "@/components/Toast";
 
@@ -12,15 +13,11 @@ interface Course {
   videoUrl: string | null;
   duration: number;
   order: number;
-  isActive: boolean;
-  record?: {
-    progress: number;
-    completed: boolean;
-    completedAt: string | null;
-  } | null;
+  progress: number;
+  completed: boolean;
+  completedAt: string | null;
 }
 
-// YouTube URL → video ID 추출
 function extractYoutubeId(url: string | null | undefined): string | null {
   if (!url) return null;
   const patterns = [
@@ -36,43 +33,10 @@ function extractYoutubeId(url: string | null | undefined): string | null {
   return null;
 }
 
-declare global {
-  interface Window {
-    YT: any;
-    onYouTubeIframeAPIReady: (() => void) | undefined;
-  }
-}
-
-function loadYoutubeApi(): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") return;
-    if (window.YT && window.YT.Player) {
-      resolve();
-      return;
-    }
-    const existing = document.querySelector('script[src*="youtube.com/iframe_api"]');
-    const prevCb = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      if (prevCb) prevCb();
-      resolve();
-    };
-    if (!existing) {
-      const s = document.createElement("script");
-      s.src = "https://www.youtube.com/iframe_api";
-      document.body.appendChild(s);
-    }
-  });
-}
-
-export default function EducationPage() {
+export default function EducationListPage() {
+  const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeCourse, setActiveCourse] = useState<Course | null>(null);
-  const [currentProgress, setCurrentProgress] = useState(0);
-
-  const playerRef = useRef<any>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const progressTimerRef = useRef<any>(null);
 
   const loadCourses = useCallback(async () => {
     setLoading(true);
@@ -80,15 +44,17 @@ export default function EducationPage() {
       const res = await educationAPI.list();
       const data = res.data || {};
       const list: any[] = data.educations || [];
-      // 백엔드는 progress/completed/completedAt을 각 education에 flat하게 붙여줌
       setCourses(
         list.map((c) => ({
-          ...c,
-          record: {
-            progress: c.progress ?? 0,
-            completed: c.completed ?? false,
-            completedAt: c.completedAt ?? null,
-          },
+          id: c.id,
+          title: c.title,
+          description: c.description,
+          videoUrl: c.videoUrl,
+          duration: c.duration,
+          order: c.order,
+          progress: c.progress ?? 0,
+          completed: c.completed ?? false,
+          completedAt: c.completedAt ?? null,
         }))
       );
     } catch (err: any) {
@@ -102,103 +68,8 @@ export default function EducationPage() {
     loadCourses();
   }, [loadCourses]);
 
-  // 서버 heartbeat (진도 집계는 서버에서)
-  const sendHeartbeat = useCallback(async (
-    courseId: string,
-    videoTime: number,
-    duration: number,
-    playing: boolean,
-  ) => {
-    if (!duration || duration <= 0) return;
-    try {
-      const res: any = await educationAPI.heartbeat(courseId, {
-        videoTime: Math.floor(videoTime),
-        duration: Math.floor(duration),
-        playing,
-      });
-      const data = res.data?.data || res.data || {};
-      if (typeof data.progress === "number") {
-        setCurrentProgress(data.progress);
-        if (data.completed) {
-          showToast("강의 시청을 완료했습니다.", "success");
-          loadCourses();
-        }
-      }
-    } catch {
-      // silent
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // 플레이어 정리
-  const destroyPlayer = useCallback(() => {
-    if (progressTimerRef.current) {
-      clearInterval(progressTimerRef.current);
-      progressTimerRef.current = null;
-    }
-    if (playerRef.current) {
-      try { playerRef.current.destroy(); } catch {}
-      playerRef.current = null;
-    }
-  }, []);
-
-  // 강의 선택 시 플레이어 로드
-  useEffect(() => {
-    if (!activeCourse) {
-      destroyPlayer();
-      return;
-    }
-    const videoId = extractYoutubeId(activeCourse.videoUrl);
-    if (!videoId) return;
-
-    let mounted = true;
-    setCurrentProgress(activeCourse.record?.progress ?? 0);
-
-    (async () => {
-      await loadYoutubeApi();
-      if (!mounted || !containerRef.current) return;
-      destroyPlayer();
-
-      playerRef.current = new window.YT.Player(containerRef.current, {
-        videoId,
-        playerVars: { modestbranding: 1, rel: 0, playsinline: 1 },
-        events: {
-          onReady: () => {
-            try {
-              const dur = playerRef.current.getDuration();
-              const prev = (activeCourse.record?.progress ?? 0) / 100 * dur;
-              if (prev > 0 && prev < dur - 5) {
-                playerRef.current.seekTo(prev, true);
-              }
-            } catch {}
-          },
-        },
-      });
-
-      // 5초마다 서버로 heartbeat (서버가 진도 집계)
-      progressTimerRef.current = setInterval(() => {
-        if (!playerRef.current) return;
-        try {
-          const state = playerRef.current.getPlayerState?.();
-          const playing = state === window.YT.PlayerState.PLAYING;
-          const cur = playerRef.current.getCurrentTime?.() || 0;
-          const dur = playerRef.current.getDuration?.() || 0;
-          if (dur > 0) {
-            sendHeartbeat(activeCourse.id, cur, dur, playing);
-          }
-        } catch {}
-      }, 5000);
-    })();
-
-    return () => {
-      mounted = false;
-      destroyPlayer();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCourse?.id]);
-
   const totalCount = courses.length;
-  const completedCount = courses.filter((c) => c.record?.completed).length;
+  const completedCount = courses.filter((c) => c.completed).length;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-primary-50/30 via-gray-50 to-gray-50 py-4 sm:py-6 px-4">
@@ -221,57 +92,6 @@ export default function EducationPage() {
           </Link>
         </div>
 
-        {/* 재생 모달 */}
-        {activeCourse && (
-          <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4" onClick={() => setActiveCourse(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-base font-bold text-gray-900 truncate">{activeCourse.title}</h3>
-                  <p className="text-[11px] text-gray-500">소요 시간 {activeCourse.duration}분</p>
-                </div>
-                <button type="button" onClick={() => setActiveCourse(null)} className="text-gray-400 hover:text-gray-700 text-2xl leading-none flex-shrink-0 ml-3">×</button>
-              </div>
-              <div className="p-4">
-                {extractYoutubeId(activeCourse.videoUrl) ? (
-                  <>
-                    <div className="relative aspect-video bg-black rounded-xl overflow-hidden mb-3">
-                      <div ref={containerRef} className="absolute inset-0" />
-                    </div>
-                    <div className="mb-2">
-                      <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                        <span>시청 진도</span>
-                        <span className="font-semibold text-primary-600 tabular-nums">
-                          {Math.floor(currentProgress)}%
-                          {currentProgress >= 80 && <span className="ml-2 text-emerald-600 font-bold">✓ 수료 가능</span>}
-                        </span>
-                      </div>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-500 ${currentProgress >= 80 ? "bg-emerald-500" : "bg-primary-500"}`}
-                          style={{ width: `${Math.min(100, currentProgress)}%` }}
-                        />
-                      </div>
-                      <p className="text-[10px] text-gray-400 mt-1.5">
-                        영상을 재생하면 자동으로 진도가 기록됩니다. 80% 이상 시청 시 수료 처리됩니다.
-                      </p>
-                    </div>
-                    {activeCourse.description && (
-                      <div className="mt-3 p-3 bg-gray-50 rounded-xl text-sm text-gray-700 whitespace-pre-wrap">
-                        {activeCourse.description}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="p-10 text-center text-gray-400 text-sm">
-                    유튜브 영상 URL이 등록되지 않은 과정입니다.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* 과정 카드 목록 */}
         {loading ? (
           <div className="py-16 text-center">
@@ -284,14 +104,12 @@ export default function EducationPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {courses.map((c) => {
-              const progress = c.record?.progress ?? 0;
-              const completed = c.record?.completed ?? false;
               const hasVideo = !!extractYoutubeId(c.videoUrl);
               return (
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => setActiveCourse(c)}
+                  onClick={() => hasVideo && router.push(`/dashboard/caregiver/education/${c.id}`)}
                   disabled={!hasVideo}
                   className={`group text-left bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all ${
                     hasVideo ? "hover:border-primary-300 hover:shadow-md cursor-pointer" : "opacity-60 cursor-not-allowed"
@@ -308,12 +126,12 @@ export default function EducationPage() {
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">영상 없음</div>
                     )}
-                    {completed && (
+                    {c.completed && (
                       <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-white shadow">
                         수료
                       </span>
                     )}
-                    {hasVideo && !completed && (
+                    {hasVideo && !c.completed && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
                         <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
                           <svg className="w-5 h-5 text-primary-600 ml-0.5" viewBox="0 0 24 24" fill="currentColor">
@@ -328,10 +146,10 @@ export default function EducationPage() {
                     <h3 className="text-sm font-bold text-gray-900 line-clamp-2 mb-1">{c.title}</h3>
                     <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-2">
                       <span>{c.duration}분</span>
-                      {c.record?.completedAt && (
+                      {c.completedAt && (
                         <>
                           <span>·</span>
-                          <span>{new Date(c.record.completedAt).toLocaleDateString("ko-KR")} 수료</span>
+                          <span>{new Date(c.completedAt).toLocaleDateString("ko-KR")} 수료</span>
                         </>
                       )}
                     </div>
@@ -339,12 +157,12 @@ export default function EducationPage() {
                     <div>
                       <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
                         <span>진도</span>
-                        <span className="tabular-nums font-semibold">{Math.floor(progress)}%</span>
+                        <span className="tabular-nums font-semibold">{Math.floor(c.progress)}%</span>
                       </div>
                       <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                         <div
-                          className={`h-full ${completed ? "bg-emerald-500" : "bg-primary-500"} transition-all duration-500`}
-                          style={{ width: `${Math.min(100, progress)}%` }}
+                          className={`h-full ${c.completed ? "bg-emerald-500" : "bg-primary-500"} transition-all duration-500`}
+                          style={{ width: `${Math.min(100, c.progress)}%` }}
                         />
                       </div>
                     </div>
