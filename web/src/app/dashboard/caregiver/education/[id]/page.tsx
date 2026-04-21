@@ -78,6 +78,7 @@ export default function EducationDetailPage() {
   const heartbeatCountRef = useRef<number>(0);
   const lastProgressRef = useRef<number>(0);
   const [verifiedAt, setVerifiedAt] = useState<number>(0);
+  const [nowTick, setNowTick] = useState<number>(Date.now());
 
   const loadCourse = useCallback(async () => {
     if (!id) return;
@@ -148,6 +149,12 @@ export default function EducationDetailPage() {
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // 2초마다 현재 시각 갱신 → verifiedAt 만료 체크용 리렌더 트리거
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 2000);
+    return () => clearInterval(t);
+  }, []);
 
   // 개발자도구 차단 (키 단축키 + 우클릭) — 일반 사용자 부정행위 문턱 상승용
   // 참고: 완전 차단은 불가능 (브라우저 메뉴·외부 프록시 우회 가능). 서버 heartbeat가 실제 방어
@@ -327,7 +334,7 @@ export default function EducationDetailPage() {
               <span className="font-semibold">시청 진도</span>
               {/* 부정행위 방지 indicator */}
               {(() => {
-                const recentlyVerified = Date.now() - verifiedAt < 10000; // 10초 내 heartbeat
+                const recentlyVerified = nowTick - verifiedAt < 10000; // 10초 내 heartbeat
                 return (
                   <span
                     className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors ${
