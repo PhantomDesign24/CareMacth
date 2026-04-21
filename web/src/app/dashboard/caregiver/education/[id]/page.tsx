@@ -146,6 +146,8 @@ export default function EducationDetailPage() {
 
       playerRef.current = new window.YT.Player(containerRef.current, {
         videoId,
+        width: "100%",
+        height: "100%",
         playerVars: { modestbranding: 1, rel: 0, playsinline: 1 },
         events: {
           onReady: () => {
@@ -216,9 +218,9 @@ export default function EducationDetailPage() {
       {/* 비디오 영역 — 상단 full-bleed */}
       <div className="bg-black">
         <div className="max-w-6xl mx-auto">
-          <div className="relative aspect-video w-full">
+          <div className="relative aspect-video w-full [&>iframe]:absolute [&>iframe]:inset-0 [&>iframe]:w-full [&>iframe]:h-full">
             {hasVideo ? (
-              <div ref={containerRef} className="absolute inset-0" />
+              <div ref={containerRef} className="absolute inset-0 w-full h-full" />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">
                 유튜브 영상 URL이 등록되지 않은 과정입니다.
