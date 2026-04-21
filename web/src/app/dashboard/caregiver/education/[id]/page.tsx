@@ -74,6 +74,10 @@ export default function EducationDetailPage() {
   const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const progressTimerRef = useRef<any>(null);
+  // 부정행위 방지 indicator
+  const heartbeatCountRef = useRef<number>(0);
+  const lastProgressRef = useRef<number>(0);
+  const [verifiedAt, setVerifiedAt] = useState<number>(0);
 
   const loadCourse = useCallback(async () => {
     if (!id) return;
@@ -120,7 +124,20 @@ export default function EducationDetailPage() {
       });
       const data = res.data?.data || res.data || {};
       if (typeof data.progress === "number") {
-        setCurrentProgress(data.progress);
+        const newProgress = data.progress;
+        setCurrentProgress(newProgress);
+
+        // 진도가 실제로 증가했을 때만 "검증됨" 카운트
+        if (playing && newProgress > lastProgressRef.current + 0.1) {
+          lastProgressRef.current = newProgress;
+          heartbeatCountRef.current += 1;
+          setVerifiedAt(Date.now());
+          // 6회(약 30초)마다 토스트
+          if (heartbeatCountRef.current % 6 === 0) {
+            showToast("✓ 시청 기록이 서버에 검증·저장되었습니다", "success");
+          }
+        }
+
         if (data.completed) {
           setCourse((c) => c ? { ...c, completed: true } : c);
           if (!course?.completed) {
@@ -131,6 +148,40 @@ export default function EducationDetailPage() {
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // 개발자도구 차단 (키 단축키 + 우클릭) — 일반 사용자 부정행위 문턱 상승용
+  // 참고: 완전 차단은 불가능 (브라우저 메뉴·외부 프록시 우회 가능). 서버 heartbeat가 실제 방어
+  useEffect(() => {
+    const blockKey = (e: KeyboardEvent) => {
+      const k = e.key;
+      // F12
+      if (k === "F12") {
+        e.preventDefault();
+        showToast("교육 페이지에서는 개발자 도구 단축키를 사용할 수 없습니다.", "error");
+        return;
+      }
+      // Ctrl/Cmd + Shift + I/J/C (devtools)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && ["I", "J", "C"].includes(k.toUpperCase())) {
+        e.preventDefault();
+        showToast("교육 페이지에서는 개발자 도구 단축키를 사용할 수 없습니다.", "error");
+        return;
+      }
+      // Ctrl/Cmd + U (view source)
+      if ((e.ctrlKey || e.metaKey) && k.toUpperCase() === "U") {
+        e.preventDefault();
+        return;
+      }
+    };
+    const blockContext = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", blockKey);
+    window.addEventListener("contextmenu", blockContext);
+    return () => {
+      window.removeEventListener("keydown", blockKey);
+      window.removeEventListener("contextmenu", blockContext);
+    };
+  }, []);
 
   // 플레이어 로드
   useEffect(() => {
@@ -271,8 +322,27 @@ export default function EducationDetailPage() {
 
         {/* 진도 카드 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 mb-4">
-          <div className="flex items-center justify-between text-sm text-gray-700 mb-2">
-            <span className="font-semibold">시청 진도</span>
+          <div className="flex items-center justify-between text-sm text-gray-700 mb-2 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">시청 진도</span>
+              {/* 부정행위 방지 indicator */}
+              {(() => {
+                const recentlyVerified = Date.now() - verifiedAt < 10000; // 10초 내 heartbeat
+                return (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors ${
+                      recentlyVerified
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-gray-50 text-gray-500 border border-gray-200"
+                    }`}
+                    title="서버에서 실제 시청 시간을 검증합니다"
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${recentlyVerified ? "bg-emerald-500 animate-pulse" : "bg-gray-400"}`} />
+                    {recentlyVerified ? "검증 중" : "대기"}
+                  </span>
+                );
+              })()}
+            </div>
             <span className={`font-bold tabular-nums ${currentProgress >= 80 ? "text-emerald-600" : "text-primary-600"}`}>
               {Math.floor(currentProgress)}%
               {currentProgress >= 80 && <span className="ml-2 text-[11px]">✓ 수료 가능</span>}
@@ -285,7 +355,7 @@ export default function EducationDetailPage() {
             />
           </div>
           <p className="text-[11px] text-gray-400 mt-2">
-            영상을 재생하면 자동으로 진도가 기록됩니다. 80% 이상 시청 시 수료 처리됩니다. 건너뛴 구간은 집계되지 않습니다.
+            영상 재생 시 자동으로 진도가 기록됩니다. 80% 이상 시청 시 수료 처리되며, 건너뛴 구간은 집계되지 않습니다. 시청 시간은 서버에서 5초 간격으로 검증됩니다.
           </p>
         </div>
 
