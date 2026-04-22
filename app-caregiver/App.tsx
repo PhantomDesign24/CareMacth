@@ -12,7 +12,17 @@ import {
   Switch,
   Linking,
   Modal,
+  NativeModules,
 } from 'react-native';
+
+// Android 전용 네이티브 모듈: finishAndRemoveTask + Process.killProcess
+function killApp() {
+  if (Platform.OS === 'android' && NativeModules.AppExit?.killApp) {
+    NativeModules.AppExit.killApp();
+  } else {
+    killApp();
+  }
+}
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -178,7 +188,7 @@ export default function App() {
           message: '케어매치를 종료하시겠습니까?',
           buttons: [
             { text: '취소', style: 'cancel', onPress: hideModal },
-            { text: '종료', style: 'danger', onPress: () => BackHandler.exitApp() },
+            { text: '종료', style: 'danger', onPress: () => killApp() },
           ],
         });
         return true;

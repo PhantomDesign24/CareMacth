@@ -75,7 +75,8 @@
           "color": "#FF922E"
         }
       ],
-      "./plugins/withAndroidQueries.js"
+      "./plugins/withAndroidQueries.js",
+      "./plugins/withAndroidFinishAndRemoveTask.js"
     ],
     "notification": {
       "icon": "./assets/notification-icon.png",

@@ -60,7 +60,8 @@
           "color": "#2ECC71"
         }
       ],
-      "./plugins/withAndroidQueries.js"
+      "./plugins/withAndroidQueries.js",
+      "./plugins/withAndroidFinishAndRemoveTask.js"
     ],
     "scheme": "carematch-caregiver",
     "extra": {

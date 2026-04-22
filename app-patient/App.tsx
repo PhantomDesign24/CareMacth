@@ -14,7 +14,18 @@ import {
   Linking,
   Modal,
   AppState,
+  NativeModules,
 } from 'react-native';
+
+// Android 전용 네이티브 모듈: finishAndRemoveTask + Process.killProcess
+// iOS는 NativeModules.AppExit가 undefined → fallback으로 BackHandler.exitApp() 사용
+function killApp() {
+  if (Platform.OS === 'android' && NativeModules.AppExit?.killApp) {
+    NativeModules.AppExit.killApp();
+  } else {
+    BackHandler.exitApp();
+  }
+}
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -223,7 +234,7 @@ export default function App() {
             { text: '취소', style: 'cancel', onPress: hideModal },
             { text: '종료', style: 'danger', onPress: () => {
               hideModal();
-              BackHandler.exitApp();
+              killApp();
             }},
           ],
         });
