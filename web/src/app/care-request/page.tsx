@@ -14,6 +14,7 @@ export default function CareRequestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [authorized, setAuthorized] = useState(false);
 
   // 역할 가드: GUARDIAN / HOSPITAL / ADMIN 만 접근 가능
   useEffect(() => {
@@ -35,8 +36,13 @@ export default function CareRequestPage() {
       if (role && !["GUARDIAN", "HOSPITAL", "ADMIN"].includes(role)) {
         alert("간병 신청은 보호자 또는 병원 회원만 가능합니다.");
         router.replace("/");
+        return;
       }
-    } catch {}
+      // 역할 검사 통과
+      setAuthorized(true);
+    } catch {
+      router.replace("/auth/login");
+    }
   }, [router]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -140,6 +146,18 @@ export default function CareRequestPage() {
       setSubmitting(false);
     }
   };
+
+  // 인증 확인 전에는 콘텐츠 노출 금지 (비회원이 폼 보이지 않도록)
+  if (!authorized) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-gray-50 flex items-center justify-center px-4">
+        <div className="text-center">
+          <div className="inline-block w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary-600 animate-spin" />
+          <p className="mt-4 text-sm text-gray-500">로그인 상태를 확인하고 있습니다...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gray-50">
