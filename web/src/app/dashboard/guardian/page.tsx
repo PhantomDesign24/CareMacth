@@ -223,8 +223,11 @@ function GuardianDashboard() {
     try {
       await authAPI.deleteAccount(deletePassword, deleteReason);
       alert("회원 탈퇴가 완료되었습니다. 그동안 이용해주셔서 감사합니다.");
+      // 모든 세션 캐시 정리 (탈퇴 후 잔존 토큰으로 재진입 방지)
       localStorage.removeItem("cm_access_token");
       localStorage.removeItem("cm_refresh_token");
+      localStorage.removeItem("user");
+      localStorage.removeItem("cm_user");
       window.location.href = "/";
     } catch (err: unknown) {
       const message =
@@ -400,6 +403,20 @@ function GuardianDashboard() {
       router.replace('/auth/login');
       return;
     }
+    // 역할 가드 — GUARDIAN / HOSPITAL / ADMIN 만 허용
+    try {
+      const userStr = localStorage.getItem('user');
+      const user = userStr ? JSON.parse(userStr) : null;
+      const role = user?.role;
+      if (role === 'CAREGIVER') {
+        router.replace('/dashboard/caregiver');
+        return;
+      }
+      if (role && !['GUARDIAN', 'HOSPITAL', 'ADMIN'].includes(role)) {
+        router.replace('/');
+        return;
+      }
+    } catch {}
     fetchData();
   }, [fetchData, router]);
 

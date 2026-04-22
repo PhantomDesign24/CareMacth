@@ -10,23 +10,23 @@ import { AuthRequest } from '../middlewares/auth';
 import { generateReferralCode } from '../utils/generateCode';
 import { sendToAdmins } from '../services/notificationService';
 
-const generateToken = (user: { id: string; email: string; role: string }) => {
+const generateToken = (user: { id: string; email: string; role: string; tokenVersion?: number }) => {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
+    { id: user.id, email: user.email, role: user.role, v: user.tokenVersion ?? 0 },
     config.jwt.secret,
     { expiresIn: '7d' }
   );
 };
 
-const generateRefreshToken = (user: { id: string; email: string; role: string }) => {
+const generateRefreshToken = (user: { id: string; email: string; role: string; tokenVersion?: number }) => {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role, type: 'refresh' },
+    { id: user.id, email: user.email, role: user.role, v: user.tokenVersion ?? 0, type: 'refresh' },
     config.jwt.secret,
     { expiresIn: '30d' }
   );
 };
 
-const tokenPair = (user: { id: string; email: string; role: string }) => {
+const tokenPair = (user: { id: string; email: string; role: string; tokenVersion?: number }) => {
   const access_token = generateToken(user);
   const refresh_token = generateRefreshToken(user);
   return { token: access_token, access_token, refresh_token };
@@ -394,6 +394,10 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     if (!user || !user.isActive) {
       throw new AppError('유효하지 않은 사용자입니다.', 401);
     }
+    // tokenVersion 일치 확인 — 탈취·탈퇴 후 무효화된 토큰 거부
+    if (typeof payload.v === 'number' && payload.v !== user.tokenVersion) {
+      throw new AppError('세션이 만료되었습니다. 다시 로그인해주세요.', 401);
+    }
 
     const tokens = tokenPair(user);
     res.json({ success: true, data: tokens });
@@ -520,6 +524,7 @@ export const deleteAccount = async (req: AuthRequest, res: Response, next: NextF
         data: {
           isActive: false,
           deletedAt: new Date(),
+          tokenVersion: { increment: 1 }, // 기존 JWT 전부 무효화
           // 개인정보 익명화 (GDPR/개인정보보호법 준수)
           email: `deleted_${timestamp}_${user.id.slice(0, 8)}@deleted.local`,
           phone: `DELETED_${timestamp}`,

@@ -57,6 +57,7 @@ model User {
   referralCode  String       @unique // 추천인 코드
   referredBy    String?      // 추천인 ID
   points        Int          @default(0) // 포인트
+  tokenVersion  Int          @default(0) // JWT 무효화용 버전 (보안 이벤트 시 증가)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

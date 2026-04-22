@@ -175,13 +175,22 @@ export default function RootLayout({
 
   useEffect(() => {
     const token = getToken();
-    if (token) {
-      // 웹 토큰이면 admin 토큰으로도 저장
-      if (!localStorage.getItem('token') && localStorage.getItem('cm_access_token')) {
-        setToken(token);
+    if (!token) {
+      setAuthenticated(false);
+      return;
+    }
+    // ADMIN 역할 확인 — admin 패널은 ADMIN만 접근 가능
+    try {
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
+      if (user?.role !== "ADMIN") {
+        clearToken();
+        setAuthenticated(false);
+        return;
       }
       setAuthenticated(true);
-    } else {
+    } catch {
+      clearToken();
       setAuthenticated(false);
     }
   }, []);

@@ -1,11 +1,11 @@
 const API_BASE_URL = "/api";
 
-const TOKEN_KEY = "token"; // 홈페이지와 동일한 키 사용
+const TOKEN_KEY = "token"; // admin 전용 키
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  // admin 토큰 먼저, 없으면 웹 토큰 사용 (관리자가 웹에서 로그인한 경우)
-  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem("cm_access_token");
+  // admin 토큰만 사용 — 웹 토큰 폴백 제거 (역할 혼용 차단)
+  return localStorage.getItem(TOKEN_KEY);
 }
 
 export function setToken(token: string): void {
@@ -13,8 +13,12 @@ export function setToken(token: string): void {
 }
 
 export function clearToken(): void {
+  // admin + 혹시 남아있는 웹 토큰까지 모두 정리 (브라우저 잔존 세션 차단)
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem("user");
+  localStorage.removeItem("cm_access_token");
+  localStorage.removeItem("cm_refresh_token");
+  localStorage.removeItem("cm_user");
 }
 
 interface RequestOptions {

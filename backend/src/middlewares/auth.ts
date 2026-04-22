@@ -28,6 +28,7 @@ export const authenticate = async (
       id: string;
       email: string;
       role: string;
+      v?: number;
     };
 
     const user = await prisma.user.findUnique({
@@ -36,6 +37,10 @@ export const authenticate = async (
 
     if (!user || !user.isActive) {
       throw new AppError('유효하지 않은 사용자입니다.', 401);
+    }
+    // tokenVersion 일치 — 탈취·로그아웃·탈퇴 후 무효화된 토큰 거부
+    if (typeof decoded.v === 'number' && decoded.v !== user.tokenVersion) {
+      throw new AppError('세션이 만료되었습니다. 다시 로그인해주세요.', 401);
     }
 
     req.user = { id: user.id, email: user.email, role: user.role };

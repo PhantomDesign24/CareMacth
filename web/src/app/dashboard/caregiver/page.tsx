@@ -413,6 +413,20 @@ function CaregiverDashboard() {
       router.replace('/auth/login');
       return;
     }
+    // 역할 가드 — CAREGIVER / ADMIN 만 허용
+    try {
+      const userStr = localStorage.getItem('user');
+      const user = userStr ? JSON.parse(userStr) : null;
+      const role = user?.role;
+      if (role === 'GUARDIAN' || role === 'HOSPITAL') {
+        router.replace('/dashboard/guardian');
+        return;
+      }
+      if (role && !['CAREGIVER', 'ADMIN'].includes(role)) {
+        router.replace('/');
+        return;
+      }
+    } catch {}
     fetchData();
   }, [fetchData, router]);
 
