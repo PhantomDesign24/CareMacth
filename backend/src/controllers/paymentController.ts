@@ -7,7 +7,7 @@ import { AuthRequest } from '../middlewares/auth';
 import { config } from '../config';
 import { generateOrderId } from '../utils/generateCode';
 import { sendEmail, emailPaymentCompleted } from '../services/emailService';
-import { sendFromTemplate, renderTemplate } from '../services/notificationService';
+import { sendFromTemplate, renderTemplate, sendToAdmins } from '../services/notificationService';
 
 // POST / - 결제 생성
 export const createPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -367,34 +367,26 @@ export const refundPayment = async (req: AuthRequest, res: Response, next: NextF
 
     // ── 보호자/간병인: 환불 요청만 생성 (2단계 플로우)
     if (!isAdmin) {
-      await prisma.$transaction(async (tx) => {
-        await tx.payment.update({
-          where: { id },
-          data: {
-            refundRequestStatus: 'PENDING',
-            refundRequestedAt: new Date(),
-            refundRequestedBy: req.user!.id,
-            refundRequestReason: reason || '고객 요청에 의한 환불',
-            refundRequestAmount: refundAmount,
-          },
-        });
-        // 관리자에게 알림 (adminAlert=true로 마킹)
-        const admins = await tx.user.findMany({
-          where: { role: 'ADMIN', isActive: true },
-          select: { id: true },
-        });
-        if (admins.length > 0) {
-          await tx.notification.createMany({
-            data: admins.map((a) => ({
-              userId: a.id,
-              type: 'PAYMENT' as const,
-              title: '환불 요청 접수',
-              body: `${payment.guardian?.user?.name || '사용자'}님이 ${refundAmount.toLocaleString()}원 환불을 요청했습니다.`,
-              data: { paymentId: id, contractId: payment.contractId, refundRequest: true, adminAlert: true } as any,
-            })),
-          });
-        }
+      await prisma.payment.update({
+        where: { id },
+        data: {
+          refundRequestStatus: 'PENDING',
+          refundRequestedAt: new Date(),
+          refundRequestedBy: req.user!.id,
+          refundRequestReason: reason || '고객 요청에 의한 환불',
+          refundRequestAmount: refundAmount,
+        },
       });
+      // 관리자 전원에게 푸시
+      await sendToAdmins({
+        key: 'REFUND_REQUEST_ADMIN',
+        vars: {
+          guardianName: payment.guardian?.user?.name || '사용자',
+          amount: refundAmount.toLocaleString(),
+          reason: reason || '고객 요청',
+        },
+        data: { paymentId: id, contractId: payment.contractId, refundRequest: true },
+      }).catch(() => {});
       return res.json({
         success: true,
         data: { refundAmount, pending: true },
@@ -520,39 +512,34 @@ async function executeRefund(
       }
     }
 
-    // 보호자 + 간병인 알림 (템플릿 기반 — 트랜잭션 내부라 renderTemplate 사용)
-    const notifications: any[] = [];
-    const refundFormatted = refundAmount.toLocaleString();
-    if (payment.guardian?.userId) {
-      const gKey = isPartialRefund ? 'REFUND_PARTIAL_GUARDIAN' : 'REFUND_APPROVED_GUARDIAN';
-      const gTpl = await renderTemplate(gKey, { refundAmount: refundFormatted });
-      if (gTpl && gTpl.enabled) {
-        notifications.push({
-          userId: payment.guardian.userId,
-          type: gTpl.type,
-          title: gTpl.title,
-          body: gTpl.body,
-          data: { paymentId: payment.id } as any,
-        });
-      }
-    }
-    if (payment.contract?.caregiver?.userId) {
-      const cKey = isPartialRefund ? 'REFUND_PARTIAL_CAREGIVER' : 'REFUND_APPROVED_CAREGIVER';
-      const cTpl = await renderTemplate(cKey, { refundAmount: refundFormatted });
-      if (cTpl && cTpl.enabled) {
-        notifications.push({
-          userId: payment.contract.caregiver.userId,
-          type: cTpl.type,
-          title: cTpl.title,
-          body: cTpl.body,
-          data: { paymentId: payment.id, contractId: payment.contractId } as any,
-        });
-      }
-    }
-    if (notifications.length > 0) {
-      await tx.notification.createMany({ data: notifications });
-    }
   });
+
+  // 트랜잭션 완료 후 템플릿 기반 푸시 발송
+  const refundFormatted = refundAmount.toLocaleString();
+  if (payment.guardian?.userId) {
+    const gKey = isPartialRefund ? 'REFUND_PARTIAL_GUARDIAN' : 'REFUND_APPROVED_GUARDIAN';
+    await sendFromTemplate({
+      userId: payment.guardian.userId,
+      key: gKey,
+      vars: { refundAmount: refundFormatted },
+      fallbackTitle: isPartialRefund ? '부분 환불 완료' : '환불 완료',
+      fallbackBody: `${refundFormatted}원이 환불되었습니다.`,
+      fallbackType: 'PAYMENT',
+      data: { paymentId: payment.id },
+    }).catch(() => {});
+  }
+  if (payment.contract?.caregiver?.userId) {
+    const cKey = isPartialRefund ? 'REFUND_PARTIAL_CAREGIVER' : 'REFUND_APPROVED_CAREGIVER';
+    await sendFromTemplate({
+      userId: payment.contract.caregiver.userId,
+      key: cKey,
+      vars: { refundAmount: refundFormatted },
+      fallbackTitle: isPartialRefund ? '부분 환불 발생' : '전액 환불 발생',
+      fallbackBody: `${refundFormatted}원 환불이 발생했습니다. 정산에 영향이 있습니다.`,
+      fallbackType: 'PAYMENT',
+      data: { paymentId: payment.id, contractId: payment.contractId },
+    }).catch(() => {});
+  }
 }
 
 // POST /admin/payments/:id/refund-approve - 관리자: 환불 요청 승인 → 실제 환불
@@ -594,28 +581,27 @@ export const rejectRefundRequest = async (req: AuthRequest, res: Response, next:
       throw new AppError('처리 대기 중인 환불 요청이 아닙니다.', 400);
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.payment.update({
-        where: { id },
-        data: {
-          refundRequestStatus: 'REJECTED',
-          refundReviewedAt: new Date(),
-          refundReviewedBy: req.user!.id,
-          refundRejectReason: reason || '환불 불가',
-        },
-      });
-      if (payment.guardian?.userId) {
-        await tx.notification.create({
-          data: {
-            userId: payment.guardian.userId,
-            type: 'PAYMENT',
-            title: '환불 요청 거절',
-            body: `환불 요청이 거절되었습니다. ${reason ? '사유: ' + reason : ''}`,
-            data: { paymentId: id } as any,
-          },
-        });
-      }
+    await prisma.payment.update({
+      where: { id },
+      data: {
+        refundRequestStatus: 'REJECTED',
+        refundReviewedAt: new Date(),
+        refundReviewedBy: req.user!.id,
+        refundRejectReason: reason || '환불 불가',
+      },
     });
+
+    if (payment.guardian?.userId) {
+      await sendFromTemplate({
+        userId: payment.guardian.userId,
+        key: 'REFUND_REJECTED',
+        vars: { reason: reason || '환불 불가' },
+        fallbackTitle: '환불 요청 거절',
+        fallbackBody: `환불 요청이 거절되었습니다. ${reason ? '사유: ' + reason : ''}`,
+        fallbackType: 'PAYMENT',
+        data: { paymentId: id },
+      }).catch(() => {});
+    }
 
     res.json({ success: true, message: '환불 요청이 거절되었습니다.' });
   } catch (error) {

@@ -424,38 +424,7 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
           penaltyWarning = '취소 3회 이상으로 활동이 정지되었습니다.';
         }
 
-        // 보호자에게 알림 발송 (템플릿 기반)
-        const tpl = await renderTemplate('CONTRACT_CANCELLED_BY_CAREGIVER', { reason: reason || '' });
-        if (tpl && tpl.enabled) {
-          await tx.notification.create({
-            data: {
-              userId: contract.guardian.userId,
-              type: tpl.type,
-              title: tpl.title,
-              body: tpl.body,
-              data: { contractId: id },
-            },
-          });
-        }
-      }
-
-      // 보호자가 취소한 경우: 간병인에게 알림
-      if (isGuardianCancel || req.user!.role === 'ADMIN') {
-        const tpl = await renderTemplate('CONTRACT_CANCELLED_BY_GUARDIAN', {
-          usedDays: String(usedDays),
-          netEarning: netEarning.toLocaleString(),
-        });
-        if (tpl && tpl.enabled) {
-          await tx.notification.create({
-            data: {
-              userId: contract.caregiver.userId,
-              type: tpl.type,
-              title: tpl.title,
-              body: tpl.body,
-              data: { contractId: id },
-            },
-          });
-        }
+        // 알림은 트랜잭션 밖에서 sendFromTemplate 호출 (푸시까지 발송)
       }
 
       // ── 부분 정산: 기존 미정산 Earning 재조정 (DIRECT 결제는 생성 시 full amount로 기록됨)
@@ -534,6 +503,33 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
         });
       }
     });
+
+    // 트랜잭션 완료 후 템플릿 기반 푸시 발송
+    if (isCaregiverCancel) {
+      await sendFromTemplate({
+        userId: contract.guardian.userId,
+        key: 'CONTRACT_CANCELLED_BY_CAREGIVER',
+        vars: { reason: reason || '' },
+        fallbackTitle: '간병 계약이 취소되었습니다',
+        fallbackBody: `간병인이 계약을 취소했습니다. 사유: ${reason}`,
+        fallbackType: 'CONTRACT',
+        data: { contractId: id },
+      }).catch(() => {});
+    }
+    if (isGuardianCancel || req.user!.role === 'ADMIN') {
+      await sendFromTemplate({
+        userId: contract.caregiver.userId,
+        key: 'CONTRACT_CANCELLED_BY_GUARDIAN',
+        vars: {
+          usedDays: String(usedDays),
+          netEarning: netEarning.toLocaleString(),
+        },
+        fallbackTitle: '간병 계약이 취소되었습니다',
+        fallbackBody: `보호자가 계약을 취소했습니다. 사용 ${usedDays}일 기준 ${netEarning.toLocaleString()}원 정산됩니다.`,
+        fallbackType: 'CONTRACT',
+        data: { contractId: id },
+      }).catch(() => {});
+    }
 
     res.json({
       success: true,
@@ -633,19 +629,23 @@ export const extendContract = async (req: AuthRequest, res: Response, next: Next
         data: { endDate: newEndDate },
       });
 
-      // 간병인에게 알림
-      await tx.notification.create({
-        data: {
-          userId: contract.caregiver.userId,
-          type: 'EXTENSION',
-          title: '계약 연장 요청',
-          body: `${contract.careRequest.patient.name} 환자의 간병이 ${additionalDays}일 연장되었습니다. 새 종료일: ${newEndDate.toLocaleDateString('ko-KR')}`,
-          data: { contractId: id, extensionId: ext.id },
-        },
-      });
-
       return ext;
     });
+
+    // 간병인에게 연장 요청 푸시 (트랜잭션 밖)
+    await sendFromTemplate({
+      userId: contract.caregiver.userId,
+      key: 'EXTENSION_REQUEST',
+      vars: {
+        patientName: contract.careRequest.patient.name,
+        additionalDays: String(additionalDays),
+        newEndDate: newEndDate.toLocaleDateString('ko-KR'),
+      },
+      fallbackTitle: '계약 연장 요청',
+      fallbackBody: `${contract.careRequest.patient.name} 환자의 간병이 ${additionalDays}일 연장되었습니다. 새 종료일: ${newEndDate.toLocaleDateString('ko-KR')}`,
+      fallbackType: 'EXTENSION',
+      data: { contractId: id, extensionId: extension.id },
+    }).catch(() => {});
 
     res.status(201).json({
       success: true,

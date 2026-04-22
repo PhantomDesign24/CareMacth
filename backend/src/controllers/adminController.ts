@@ -494,15 +494,15 @@ export const approveCaregiver = async (req: AuthRequest, res: Response, next: Ne
       data: { status: 'APPROVED' },
     });
 
-    // 알림 발송
-    await prisma.notification.create({
-      data: {
-        userId: caregiver.userId,
-        type: 'SYSTEM',
-        title: '간병인 승인 완료',
-        body: '간병인 승인이 완료되었습니다. 이제 간병 매칭을 받을 수 있습니다.',
-      },
-    });
+    // 템플릿 기반 푸시 발송
+    await sendFromTemplate({
+      userId: caregiver.userId,
+      key: 'CAREGIVER_APPROVED',
+      vars: { caregiverName: caregiver.user.name },
+      fallbackTitle: '간병인 승인 완료',
+      fallbackBody: '간병인 승인이 완료되었습니다. 이제 간병 매칭을 받을 수 있습니다.',
+      fallbackType: 'SYSTEM',
+    }).catch(() => {});
 
     res.json({
       success: true,
@@ -533,14 +533,14 @@ export const rejectCaregiver = async (req: AuthRequest, res: Response, next: Nex
       data: { status: 'REJECTED' },
     });
 
-    await prisma.notification.create({
-      data: {
-        userId: caregiver.userId,
-        type: 'SYSTEM',
-        title: '간병인 승인 거절',
-        body: reason || '간병인 승인이 거절되었습니다. 자세한 사유는 고객센터에 문의해주세요.',
-      },
-    });
+    await sendFromTemplate({
+      userId: caregiver.userId,
+      key: 'CAREGIVER_REJECTED',
+      vars: { caregiverName: caregiver.user.name, reason: reason || '관리자 문의' },
+      fallbackTitle: '간병인 승인 거절',
+      fallbackBody: reason || '간병인 승인이 거절되었습니다. 자세한 사유는 고객센터에 문의해주세요.',
+      fallbackType: 'SYSTEM',
+    }).catch(() => {});
 
     res.json({
       success: true,
@@ -584,14 +584,6 @@ export const blacklistCaregiver = async (req: AuthRequest, res: Response, next: 
           where: { id: caregiver.userId },
           data: { isActive: true },
         }),
-        prisma.notification.create({
-          data: {
-            userId: caregiver.userId,
-            type: 'SYSTEM',
-            title: '블랙리스트 해제 안내',
-            body: '블랙리스트가 해제되었습니다. 다시 활동이 가능합니다.',
-          },
-        }),
         prisma.consultMemo.create({
           data: {
             caregiverId: id,
@@ -601,12 +593,30 @@ export const blacklistCaregiver = async (req: AuthRequest, res: Response, next: 
         }),
       ]);
 
+      await sendFromTemplate({
+        userId: caregiver.userId,
+        key: 'PENALTY_UNBLACKLISTED',
+        vars: { caregiverName: caregiver.user.name },
+        fallbackTitle: '블랙리스트 해제 안내',
+        fallbackBody: '블랙리스트가 해제되었습니다. 다시 활동이 가능합니다.',
+        fallbackType: 'SYSTEM',
+      }).catch(() => {});
+
       res.json({
         success: true,
         message: `${caregiver.user.name} 간병인의 블랙리스트가 해제되었습니다.`,
       });
     } else {
-      // 블랙리스트 등록
+      // 블랙리스트 등록 — isActive=false로 바뀌기 전에 푸시 먼저 전송
+      await sendFromTemplate({
+        userId: caregiver.userId,
+        key: 'PENALTY_BLACKLISTED',
+        vars: { caregiverName: caregiver.user.name, reason: reason || '규정 위반' },
+        fallbackTitle: '계정 정지 안내',
+        fallbackBody: reason || '서비스 이용 규정 위반으로 계정이 정지되었습니다.',
+        fallbackType: 'PENALTY',
+      }).catch(() => {});
+
       await prisma.$transaction([
         prisma.caregiver.update({
           where: { id },
@@ -615,14 +625,6 @@ export const blacklistCaregiver = async (req: AuthRequest, res: Response, next: 
         prisma.user.update({
           where: { id: caregiver.userId },
           data: { isActive: false },
-        }),
-        prisma.notification.create({
-          data: {
-            userId: caregiver.userId,
-            type: 'SYSTEM',
-            title: '계정 정지 안내',
-            body: reason || '서비스 이용 규정 위반으로 계정이 정지되었습니다.',
-          },
         }),
         prisma.consultMemo.create({
           data: {
@@ -2174,27 +2176,23 @@ export const paySettlement = async (req: AuthRequest, res: Response, next: NextF
     if (!earning) throw new AppError('정산 내역을 찾을 수 없습니다.', 404);
     if (earning.isPaid) throw new AppError('이미 정산 처리된 건입니다.', 400);
 
-    await prisma.$transaction(async (tx) => {
-      await tx.earning.update({
-        where: { id },
-        data: { isPaid: true, paidAt: new Date() },
-      });
-      // 간병인에게 알림 (템플릿)
-      if (earning.caregiver?.userId) {
-        const tpl = await renderTemplate('SETTLEMENT_PAID', { netAmount: earning.netAmount.toLocaleString() });
-        if (tpl && tpl.enabled) {
-          await tx.notification.create({
-            data: {
-              userId: earning.caregiver.userId,
-              type: tpl.type,
-              title: tpl.title,
-              body: tpl.body,
-              data: { earningId: id } as any,
-            },
-          });
-        }
-      }
+    await prisma.earning.update({
+      where: { id },
+      data: { isPaid: true, paidAt: new Date() },
     });
+
+    // 간병인에게 정산 완료 푸시
+    if (earning.caregiver?.userId) {
+      await sendFromTemplate({
+        userId: earning.caregiver.userId,
+        key: 'SETTLEMENT_PAID',
+        vars: { netAmount: earning.netAmount.toLocaleString() },
+        fallbackTitle: '정산 완료',
+        fallbackBody: `${earning.netAmount.toLocaleString()}원이 정산되었습니다.`,
+        fallbackType: 'PAYMENT',
+        data: { earningId: id },
+      }).catch(() => {});
+    }
 
     res.json({ success: true });
   } catch (error) {
@@ -2216,43 +2214,35 @@ export const bulkPaySettlements = async (req: AuthRequest, res: Response, next: 
     if (targets.length === 0) throw new AppError('처리 가능한 정산이 없습니다.', 400);
 
     const now = new Date();
-    await prisma.$transaction(async (tx) => {
-      await tx.earning.updateMany({
-        where: { id: { in: targets.map((t) => t.id) } },
-        data: { isPaid: true, paidAt: now },
-      });
-      // 간병인별 알림 집계
-      const byCaregiver = new Map<string, { userId: string; total: number; count: number }>();
-      for (const t of targets) {
-        const userId = t.caregiver?.userId;
-        if (!userId) continue;
-        const cur = byCaregiver.get(t.caregiverId) || { userId, total: 0, count: 0 };
-        cur.total += t.netAmount;
-        cur.count += 1;
-        byCaregiver.set(t.caregiverId, cur);
-      }
-      // 간병인별 일괄 정산 알림 (템플릿)
-      const values = Array.from(byCaregiver.values());
-      const notifData: any[] = [];
-      for (const v of values) {
-        const tpl = await renderTemplate('SETTLEMENT_BULK_PAID', {
-          count: String(v.count),
-          total: v.total.toLocaleString(),
-        });
-        if (tpl && tpl.enabled) {
-          notifData.push({
-            userId: v.userId,
-            type: tpl.type,
-            title: tpl.title,
-            body: tpl.body,
-            data: { bulk: true } as any,
-          });
-        }
-      }
-      if (notifData.length > 0) {
-        await tx.notification.createMany({ data: notifData });
-      }
+    await prisma.earning.updateMany({
+      where: { id: { in: targets.map((t) => t.id) } },
+      data: { isPaid: true, paidAt: now },
     });
+
+    // 간병인별 알림 집계
+    const byCaregiver = new Map<string, { userId: string; total: number; count: number }>();
+    for (const t of targets) {
+      const userId = t.caregiver?.userId;
+      if (!userId) continue;
+      const cur = byCaregiver.get(t.caregiverId) || { userId, total: 0, count: 0 };
+      cur.total += t.netAmount;
+      cur.count += 1;
+      byCaregiver.set(t.caregiverId, cur);
+    }
+    // 간병인별 일괄 정산 푸시 발송
+    await Promise.all(
+      Array.from(byCaregiver.values()).map((v) =>
+        sendFromTemplate({
+          userId: v.userId,
+          key: 'SETTLEMENT_BULK_PAID',
+          vars: { count: String(v.count), total: v.total.toLocaleString() },
+          fallbackTitle: '일괄 정산 완료',
+          fallbackBody: `${v.count}건 총 ${v.total.toLocaleString()}원이 정산되었습니다.`,
+          fallbackType: 'PAYMENT',
+          data: { bulk: true },
+        }).catch(() => {}),
+      ),
+    );
 
     res.json({ success: true, data: { processed: targets.length } });
   } catch (error) {

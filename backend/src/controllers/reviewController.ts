@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { sendFromTemplate } from '../services/notificationService';
 
 // POST / - 리뷰 작성
 export const createReview = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -90,25 +91,25 @@ export const createReview = async (req: AuthRequest, res: Response, next: NextFu
         },
       });
 
-      // 간병인에게 알림
-      const caregiver = await tx.caregiver.findUnique({
-        where: { id: contract.caregiverId },
-      });
-
-      if (caregiver) {
-        await tx.notification.create({
-          data: {
-            userId: caregiver.userId,
-            type: 'SYSTEM',
-            title: '새로운 리뷰가 등록되었습니다',
-            body: `평점 ${rating}점의 리뷰가 등록되었습니다.`,
-            data: { reviewId: newReview.id },
-          },
-        });
-      }
-
       return newReview;
     });
+
+    // 간병인에게 리뷰 등록 알림 (트랜잭션 밖 — 푸시 실패해도 리뷰는 저장)
+    const caregiver = await prisma.caregiver.findUnique({
+      where: { id: contract.caregiverId },
+      include: { user: { select: { name: true } } },
+    });
+    if (caregiver) {
+      await sendFromTemplate({
+        userId: caregiver.userId,
+        key: 'REVIEW_CREATED',
+        vars: { caregiverName: caregiver.user?.name || '', rating: String(rating) },
+        fallbackTitle: '새로운 리뷰가 등록되었습니다',
+        fallbackBody: `평점 ${rating}점의 리뷰가 등록되었습니다.`,
+        fallbackType: 'SYSTEM',
+        data: { reviewId: review.id },
+      }).catch(() => {});
+    }
 
     res.status(201).json({
       success: true,

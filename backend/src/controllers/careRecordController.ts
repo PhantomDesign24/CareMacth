@@ -6,6 +6,7 @@ import fs from 'fs';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { sendFromTemplate } from '../services/notificationService';
 
 // POST /check-in - 출근 체크
 export const checkIn = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -88,21 +89,24 @@ export const checkIn = async (req: AuthRequest, res: Response, next: NextFunctio
       });
     }
 
-    // 보호자에게 알림
+    // 보호자에게 출근 푸시
     const guardian = await prisma.guardian.findUnique({
       where: { id: contract.guardianId },
+      include: { user: { select: { name: true } } },
     });
-
     if (guardian) {
-      await prisma.notification.create({
-        data: {
-          userId: guardian.userId,
-          type: 'CARE_RECORD',
-          title: '간병인 출근',
-          body: `간병인이 ${now.toLocaleTimeString('ko-KR')}에 출근했습니다.`,
-          data: { contractId, recordId: record.id },
+      await sendFromTemplate({
+        userId: guardian.userId,
+        key: 'CHECK_IN',
+        vars: {
+          guardianName: guardian.user?.name || '',
+          time: now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
         },
-      });
+        fallbackTitle: '간병인 출근',
+        fallbackBody: `간병인이 ${now.toLocaleTimeString('ko-KR')}에 출근했습니다.`,
+        fallbackType: 'CARE_RECORD',
+        data: { contractId, recordId: record.id },
+      }).catch(() => {});
     }
 
     res.status(201).json({
@@ -176,26 +180,28 @@ export const checkOut = async (req: AuthRequest, res: Response, next: NextFuncti
       },
     });
 
-    // 보호자에게 알림
+    // 보호자에게 퇴근 푸시
     const contract = await prisma.contract.findUnique({
       where: { id: contractId },
     });
-
     if (contract) {
       const guardian = await prisma.guardian.findUnique({
         where: { id: contract.guardianId },
+        include: { user: { select: { name: true } } },
       });
-
       if (guardian) {
-        await prisma.notification.create({
-          data: {
-            userId: guardian.userId,
-            type: 'CARE_RECORD',
-            title: '간병인 퇴근',
-            body: `간병인이 ${now.toLocaleTimeString('ko-KR')}에 퇴근했습니다.`,
-            data: { contractId, recordId: record.id },
+        await sendFromTemplate({
+          userId: guardian.userId,
+          key: 'CHECK_OUT',
+          vars: {
+            guardianName: guardian.user?.name || '',
+            time: now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
           },
-        });
+          fallbackTitle: '간병인 퇴근',
+          fallbackBody: `간병인이 ${now.toLocaleTimeString('ko-KR')}에 퇴근했습니다.`,
+          fallbackType: 'CARE_RECORD',
+          data: { contractId, recordId: record.id },
+        }).catch(() => {});
       }
     }
 
@@ -306,21 +312,21 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
       });
     }
 
-    // 보호자에게 알림
+    // 보호자에게 간병일지 작성 푸시
     const guardian = await prisma.guardian.findUnique({
       where: { id: contract.guardianId },
+      include: { user: { select: { name: true } } },
     });
-
     if (guardian) {
-      await prisma.notification.create({
-        data: {
-          userId: guardian.userId,
-          type: 'CARE_RECORD',
-          title: '간병 일지 작성',
-          body: '오늘의 간병 일지가 작성되었습니다. 확인해 주세요.',
-          data: { contractId, recordId: record.id },
-        },
-      });
+      await sendFromTemplate({
+        userId: guardian.userId,
+        key: 'CARE_RECORD_CREATED',
+        vars: { guardianName: guardian.user?.name || '' },
+        fallbackTitle: '간병 일지 작성',
+        fallbackBody: '오늘의 간병 일지가 작성되었습니다. 확인해 주세요.',
+        fallbackType: 'CARE_RECORD',
+        data: { contractId, recordId: record.id },
+      }).catch(() => {});
     }
 
     res.status(201).json({
