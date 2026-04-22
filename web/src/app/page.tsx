@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   FiPhone,
   FiChevronDown,
@@ -94,6 +95,18 @@ function useCountUp(end: number, duration = 2000, startOnView = true) {
 /* ------------------------------------------------------------------ */
 function HeroSection() {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const router = useRouter();
+
+  // 비로그인 상태면 회원가입으로, 로그인 상태면 목적 페이지로
+  const handleAuthRedirect = (target: string, role?: string) => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("cm_access_token");
+    if (token) {
+      router.push(target);
+    } else {
+      router.push(role ? `/auth/register?role=${role}` : "/auth/register");
+    }
+  };
 
   const slides = [
     {
@@ -205,24 +218,26 @@ function HeroSection() {
 
           {/* CTA Buttons */}
           <div className="mt-6 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-            <Link
-              href="/care-request"
+            <button
+              type="button"
+              onClick={() => handleAuthRedirect("/care-request", "guardian")}
               className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-primary-500 text-white font-bold rounded-2xl text-sm sm:text-base
                          hover:bg-primary-600 transition-all duration-200 shadow-xl shadow-primary-500/30 hover:shadow-2xl hover:shadow-primary-500/40
                          w-full sm:w-auto"
             >
               간병인 찾기
               <FiArrowRight className="w-5 h-5" />
-            </Link>
-            <Link
-              href="/find-work"
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAuthRedirect("/find-work", "caregiver")}
               className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-secondary-500 text-white font-bold rounded-2xl text-sm sm:text-base
                          hover:bg-secondary-600 transition-all duration-200 shadow-xl shadow-secondary-500/30 hover:shadow-2xl hover:shadow-secondary-500/40
                          w-full sm:w-auto"
             >
               간병일감 찾기
               <FiArrowRight className="w-5 h-5" />
-            </Link>
+            </button>
           </div>
 
           {/* App Store Buttons */}
