@@ -42,10 +42,14 @@ export default function Header() {
   }, [pathname]);
 
   const handleLogout = () => {
+    // 모든 토큰·사용자 캐시 정리 (refresh 토큰 남아있으면 인터셉터가 자동 재로그인함)
     localStorage.removeItem("cm_access_token");
+    localStorage.removeItem("cm_refresh_token");
     localStorage.removeItem("user");
+    localStorage.removeItem("cm_user");
     setUser(null);
-    router.push("/");
+    // router.push 대신 full reload 로 모든 메모리 state·axios 캐시 초기화
+    window.location.href = "/";
   };
 
   const getDashboardLink = () => {
