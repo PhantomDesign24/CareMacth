@@ -1287,23 +1287,23 @@ function CaregiverDashboard() {
           {activeTab === "activity" && (
             <div className="divide-y divide-gray-100">
               {activityHistory.map((activity) => (
-                <div key={activity.id} className="p-6">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div className="space-y-2">
+                <div key={activity.id} className="p-4 sm:p-6">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+                    <div className="space-y-2 min-w-0">
                       <div className="flex items-center gap-3">
                         {statusBadge(activity.status)}
                       </div>
-                      <h4 className="font-semibold text-gray-900">
+                      <h4 className="font-semibold text-gray-900 break-words">
                         {activity.patientName} - {activity.careType}
                       </h4>
-                      <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-500">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-500">
                         <span>장소: {activity.location}</span>
-                        <span>
+                        <span className="break-words">
                           기간: {activity.startDate} ~ {activity.endDate}
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:shrink-0">
                       <div className="text-right">
                         <div className="text-lg font-bold text-gray-900">
                           {activity.earnings.toLocaleString()}원
