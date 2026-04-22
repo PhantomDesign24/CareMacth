@@ -445,6 +445,14 @@ function GuardianDashboard() {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
+  // URL tab 변경 시 activeTab 동기화 (BottomTabBar Link 클릭 등)
+  useEffect(() => {
+    if (tabFromUrl && validTabs.includes(tabFromUrl as TabKey) && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl as TabKey);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabFromUrl]);
+
   const copyReferralCode = () => {
     navigator.clipboard.writeText(referralCode);
     alert("추천인 코드가 복사되었습니다.");

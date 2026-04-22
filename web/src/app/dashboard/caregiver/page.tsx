@@ -407,6 +407,14 @@ function CaregiverDashboard() {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
+  // URL tab 변경 시 activeTab 동기화 (BottomTabBar Link 클릭 등)
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabFromUrl]);
+
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('cm_access_token') : null;
     if (!token) {

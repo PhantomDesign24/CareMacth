@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { FiHome, FiSearch, FiClipboard, FiUser, FiBell, FiBriefcase } from "react-icons/fi";
 
 interface UserInfo {
@@ -13,6 +13,7 @@ interface UserInfo {
 
 export default function BottomTabBar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -44,7 +45,7 @@ export default function BottomTabBar() {
         { href: "/", label: "홈", icon: FiHome },
         { href: "/care-request", label: "간병 신청", icon: FiClipboard },
         { href: "/dashboard/guardian?tab=history", label: "내 이력", icon: FiBriefcase },
-        { href: "/dashboard/guardian?tab=notifications", label: "알림", icon: FiBell },
+        { href: "/dashboard/notifications", label: "알림", icon: FiBell },
         { href: "/dashboard/guardian?tab=settings", label: "마이", icon: FiUser },
       ]
     : isCaregiver
@@ -52,21 +53,27 @@ export default function BottomTabBar() {
         { href: "/", label: "홈", icon: FiHome },
         { href: "/find-work", label: "일감 찾기", icon: FiSearch },
         { href: "/dashboard/caregiver?tab=activity", label: "내 활동", icon: FiBriefcase },
-        { href: "/dashboard/caregiver?tab=notifications", label: "알림", icon: FiBell },
+        { href: "/dashboard/notifications", label: "알림", icon: FiBell },
         { href: "/dashboard/caregiver?tab=settings", label: "마이", icon: FiUser },
       ]
     : [];
 
   if (tabs.length === 0) return null;
 
+  const currentTab = searchParams.get("tab") || "";
+
   const isActive = (href: string) => {
     const [path, query] = href.split("?");
-    if (path === "/") return pathname === "/";
-    if (pathname === path) {
-      // tab 쿼리가 있는 경우도 매칭 (간단히 path 만 검사)
-      return true;
+    if (path === "/") return pathname === "/" && !currentTab;
+    if (pathname !== path && !pathname.startsWith(path + "/")) return false;
+
+    // 같은 path일 때 tab 쿼리까지 매칭
+    const hrefTab = query ? new URLSearchParams(query).get("tab") || "" : "";
+    if (hrefTab) {
+      return currentTab === hrefTab;
     }
-    return pathname.startsWith(path + "/");
+    // href에 tab이 없으면 path만 일치하고 currentTab 없을 때만 active
+    return !currentTab;
   };
 
   return (
