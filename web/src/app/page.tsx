@@ -374,11 +374,10 @@ function HomeBannerSection() {
   };
 
   return (
-    <section className="relative py-6 sm:py-10 bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="relative py-4 sm:py-10 bg-gray-50">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8">
         <div
-          className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg bg-gray-900"
-          style={{ aspectRatio: "16 / 7" }}
+          className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg bg-gray-900 aspect-[4/3] sm:aspect-[16/7]"
           onMouseEnter={() => setPaused(true)}
           onMouseLeave={() => setPaused(false)}
         >
@@ -395,33 +394,36 @@ function HomeBannerSection() {
                 style={{ backgroundImage: b.pattern }}
               >
                 {/* 컨텐츠 */}
-                <div className="relative z-10 px-6 sm:px-12 md:px-16 py-6 sm:py-10 max-w-3xl">
-                  <div className="text-5xl sm:text-6xl md:text-7xl mb-2 sm:mb-3 drop-shadow-lg">
+                <div className="relative z-10 px-5 sm:px-12 md:px-16 py-5 sm:py-10 max-w-3xl h-full flex flex-col justify-center">
+                  <div className="text-4xl sm:text-6xl md:text-7xl mb-1.5 sm:mb-3 drop-shadow-lg">
                     {b.emoji}
                   </div>
-                  <p className="text-white/90 text-xs sm:text-sm font-semibold mb-1 sm:mb-2 drop-shadow">
+                  <p className="text-white/90 text-[11px] sm:text-sm font-semibold mb-0.5 sm:mb-2 drop-shadow">
                     {b.subtitle}
                   </p>
-                  <h3 className="text-white text-2xl sm:text-4xl md:text-5xl font-black mb-2 sm:mb-3 drop-shadow-lg leading-tight">
+                  <h3 className="text-white text-xl sm:text-4xl md:text-5xl font-black mb-1.5 sm:mb-3 drop-shadow-lg leading-tight">
                     {b.title}
                   </h3>
-                  <p className="text-white/85 text-sm sm:text-base md:text-lg font-medium mb-4 sm:mb-6 drop-shadow">
+                  <p className="hidden sm:block text-white/85 text-sm sm:text-base md:text-lg font-medium mb-4 sm:mb-6 drop-shadow">
+                    {b.desc}
+                  </p>
+                  <p className="sm:hidden text-white/85 text-xs font-medium mb-3 drop-shadow line-clamp-2">
                     {b.desc}
                   </p>
                   <button
                     type="button"
                     onClick={() => go(b.target, b.role)}
-                    className="inline-flex items-center gap-2 px-5 sm:px-7 py-2.5 sm:py-3.5 bg-white text-gray-900 font-bold rounded-xl text-xs sm:text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                    className="inline-flex self-start items-center gap-1.5 px-4 sm:px-7 py-2 sm:py-3.5 bg-white text-gray-900 font-bold rounded-lg sm:rounded-xl text-xs sm:text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
                   >
                     {b.cta}
-                    <FiArrowRight className="w-4 h-4" />
+                    <FiArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
                 </div>
 
                 {/* 우측 장식 번호 */}
-                <div className="absolute top-4 right-4 sm:top-6 sm:right-8 text-white/30 font-black text-2xl sm:text-4xl tabular-nums">
+                <div className="absolute top-3 right-3 sm:top-6 sm:right-8 text-white/30 font-black text-xl sm:text-4xl tabular-nums">
                   {String(i + 1).padStart(2, "0")}
-                  <span className="text-base sm:text-xl">/{String(banners.length).padStart(2, "0")}</span>
+                  <span className="text-sm sm:text-xl">/{String(banners.length).padStart(2, "0")}</span>
                 </div>
               </div>
             </div>
