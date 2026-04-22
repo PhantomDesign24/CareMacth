@@ -21,12 +21,17 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
+    // 간병 신청은 보호자(GUARDIAN) 또는 병원(HOSPITAL) 회원만 가능
+    if (!['GUARDIAN', 'HOSPITAL'].includes(req.user!.role)) {
+      throw new AppError('간병 신청은 보호자 또는 병원 회원만 가능합니다.', 403);
+    }
+
     const guardian = await prisma.guardian.findUnique({
       where: { userId: req.user!.id },
     });
 
     if (!guardian) {
-      throw new AppError('보호자 정보를 찾을 수 없습니다.', 404);
+      throw new AppError('보호자 정보를 찾을 수 없습니다. (병원 계정은 관리자에게 문의)', 404);
     }
 
     const {

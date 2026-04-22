@@ -34,6 +34,7 @@ export default function HomePage() {
   return (
     <>
       <HeroSection />
+      <HomeBannerSection />
       <LiveDashboardSection />
       <SpecialServiceSection />
       <CareMatchTVSection />
@@ -97,15 +98,30 @@ function HeroSection() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const router = useRouter();
 
-  // 비로그인 상태면 회원가입으로, 로그인 상태면 목적 페이지로
+  // 비로그인 상태면 회원가입으로, 로그인 상태면 역할 체크 후 목적 페이지
   const handleAuthRedirect = (target: string, role?: string) => {
     if (typeof window === "undefined") return;
     const token = localStorage.getItem("cm_access_token");
-    if (token) {
-      router.push(target);
-    } else {
+    if (!token) {
       router.push(role ? `/auth/register?role=${role}` : "/auth/register");
+      return;
     }
+    try {
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
+      const userRole = user?.role;
+      // 간병 신청은 보호자/병원만
+      if (target === "/care-request" && userRole && !["GUARDIAN", "HOSPITAL", "ADMIN"].includes(userRole)) {
+        alert("간병 신청은 보호자 또는 병원 회원만 가능합니다.");
+        return;
+      }
+      // 간병 일감 찾기는 간병인/관리자만
+      if (target === "/find-work" && userRole && !["CAREGIVER", "ADMIN"].includes(userRole)) {
+        alert("간병 일감 찾기는 간병인 회원만 가능합니다.");
+        return;
+      }
+    } catch {}
+    router.push(target);
   };
 
   const slides = [
@@ -276,6 +292,181 @@ function HeroSection() {
         </div>
       </div>
 
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Home Banner (슬라이드 형태)                                         */
+/* ------------------------------------------------------------------ */
+function HomeBannerSection() {
+  const router = useRouter();
+  const banners = [
+    {
+      id: "b1",
+      title: "AI 간병 매칭",
+      subtitle: "10분 내 평균 매칭 완료",
+      desc: "조건 입력만으로 맞춤 간병인을 즉시 추천받아보세요",
+      cta: "지금 매칭 신청",
+      target: "/care-request",
+      role: "guardian",
+      gradient: "from-primary-600 via-primary-500 to-primary-400",
+      pattern: "radial-gradient(circle at 85% 20%, rgba(255,255,255,0.2), transparent 40%), radial-gradient(circle at 15% 80%, rgba(255,255,255,0.15), transparent 35%)",
+      emoji: "🤝",
+    },
+    {
+      id: "b2",
+      title: "간병일감 찾으세요?",
+      subtitle: "매일 새로운 공고 수백건",
+      desc: "원하는 지역·조건으로 간병 일감을 바로 검색하세요",
+      cta: "일감 탐색하기",
+      target: "/find-work",
+      role: "caregiver",
+      gradient: "from-emerald-600 via-emerald-500 to-teal-400",
+      pattern: "radial-gradient(circle at 75% 25%, rgba(255,255,255,0.25), transparent 40%), radial-gradient(circle at 20% 75%, rgba(255,255,255,0.15), transparent 35%)",
+      emoji: "💼",
+    },
+    {
+      id: "b3",
+      title: "3중 케어 시스템",
+      subtitle: "보호자·간병인·관리자 동시 모니터링",
+      desc: "실시간 간병 상태 확인 + 긴급 대응까지",
+      cta: "서비스 자세히",
+      target: "/home-care",
+      role: undefined,
+      gradient: "from-violet-600 via-purple-500 to-fuchsia-400",
+      pattern: "radial-gradient(circle at 80% 30%, rgba(255,255,255,0.25), transparent 40%), radial-gradient(circle at 15% 70%, rgba(255,255,255,0.15), transparent 35%)",
+      emoji: "🛡️",
+    },
+    {
+      id: "b4",
+      title: "추천인 제도 신규 오픈",
+      subtitle: "지인 초대 시 양쪽 포인트 지급",
+      desc: "마이페이지 추천 코드 공유로 혜택 받아가세요",
+      cta: "코드 받기",
+      target: "/auth/register",
+      role: undefined,
+      gradient: "from-amber-500 via-orange-500 to-rose-400",
+      pattern: "radial-gradient(circle at 70% 20%, rgba(255,255,255,0.25), transparent 40%), radial-gradient(circle at 20% 85%, rgba(255,255,255,0.15), transparent 35%)",
+      emoji: "🎁",
+    },
+  ];
+
+  const [current, setCurrent] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (paused) return;
+    const t = setInterval(() => {
+      setCurrent((c) => (c + 1) % banners.length);
+    }, 5000);
+    return () => clearInterval(t);
+  }, [paused, banners.length]);
+
+  const go = (target: string, role?: string) => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("cm_access_token");
+    if (role && !token) {
+      router.push(`/auth/register?role=${role}`);
+    } else {
+      router.push(target);
+    }
+  };
+
+  return (
+    <section className="relative py-6 sm:py-10 bg-gray-50">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div
+          className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg bg-gray-900"
+          style={{ aspectRatio: "16 / 7" }}
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+        >
+          {/* 슬라이드들 */}
+          {banners.map((b, i) => (
+            <div
+              key={b.id}
+              className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+                i === current ? "opacity-100 z-10" : "opacity-0 z-0"
+              }`}
+            >
+              <div
+                className={`w-full h-full bg-gradient-to-br ${b.gradient} relative flex items-center`}
+                style={{ backgroundImage: b.pattern }}
+              >
+                {/* 컨텐츠 */}
+                <div className="relative z-10 px-6 sm:px-12 md:px-16 py-6 sm:py-10 max-w-3xl">
+                  <div className="text-5xl sm:text-6xl md:text-7xl mb-2 sm:mb-3 drop-shadow-lg">
+                    {b.emoji}
+                  </div>
+                  <p className="text-white/90 text-xs sm:text-sm font-semibold mb-1 sm:mb-2 drop-shadow">
+                    {b.subtitle}
+                  </p>
+                  <h3 className="text-white text-2xl sm:text-4xl md:text-5xl font-black mb-2 sm:mb-3 drop-shadow-lg leading-tight">
+                    {b.title}
+                  </h3>
+                  <p className="text-white/85 text-sm sm:text-base md:text-lg font-medium mb-4 sm:mb-6 drop-shadow">
+                    {b.desc}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => go(b.target, b.role)}
+                    className="inline-flex items-center gap-2 px-5 sm:px-7 py-2.5 sm:py-3.5 bg-white text-gray-900 font-bold rounded-xl text-xs sm:text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                  >
+                    {b.cta}
+                    <FiArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* 우측 장식 번호 */}
+                <div className="absolute top-4 right-4 sm:top-6 sm:right-8 text-white/30 font-black text-2xl sm:text-4xl tabular-nums">
+                  {String(i + 1).padStart(2, "0")}
+                  <span className="text-base sm:text-xl">/{String(banners.length).padStart(2, "0")}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* 인디케이터 (dots) */}
+          <div className="absolute bottom-3 sm:bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+            {banners.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`슬라이드 ${i + 1}`}
+                onClick={() => setCurrent(i)}
+                className={`transition-all rounded-full ${
+                  i === current
+                    ? "w-6 h-1.5 bg-white"
+                    : "w-1.5 h-1.5 bg-white/50 hover:bg-white/80"
+                }`}
+              />
+            ))}
+          </div>
+
+          {/* 좌우 버튼 — 데스크톱에서만 */}
+          <button
+            type="button"
+            aria-label="이전 슬라이드"
+            onClick={() => setCurrent((c) => (c - 1 + banners.length) % banners.length)}
+            className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 items-center justify-center rounded-full bg-black/30 backdrop-blur-sm text-white hover:bg-black/50 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            aria-label="다음 슬라이드"
+            onClick={() => setCurrent((c) => (c + 1) % banners.length)}
+            className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 items-center justify-center rounded-full bg-black/30 backdrop-blur-sm text-white hover:bg-black/50 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </section>
   );
 }

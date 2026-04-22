@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import CareRequestForm from "@/components/CareRequestForm";
 import { FiInfo, FiSearch } from "react-icons/fi";
@@ -14,6 +14,30 @@ export default function CareRequestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  // 역할 가드: GUARDIAN / HOSPITAL / ADMIN 만 접근 가능
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("cm_access_token");
+    if (!token) {
+      router.replace("/auth/register?role=guardian");
+      return;
+    }
+    try {
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
+      const role = user?.role;
+      if (role === "CAREGIVER") {
+        alert("간병 신청은 보호자 또는 병원 회원만 가능합니다.");
+        router.replace("/dashboard/caregiver");
+        return;
+      }
+      if (role && !["GUARDIAN", "HOSPITAL", "ADMIN"].includes(role)) {
+        alert("간병 신청은 보호자 또는 병원 회원만 가능합니다.");
+        router.replace("/");
+      }
+    } catch {}
+  }, [router]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSubmit = async (data: any) => {

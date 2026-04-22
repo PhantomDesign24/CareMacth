@@ -99,6 +99,10 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
           },
         }),
         ...(role === 'HOSPITAL' && {
+          // 병원도 간병 요청을 생성할 수 있도록 guardian 레코드 함께 생성
+          guardian: {
+            create: {},
+          },
           hospital: {
             create: {
               name: req.body.hospitalName || name,
