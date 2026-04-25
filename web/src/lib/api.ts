@@ -309,6 +309,8 @@ export const contractAPI = {
     api.post(`/contracts/${id}/cancel`, { reason }),
   updateCorporateName: (id: string, corporateName: string) =>
     api.patch(`/contracts/${id}/corporate-name`, { corporateName }),
+  sign: (id: string, signature: string) =>
+    api.post(`/contracts/${id}/sign`, { signature }),
   getPdfUrl: (id: string, token?: string) =>
     `/api/contracts/${id}/pdf?token=${encodeURIComponent(token || '')}`,
 };

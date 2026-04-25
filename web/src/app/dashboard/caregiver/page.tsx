@@ -6,6 +6,7 @@ import Link from "next/link";
 import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, reportAPI, paymentAPI } from "@/lib/api";
 import { formatDate, formatContractStatus, formatCareType, formatLocation, formatPenaltyType } from "@/lib/format";
 import { showToast } from "@/components/Toast";
+import SignaturePad from "@/components/SignaturePad";
 import NotificationPrefsSection from "@/components/NotificationPrefsSection";
 
 interface EarningItem {
@@ -56,6 +57,8 @@ interface ActivityHistory {
   location: string;
   earnings: number;
   hasTodayRecord?: boolean; // 오늘 간병일지 작성 여부
+  guardianSigned?: boolean;
+  caregiverSigned?: boolean;
 }
 
 // 로컬 날짜 YYYY-MM-DD
@@ -189,6 +192,7 @@ function CaregiverDashboard() {
 
   // Cancel contract modal state
   const [cancelContractId, setCancelContractId] = useState<string | null>(null);
+  const [signTarget, setSignTarget] = useState<ActivityHistory | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
 
@@ -316,6 +320,8 @@ function CaregiverDashboard() {
           location: formatLocation(c.careRequest?.location || ''),
           earnings: c.totalAmount || 0,
           hasTodayRecord,
+          guardianSigned: !!c.guardianSignedAt,
+          caregiverSigned: !!c.caregiverSignedAt,
         };
       }));
 
@@ -1309,6 +1315,21 @@ function CaregiverDashboard() {
                           {activity.earnings.toLocaleString()}원
                         </div>
                       </div>
+                      {/* PENDING_SIGNATURE: 서명 흐름 */}
+                      {activity.contractStatus === 'PENDING_SIGNATURE' && !activity.caregiverSigned && (
+                        <button
+                          type="button"
+                          onClick={() => setSignTarget(activity)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+                        >
+                          ✍ 계약서 서명
+                        </button>
+                      )}
+                      {activity.contractStatus === 'PENDING_SIGNATURE' && activity.caregiverSigned && !activity.guardianSigned && (
+                        <span className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+                          ⏱ 보호자 서명 대기 중
+                        </span>
+                      )}
                       {(activity.contractStatus === 'ACTIVE' || activity.contractStatus === 'EXTENDED') && (
                         <>
                           <Link
@@ -1842,6 +1863,27 @@ function CaregiverDashboard() {
           </div>
         </div>
       )}
+
+      {/* 디지털 서명 모달 */}
+      <SignaturePad
+        open={!!signTarget}
+        onClose={() => setSignTarget(null)}
+        signerName={userName}
+        title="계약서 간병인 서명"
+        description="아래 영역에 서명해주세요. 양측 서명이 완료되면 계약이 활성화됩니다."
+        onSubmit={async (signatureDataUrl) => {
+          if (!signTarget) return;
+          try {
+            await contractAPI.sign(signTarget.id, signatureDataUrl);
+            showToast("서명이 저장되었습니다.", "success");
+            setSignTarget(null);
+            await fetchData();
+          } catch (err: any) {
+            const msg = err?.response?.data?.message || err?.message || "서명 저장에 실패했습니다.";
+            throw new Error(msg);
+          }
+        }}
+      />
     </div>
   );
 }

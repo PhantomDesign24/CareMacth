@@ -8,6 +8,7 @@ import { formatDate, formatMoney, formatCareStatus, formatContractStatus, format
 import { showToast } from "@/components/Toast";
 import NotificationPrefsSection from "@/components/NotificationPrefsSection";
 import InsuranceTab from "@/components/InsuranceTab";
+import SignaturePad from "@/components/SignaturePad";
 import { SITE } from "@/config/site";
 
 interface CareHistory {
@@ -32,6 +33,9 @@ interface CareHistory {
   requestStatus: string; // CareRequest.status (OPEN/MATCHING/MATCHED/CANCELLED/COMPLETED)
   isPaid: boolean; // 결제 완료 여부
   createdAtRaw: string; // 요청 생성 시각
+  // 디지털 서명
+  guardianSigned?: boolean;
+  caregiverSigned?: boolean;
 }
 
 interface Payment {
@@ -194,6 +198,7 @@ function GuardianDashboard() {
 
   // Extend contract modal state
   const [extendTarget, setExtendTarget] = useState<CareHistory | null>(null);
+  const [signTarget, setSignTarget] = useState<CareHistory | null>(null);
   const [extendEndDate, setExtendEndDate] = useState("");
   const [extendNewCaregiver, setExtendNewCaregiver] = useState(false);
   const [extendLoading, setExtendLoading] = useState(false);
@@ -375,6 +380,8 @@ function GuardianDashboard() {
           requestStatus: crStatus,
           isPaid,
           createdAtRaw: c.careRequest?.createdAt || c.createdAt || '',
+          guardianSigned: !!c.guardianSignedAt,
+          caregiverSigned: !!c.caregiverSignedAt,
         };
       }));
 
@@ -920,6 +927,21 @@ function GuardianDashboard() {
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
+                        {/* PENDING_SIGNATURE: 서명 흐름 */}
+                        {!care.isVirtual && care.contractStatus === 'PENDING_SIGNATURE' && !care.guardianSigned && (
+                          <button
+                            type="button"
+                            onClick={() => setSignTarget(care)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+                          >
+                            ✍ 계약서 서명
+                          </button>
+                        )}
+                        {!care.isVirtual && care.contractStatus === 'PENDING_SIGNATURE' && care.guardianSigned && !care.caregiverSigned && (
+                          <span className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+                            ⏱ 간병인 서명 대기 중
+                          </span>
+                        )}
                         {/* 결제 대기 중이면 결제 버튼 최우선 표시 */}
                         {!care.isVirtual && (care.contractStatus === 'ACTIVE' || care.contractStatus === 'EXTENDED') && !care.isPaid && (
                           <Link
@@ -2094,6 +2116,27 @@ function GuardianDashboard() {
           </div>
         </div>
       )}
+
+      {/* 디지털 서명 모달 */}
+      <SignaturePad
+        open={!!signTarget}
+        onClose={() => setSignTarget(null)}
+        signerName={userName}
+        title="계약서 보호자 서명"
+        description="아래 영역에 서명해주세요. 양측 서명이 완료되면 계약이 활성화되며 결제를 진행할 수 있습니다."
+        onSubmit={async (signatureDataUrl) => {
+          if (!signTarget) return;
+          try {
+            await contractAPI.sign(signTarget.id, signatureDataUrl);
+            showToast("서명이 저장되었습니다.", "success");
+            setSignTarget(null);
+            await fetchData();
+          } catch (err: any) {
+            const msg = err?.response?.data?.message || err?.message || "서명 저장에 실패했습니다.";
+            throw new Error(msg);
+          }
+        }}
+      />
     </div>
   );
 }
