@@ -63,7 +63,7 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
     const recentPending = await prisma.payment.findFirst({
       where: {
         contractId,
-        status: 'PENDING',
+        status: { in: ['PENDING', 'COMPLETED', 'ESCROW'] },
         createdAt: { gte: new Date(Date.now() - 10 * 1000) },
       },
       orderBy: { createdAt: 'desc' },
@@ -132,16 +132,18 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       // 트랜지션 락: contract 행 잠금 + 트랜잭션 내부 재검증
       // (동시 두 요청이 모두 빠른 경로 가드를 통과해도 여기서 직렬화됨)
       await tx.$queryRaw`SELECT id FROM "Contract" WHERE id = ${contractId} FOR UPDATE`;
+      // PENDING 또는 DIRECT 즉시 완료 결제 모두 dedup 대상
+      // (DIRECT 결제는 status=COMPLETED 로 바로 들어가므로 status 필터 없이 createdAt 만 확인)
       const dupCheck = await tx.payment.findFirst({
         where: {
           contractId,
-          status: 'PENDING',
+          status: { in: ['PENDING', 'COMPLETED', 'ESCROW'] },
           createdAt: { gte: new Date(Date.now() - 10 * 1000) },
         },
         orderBy: { createdAt: 'desc' },
       });
       if (dupCheck) {
-        // 동시 요청에서 먼저 만들어진 PENDING 이 있으면 그것을 반환
+        // 동시 요청에서 먼저 만들어진 결제 있으면 그것을 반환
         return dupCheck;
       }
 
@@ -669,7 +671,27 @@ export const approveRefundRequest = async (req: AuthRequest, res: Response, next
     const refundAmount = payment.refundRequestAmount ?? payment.totalAmount;
     const reason = payment.refundRequestReason || '환불 요청 승인';
 
-    await executeRefund(payment, refundAmount, reason, req.user!.id);
+    // 트랜지션 락: refundReviewedAt=null 인 PENDING 만 클레임 (1회만 통과)
+    // 동시 두 관리자 승인 시 한쪽만 executeRefund 진행
+    const claim = await prisma.payment.updateMany({
+      where: { id, refundRequestStatus: 'PENDING', refundReviewedAt: null },
+      data: { refundReviewedAt: new Date(), refundReviewedBy: req.user!.id },
+    });
+    if (claim.count === 0) {
+      throw new AppError('이미 처리 중이거나 처리된 환불 요청입니다.', 409);
+    }
+
+    try {
+      await executeRefund(payment, refundAmount, reason, req.user!.id);
+      // executeRefund 가 status='APPROVED' 로 최종 마킹
+    } catch (e) {
+      // 실패 시 락 해제 (재시도 가능)
+      await prisma.payment.updateMany({
+        where: { id, refundRequestStatus: 'PENDING' },
+        data: { refundReviewedAt: null, refundReviewedBy: null },
+      });
+      throw e;
+    }
     res.json({ success: true, data: { refundAmount }, message: '환불이 승인·처리되었습니다.' });
   } catch (error) {
     next(error);
@@ -690,8 +712,9 @@ export const rejectRefundRequest = async (req: AuthRequest, res: Response, next:
       throw new AppError('처리 대기 중인 환불 요청이 아닙니다.', 400);
     }
 
-    await prisma.payment.update({
-      where: { id },
+    // 트랜지션 락: PENDING 인 경우에만 REJECTED 로 1회 전이
+    const lock = await prisma.payment.updateMany({
+      where: { id, refundRequestStatus: 'PENDING' },
       data: {
         refundRequestStatus: 'REJECTED',
         refundReviewedAt: new Date(),
@@ -699,6 +722,9 @@ export const rejectRefundRequest = async (req: AuthRequest, res: Response, next:
         refundRejectReason: reason || '환불 불가',
       },
     });
+    if (lock.count === 0) {
+      throw new AppError('이미 처리된 환불 요청입니다.', 409);
+    }
 
     if (payment.guardian?.userId) {
       await sendFromTemplate({
@@ -1036,10 +1062,15 @@ export const approveAdditionalFee = async (req: AuthRequest, res: Response, next
     if (!fee) throw new AppError('요청을 찾을 수 없습니다.', 404);
     if (fee.contract.guardianId !== guardian.id) throw new AppError('권한 없음', 403);
 
-    const updated = await prisma.additionalFee.update({
-      where: { id },
+    // 트랜지션 락: 미승인+미거절 상태에서만 1회 승인
+    const claim = await prisma.additionalFee.updateMany({
+      where: { id, approvedByGuardian: false, rejected: false },
       data: { approvedByGuardian: true },
     });
+    if (claim.count === 0) {
+      throw new AppError('이미 처리된 추가비 요청입니다.', 409);
+    }
+    const updated = await prisma.additionalFee.findUnique({ where: { id } });
     // 간병인 알림
     await sendFromTemplate({
       userId: fee.contract.caregiver.userId,
@@ -1066,11 +1097,15 @@ export const rejectAdditionalFee = async (req: AuthRequest, res: Response, next:
     });
     if (!fee) throw new AppError('요청을 찾을 수 없습니다.', 404);
     if (fee.contract.guardianId !== guardian.id) throw new AppError('권한 없음', 403);
-    // 삭제 대신 rejected 플래그로 이력 보존
-    const updated = await prisma.additionalFee.update({
-      where: { id },
-      data: { rejected: true, rejectReason: reason || null, approvedByGuardian: false },
+    // 트랜지션 락: 미승인+미거절 상태에서만 1회 거절
+    const claim = await prisma.additionalFee.updateMany({
+      where: { id, approvedByGuardian: false, rejected: false },
+      data: { rejected: true, rejectReason: reason || null },
     });
+    if (claim.count === 0) {
+      throw new AppError('이미 처리된 추가비 요청입니다.', 409);
+    }
+    const updated = await prisma.additionalFee.findUnique({ where: { id } });
     // 간병인 알림
     await sendFromTemplate({
       userId: fee.contract.caregiver.userId,
