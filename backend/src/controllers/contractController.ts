@@ -89,9 +89,13 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
         throw new AppError('이미 계약이 생성된 간병 요청입니다.', 400);
       }
 
-      // 간병인 근무 상태 재확인 (race condition 방지)
-      const freshCaregiver = await tx.caregiver.findUnique({ where: { id: caregiverId } });
-      if (freshCaregiver?.workStatus === 'WORKING') {
+      // 트랜지션 락: caregiver 행을 WORKING 으로 클레임 (workStatus != WORKING 일 때만 1회 성공)
+      // 동시 두 createContract 호출 시 한쪽만 클레임 성공
+      const claim = await tx.caregiver.updateMany({
+        where: { id: caregiverId, workStatus: { not: 'WORKING' } },
+        data: { workStatus: 'WORKING', totalMatches: { increment: 1 } },
+      });
+      if (claim.count === 0) {
         throw new AppError('간병인이 이미 다른 간병을 진행 중입니다.', 400);
       }
 
@@ -127,15 +131,7 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
         where: { id: careRequestId },
         data: { status: 'MATCHED' },
       });
-
-      // 간병인 근무 상태 업데이트
-      await tx.caregiver.update({
-        where: { id: caregiverId },
-        data: {
-          workStatus: 'WORKING',
-          totalMatches: { increment: 1 },
-        },
-      });
+      // 간병인 workStatus 는 위에서 트랜지션 락으로 이미 WORKING 으로 전이 + totalMatches 증가됨
 
       // 다른 지원 거절 처리
       await tx.careApplication.updateMany({
@@ -345,10 +341,10 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
     let penaltyWarning: string | null = null;
 
     await prisma.$transaction(async (tx) => {
-      // 계약 취소
+      // 트랜지션 락: ACTIVE 인 경우에만 1회 CANCELLED 전이 (동시 취소 race 차단)
       const cancelledByLabel = isCaregiverCancel ? '간병인' : '보호자';
-      await tx.contract.update({
-        where: { id },
+      const lock = await tx.contract.updateMany({
+        where: { id, status: 'ACTIVE' },
         data: {
           status: 'CANCELLED',
           cancelledAt: now,
@@ -357,6 +353,9 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
           cancellationPolicy: `총 ${totalDays}일 중 ${usedDays}일 사용. 사용금액: ${usedAmount}원, 환불금액: ${refundAmount}원`,
         },
       });
+      if (lock.count === 0) {
+        throw new AppError('이미 취소된 계약입니다.', 409);
+      }
 
       // 간병 요청 상태 업데이트
       await tx.careRequest.update({
