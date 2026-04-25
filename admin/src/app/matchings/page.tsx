@@ -622,6 +622,37 @@ export default function MatchingsPage() {
                   </div>
                 </section>
 
+                {/* 디지털 서명 상태 */}
+                <section>
+                  <h4 className="text-sm font-bold text-gray-900 mb-2">계약서 서명</h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className={`px-3 py-2 rounded-lg border ${
+                      detailData.guardianSignedAt
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                        : "bg-gray-50 border-gray-200 text-gray-500"
+                    }`}>
+                      <div className="font-bold mb-0.5">{detailData.guardianSignedAt ? "✓ 보호자 서명" : "✗ 보호자 미서명"}</div>
+                      {detailData.guardianSignedAt && (
+                        <div className="text-[10px] text-gray-500">
+                          {new Date(detailData.guardianSignedAt).toLocaleString("ko-KR")}
+                        </div>
+                      )}
+                    </div>
+                    <div className={`px-3 py-2 rounded-lg border ${
+                      detailData.caregiverSignedAt
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                        : "bg-gray-50 border-gray-200 text-gray-500"
+                    }`}>
+                      <div className="font-bold mb-0.5">{detailData.caregiverSignedAt ? "✓ 간병인 서명" : "✗ 간병인 미서명"}</div>
+                      {detailData.caregiverSignedAt && (
+                        <div className="text-[10px] text-gray-500">
+                          {new Date(detailData.caregiverSignedAt).toLocaleString("ko-KR")}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </section>
+
                 {/* 연장 / 추가비 */}
                 {(detailData.extensions?.length > 0 || detailData.additionalFees?.length > 0) && (
                   <section>
@@ -629,12 +660,28 @@ export default function MatchingsPage() {
                       연장 {detailData.extensions?.length || 0}건 · 추가비 {detailData.additionalFees?.length || 0}건
                     </h4>
                     <div className="space-y-1 text-xs text-gray-600">
-                      {detailData.extensions?.map((ex: any) => (
-                        <div key={ex.id} className="px-3 py-1.5 bg-blue-50 rounded">
-                          연장: {ex.additionalDays}일 · {ex.additionalAmount?.toLocaleString()}원
-                          {ex.approvedByCaregiver ? " · 간병인 수락" : " · 대기"}
-                        </div>
-                      ))}
+                      {detailData.extensions?.map((ex: any) => {
+                        const statusInfo = (() => {
+                          switch (ex.status) {
+                            case 'CONFIRMED': return { cls: 'bg-emerald-100 text-emerald-700', label: '결제완료·확정' };
+                            case 'PENDING_PAYMENT': return { cls: 'bg-amber-100 text-amber-700', label: '결제 대기' };
+                            case 'EXPIRED': return { cls: 'bg-gray-200 text-gray-600', label: '만료' };
+                            case 'REJECTED': return { cls: 'bg-red-100 text-red-700', label: '거절/취소' };
+                            default: return { cls: 'bg-gray-100 text-gray-600', label: ex.status || '-' };
+                          }
+                        })();
+                        return (
+                          <div key={ex.id} className="px-3 py-2 bg-blue-50 rounded flex items-center justify-between gap-2 flex-wrap">
+                            <div>
+                              연장: {ex.additionalDays}일 · {ex.additionalAmount?.toLocaleString()}원
+                              {ex.isNewCaregiver && <span className="ml-1 text-amber-700">(새 간병인)</span>}
+                            </div>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${statusInfo.cls}`}>
+                              {statusInfo.label}
+                            </span>
+                          </div>
+                        );
+                      })}
                       {detailData.additionalFees?.map((f: any) => (
                         <div key={f.id} className="px-3 py-1.5 bg-amber-50 rounded">
                           추가비: {f.amount?.toLocaleString()}원 · {f.reason}
