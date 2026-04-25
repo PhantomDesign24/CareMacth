@@ -52,4 +52,9 @@ router.patch('/:id/corporate-name', authorize('CAREGIVER'), [
   body('corporateName').optional({ nullable: true }).isLength({ max: 100 }).withMessage('법인명은 100자 이내여야 합니다.'),
 ], contractController.updateCorporateName);
 
+// POST /:id/sign - 디지털 서명 (보호자/병원/간병인)
+router.post('/:id/sign', authorize('GUARDIAN', 'HOSPITAL', 'CAREGIVER'), [
+  body('signature').notEmpty().withMessage('서명 이미지가 필요합니다.'),
+], contractController.signContract);
+
 export default router;

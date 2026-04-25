@@ -879,3 +879,108 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     next(error);
   }
 };
+
+// ============================================
+// 디지털 서명
+// ============================================
+
+// POST /:id/sign - 계약 서명 (보호자 또는 간병인)
+// Body: { signature: string (base64 PNG data URL) }
+export const signContract = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { signature } = req.body;
+
+    if (!signature || typeof signature !== 'string' || !signature.startsWith('data:image/')) {
+      throw new AppError('유효한 서명 이미지가 필요합니다. (base64 data URL)', 400);
+    }
+    if (signature.length > 500_000) {
+      throw new AppError('서명 이미지가 너무 큽니다. (최대 500KB)', 400);
+    }
+
+    const contract = await prisma.contract.findUnique({
+      where: { id },
+      include: { guardian: true, caregiver: true },
+    });
+    if (!contract) throw new AppError('계약을 찾을 수 없습니다.', 404);
+
+    const role = req.user!.role;
+    const now = new Date();
+
+    let updateData: any = {};
+    let signerRole: 'GUARDIAN' | 'CAREGIVER';
+
+    if (role === 'GUARDIAN' || role === 'HOSPITAL') {
+      const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
+      if (!guardian || contract.guardianId !== guardian.id) {
+        throw new AppError('이 계약의 보호자가 아닙니다.', 403);
+      }
+      if (contract.guardianSignedAt) {
+        throw new AppError('이미 서명을 완료했습니다.', 400);
+      }
+      updateData = { guardianSignature: signature, guardianSignedAt: now };
+      signerRole = 'GUARDIAN';
+    } else if (role === 'CAREGIVER') {
+      const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+      if (!caregiver || contract.caregiverId !== caregiver.id) {
+        throw new AppError('이 계약의 간병인이 아닙니다.', 403);
+      }
+      if (contract.caregiverSignedAt) {
+        throw new AppError('이미 서명을 완료했습니다.', 400);
+      }
+      updateData = { caregiverSignature: signature, caregiverSignedAt: now };
+      signerRole = 'CAREGIVER';
+    } else {
+      throw new AppError('서명 권한이 없습니다.', 403);
+    }
+
+    // 서명 후 양측 모두 서명 완료되면 PENDING_SIGNATURE → ACTIVE 전환
+    const willBothSigned =
+      (signerRole === 'GUARDIAN' && contract.caregiverSignedAt) ||
+      (signerRole === 'CAREGIVER' && contract.guardianSignedAt);
+
+    if (willBothSigned && contract.status === 'PENDING_SIGNATURE') {
+      updateData.status = 'ACTIVE';
+    }
+
+    const updated = await prisma.contract.update({
+      where: { id },
+      data: updateData,
+    });
+
+    // 알림 발송
+    if (signerRole === 'GUARDIAN') {
+      await sendFromTemplate({
+        userId: contract.caregiver.userId,
+        key: 'CONTRACT_SIGNED_GUARDIAN',
+        vars: {},
+        fallbackTitle: '보호자가 계약서에 서명했습니다',
+        fallbackBody: '계약서 보호자 서명이 완료되었습니다. 본인도 서명 후 계약이 시작됩니다.',
+        fallbackType: 'CONTRACT',
+        data: { contractId: id },
+      }).catch(() => {});
+    } else {
+      await sendFromTemplate({
+        userId: contract.guardian.userId,
+        key: 'CONTRACT_SIGNED_CAREGIVER',
+        vars: {},
+        fallbackTitle: '간병인이 계약서에 서명했습니다',
+        fallbackBody: '계약서 간병인 서명이 완료되었습니다. 본인도 서명 후 계약이 시작됩니다.',
+        fallbackType: 'CONTRACT',
+        data: { contractId: id },
+      }).catch(() => {});
+    }
+
+    res.json({
+      success: true,
+      data: {
+        guardianSigned: !!updated.guardianSignedAt,
+        caregiverSigned: !!updated.caregiverSignedAt,
+        status: updated.status,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

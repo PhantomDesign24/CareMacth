@@ -348,10 +348,18 @@ model CareApplication {
 // ==========================================
 
 enum ContractStatus {
+  PENDING_SIGNATURE // 서명 대기 (양측 서명 후 ACTIVE 전환)
   ACTIVE      // 진행중
   COMPLETED   // 완료
   CANCELLED   // 취소
   EXTENDED    // 연장됨
+}
+
+enum ExtensionStatus {
+  PENDING_PAYMENT // 결제 대기 (보호자가 추가금 결제 필요)
+  CONFIRMED       // 결제 완료 → 적용됨
+  EXPIRED         // 결제 미완료로 만료
+  REJECTED        // 간병인 거절
 }
 
 model Contract {
@@ -371,8 +379,15 @@ model Contract {
   platformFeeFixed Int           @default(0) // 플랫폼 고정 수수료 (원)
   taxRate         Float          @default(3.3) // 세율 (%)
 
-  status          ContractStatus @default(ACTIVE)
+  status          ContractStatus @default(PENDING_SIGNATURE)
   contractDoc     String?        // 계약서 URL
+
+  // 디지털 서명 (양측 서명 시각 + base64 PNG)
+  guardianSignature   String?    // 보호자 서명 이미지 (base64 data URL)
+  guardianSignedAt    DateTime?  // 보호자 서명 시각
+  caregiverSignature  String?    // 간병인 서명 이미지
+  caregiverSignedAt   DateTime?  // 간병인 서명 시각
+
   medicalActClause Boolean       @default(true) // 의료행위 금지 조항 포함
   corporateName   String?        // 간병인 사용 법인명 (이 계약건에서 파견된 업체명, PDF 간병일지용)
 
@@ -409,7 +424,17 @@ model ContractExtension {
   approvedByCaregiver Boolean @default(false)
   isNewCaregiver Boolean @default(false) // 새 간병인 요청 여부
 
+  // 연장 결제 흐름
+  status      ExtensionStatus @default(PENDING_PAYMENT)
+  paymentId   String?  @unique // 추가금 결제 (Payment 1:1 연결)
+  payment     Payment? @relation(fields: [paymentId], references: [id])
+  paidAt      DateTime?
+  expiredAt   DateTime?
+  rejectedAt  DateTime?
+  rejectReason String?
+
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // ==========================================
@@ -459,6 +484,9 @@ model Payment {
   refundedAt      DateTime?
   refundAmount    Int?
   refundReason    String?
+
+  // 연장 결제 역참조 (1:1)
+  extension       ContractExtension?
 
   // 환불 요청/승인 2단계 플로우
   refundRequestStatus RefundRequestStatus?  // null=요청 없음, PENDING=심사 대기, APPROVED/REJECTED
