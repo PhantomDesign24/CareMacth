@@ -264,11 +264,17 @@ export async function renderTemplate(key: string, vars: TemplateVars = {}): Prom
 } | null> {
   const template = await prisma.notificationTemplate.findUnique({ where: { key } });
   if (!template) return null;
-  const render = (s: string): string =>
-    s.replace(/\{\{(\w+)\}\}/g, (_, varName) => {
-      const v = vars[varName];
-      return v == null ? '' : String(v);
-    });
+  const render = (s: string): string => {
+    return s
+      .replace(/\{\{(\w+)\}\}/g, (_, varName) => {
+        const v = vars[varName];
+        return v == null ? '' : String(v);
+      })
+      // 변수가 빈 값으로 치환됐을 때 남는 중복 공백/앞뒤 공백 정리
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\s+([.,!?])/g, '$1') // 부호 앞 공백 제거
+      .trim();
+  };
   return {
     title: render(template.title),
     body: render(template.body),
