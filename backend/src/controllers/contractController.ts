@@ -853,6 +853,52 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     doc.font('Kor').fontSize(10).fillColor(COLOR_SUB).text('(서명 / 인)', MARGIN + boxW + 30, y + 58);
 
     y += boxH + 16;
+
+    // 서명 영역 (양측 서명 이미지 삽입)
+    const sigBoxW = (CONTENT_W - 20) / 2;
+    const sigBoxH = 90;
+    const sigBoxY = y;
+    // 보호자
+    doc.lineWidth(0.6).strokeColor('#D1D5DB').rect(MARGIN, sigBoxY, sigBoxW, sigBoxH).stroke();
+    doc.font('KorBold').fontSize(9).fillColor(COLOR_SUB).text('갑 (보호자) 서명', MARGIN + 8, sigBoxY + 6);
+    if ((contract as any).guardianSignature) {
+      try {
+        const sig = (contract as any).guardianSignature as string;
+        const base64 = sig.includes(',') ? sig.split(',')[1] : sig;
+        const buf = Buffer.from(base64, 'base64');
+        doc.image(buf, MARGIN + 10, sigBoxY + 22, { fit: [sigBoxW - 20, sigBoxH - 40] });
+      } catch {}
+      const signedAt = (contract as any).guardianSignedAt;
+      if (signedAt) {
+        doc.font('Kor').fontSize(7).fillColor('#9CA3AF')
+          .text(`서명일시: ${new Date(signedAt).toLocaleString('ko-KR')}`, MARGIN + 8, sigBoxY + sigBoxH - 14);
+      }
+    } else {
+      doc.font('Kor').fontSize(9).fillColor('#9CA3AF')
+        .text('(미서명)', MARGIN, sigBoxY + sigBoxH / 2, { width: sigBoxW, align: 'center' });
+    }
+    // 간병인
+    const sigX2 = MARGIN + sigBoxW + 20;
+    doc.lineWidth(0.6).strokeColor('#D1D5DB').rect(sigX2, sigBoxY, sigBoxW, sigBoxH).stroke();
+    doc.font('KorBold').fontSize(9).fillColor(COLOR_SUB).text('을 (간병인) 서명', sigX2 + 8, sigBoxY + 6);
+    if ((contract as any).caregiverSignature) {
+      try {
+        const sig = (contract as any).caregiverSignature as string;
+        const base64 = sig.includes(',') ? sig.split(',')[1] : sig;
+        const buf = Buffer.from(base64, 'base64');
+        doc.image(buf, sigX2 + 10, sigBoxY + 22, { fit: [sigBoxW - 20, sigBoxH - 40] });
+      } catch {}
+      const signedAt = (contract as any).caregiverSignedAt;
+      if (signedAt) {
+        doc.font('Kor').fontSize(7).fillColor('#9CA3AF')
+          .text(`서명일시: ${new Date(signedAt).toLocaleString('ko-KR')}`, sigX2 + 8, sigBoxY + sigBoxH - 14);
+      }
+    } else {
+      doc.font('Kor').fontSize(9).fillColor('#9CA3AF')
+        .text('(미서명)', sigX2, sigBoxY + sigBoxH / 2, { width: sigBoxW, align: 'center' });
+    }
+
+    y = sigBoxY + sigBoxH + 16;
     doc.font('Kor').fontSize(9).fillColor(COLOR_SUB)
       .text(`계약일: ${new Date(contract.createdAt || new Date()).toLocaleDateString('ko-KR')}`, MARGIN, y, { width: CONTENT_W, align: 'center' });
     y += 14;
