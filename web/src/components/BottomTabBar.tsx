@@ -32,6 +32,9 @@ export default function BottomTabBar() {
 
   if (!mounted || !user) return null;
 
+  // 모바일 앱(WebView) 안에서는 네이티브 탭바와 중복되므로 숨김
+  if (typeof window !== "undefined" && (window as any).IS_CAREMATCH_APP) return null;
+
   // ADMIN은 웹 탭바 숨김 (관리자 패널 별도)
   if (user.role === "ADMIN") return null;
 
