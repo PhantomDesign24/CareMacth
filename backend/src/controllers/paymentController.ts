@@ -58,7 +58,8 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       }
     }
 
-    // 중복 결제 시도 방지: 10초 이내 PENDING 결제가 있으면 기존 것 반환
+    // 중복 결제 사전 체크 (빠른 경로 — 트랜잭션 밖 1차 가드)
+    // 정확한 동시성 보장은 아래 $transaction 내부에서 수행
     const recentPending = await prisma.payment.findFirst({
       where: {
         contractId,
@@ -128,6 +129,22 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
     const orderId = generateOrderId();
 
     const payment = await prisma.$transaction(async (tx) => {
+      // 트랜지션 락: contract 행 잠금 + 트랜잭션 내부 재검증
+      // (동시 두 요청이 모두 빠른 경로 가드를 통과해도 여기서 직렬화됨)
+      await tx.$queryRaw`SELECT id FROM "Contract" WHERE id = ${contractId} FOR UPDATE`;
+      const dupCheck = await tx.payment.findFirst({
+        where: {
+          contractId,
+          status: 'PENDING',
+          createdAt: { gte: new Date(Date.now() - 10 * 1000) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (dupCheck) {
+        // 동시 요청에서 먼저 만들어진 PENDING 이 있으면 그것을 반환
+        return dupCheck;
+      }
+
       // 포인트 차감 (트랜잭션 내에서 재확인하여 음수 방지)
       if (actualPointsUsed > 0) {
         const currentUser = await tx.user.findUnique({ where: { id: req.user!.id } });
@@ -257,6 +274,16 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
       throw new AppError('결제 금액이 일치하지 않습니다.', 400);
     }
 
+    // 트랜지션 락: tossPaymentKey 클레임으로 단일 요청만 토스 호출 진행
+    // (동시 confirm 호출 시 한쪽만 클레임 성공, 다른쪽은 409)
+    const claim = await prisma.payment.updateMany({
+      where: { id: payment.id, status: 'PENDING', tossPaymentKey: null },
+      data: { tossPaymentKey: paymentKey },
+    });
+    if (claim.count === 0) {
+      throw new AppError('이미 처리 중이거나 처리된 결제입니다.', 409);
+    }
+
     // 토스페이먼츠 결제 승인 API 호출
     const secretKey = config.toss.secretKey;
     const encodedKey = Buffer.from(`${secretKey}:`).toString('base64');
@@ -280,35 +307,42 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
         });
 
         await prisma.$transaction(async (tx) => {
-          // 결제 완료 처리
-          await tx.payment.update({
-            where: { id: payment.id },
+          // 결제 완료 처리 (트랜지션 락: 클레임된 status=PENDING + tossPaymentKey=paymentKey 만 통과)
+          const finalize = await tx.payment.updateMany({
+            where: { id: payment.id, status: 'PENDING', tossPaymentKey: paymentKey },
             data: {
               status: 'ESCROW',
-              tossPaymentKey: paymentKey,
               paidAt: new Date(),
             },
           });
+          if (finalize.count === 0) {
+            // 다른 요청이 이미 finalize 했거나 상태 변경됨 — 안전하게 종료
+            throw new AppError('결제 완료 처리 중 충돌이 발생했습니다.', 409);
+          }
 
           // 연장 결제: extension CONFIRMED + Contract.endDate 갱신
           if (linkedExtension && payment.contract) {
             const now = new Date();
-            await tx.contractExtension.update({
-              where: { id: linkedExtension.id },
+            // 연장도 트랜지션 락 (PENDING_PAYMENT → CONFIRMED 만 1회 진행)
+            const extResult = await tx.contractExtension.updateMany({
+              where: { id: linkedExtension.id, status: 'PENDING_PAYMENT' },
               data: { status: 'CONFIRMED', paidAt: now },
             });
-            await tx.contract.update({
-              where: { id: payment.contract.id },
-              data: {
-                endDate: linkedExtension.newEndDate,
-                totalAmount: { increment: linkedExtension.additionalAmount },
-                status: 'EXTENDED',
-              },
-            });
-            await tx.careRequest.update({
-              where: { id: payment.contract.careRequestId },
-              data: { endDate: linkedExtension.newEndDate },
-            });
+            if (extResult.count === 1) {
+              // 우리 요청이 연장을 처음으로 CONFIRMED 시킨 경우에만 contract increment
+              await tx.contract.update({
+                where: { id: payment.contract.id },
+                data: {
+                  endDate: linkedExtension.newEndDate,
+                  totalAmount: { increment: linkedExtension.additionalAmount },
+                  status: 'EXTENDED',
+                },
+              });
+              await tx.careRequest.update({
+                where: { id: payment.contract.careRequestId },
+                data: { endDate: linkedExtension.newEndDate },
+              });
+            }
           }
           // 일반 결제: 간병 요청 상태 업데이트
           else if (payment.contract) {
@@ -372,8 +406,9 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
       // 토스 API 에러 처리
       const errorMessage = tossError.response?.data?.message || '결제 승인 중 오류가 발생했습니다.';
 
-      await prisma.payment.update({
-        where: { id: payment.id },
+      // FAILED 마킹은 PENDING 일 때만 (이미 ESCROW 로 전이됐다면 overwrite 금지)
+      await prisma.payment.updateMany({
+        where: { id: payment.id, status: 'PENDING' },
         data: { status: 'FAILED' },
       });
 

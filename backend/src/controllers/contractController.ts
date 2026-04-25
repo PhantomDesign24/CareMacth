@@ -602,20 +602,33 @@ export const extendContract = async (req: AuthRequest, res: Response, next: Next
     const newEndDate = new Date(currentEndDate.getTime() + additionalDays * 86400000);
     const additionalAmount = contract.dailyRate * additionalDays;
     const newCaregiverFlag = !!isNewCaregiver;
-
-    // 신규 간병인 모드: 즉시 새 공고 흐름 (현재 단순화 — 별도 CareRequest 생성 로직은 추후 확장)
-    // 기존 간병인 연장: PENDING_CAREGIVER_APPROVAL → 간병인 수락 후 PENDING_PAYMENT
     const initialStatus = newCaregiverFlag ? 'PENDING_PAYMENT' : 'PENDING_CAREGIVER_APPROVAL';
 
-    const extension = await prisma.contractExtension.create({
-      data: {
-        contractId: id,
-        newEndDate,
-        additionalDays: parseInt(additionalDays),
-        additionalAmount,
-        isNewCaregiver: newCaregiverFlag,
-        status: initialStatus,
-      },
+    // 트랜지션 락: contract 행 잠금 → in-flight 검증 → 생성 (동시 신청 차단)
+    const extension = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Contract" WHERE id = ${id} FOR UPDATE`;
+      const inFlight = await tx.contractExtension.findFirst({
+        where: {
+          contractId: id,
+          status: { in: ['PENDING_CAREGIVER_APPROVAL', 'PENDING_PAYMENT'] },
+        },
+      });
+      if (inFlight) {
+        throw new AppError(
+          `이미 진행 중인 연장 요청이 있습니다. (${inFlight.status}) 완료 또는 취소 후 다시 시도해주세요.`,
+          400,
+        );
+      }
+      return tx.contractExtension.create({
+        data: {
+          contractId: id,
+          newEndDate,
+          additionalDays: parseInt(additionalDays),
+          additionalAmount,
+          isNewCaregiver: newCaregiverFlag,
+          status: initialStatus,
+        },
+      });
     });
 
     // 신규 간병인 모드: 보호자에게 즉시 결제 안내 (간병인 동의 단계 스킵)
@@ -958,46 +971,53 @@ export const signContract = async (req: AuthRequest, res: Response, next: NextFu
     const role = req.user!.role;
     const now = new Date();
 
-    let updateData: any = {};
     let signerRole: 'GUARDIAN' | 'CAREGIVER';
+    let lockResult: { count: number };
 
     if (role === 'GUARDIAN' || role === 'HOSPITAL') {
       const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
       if (!guardian || contract.guardianId !== guardian.id) {
         throw new AppError('이 계약의 보호자가 아닙니다.', 403);
       }
-      if (contract.guardianSignedAt) {
+      // 트랜지션 락: guardianSignedAt = null 일 때만 1회 서명 기록
+      lockResult = await prisma.contract.updateMany({
+        where: { id, guardianSignedAt: null },
+        data: { guardianSignature: signature, guardianSignedAt: now },
+      });
+      if (lockResult.count === 0) {
         throw new AppError('이미 서명을 완료했습니다.', 400);
       }
-      updateData = { guardianSignature: signature, guardianSignedAt: now };
       signerRole = 'GUARDIAN';
     } else if (role === 'CAREGIVER') {
       const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
       if (!caregiver || contract.caregiverId !== caregiver.id) {
         throw new AppError('이 계약의 간병인이 아닙니다.', 403);
       }
-      if (contract.caregiverSignedAt) {
+      lockResult = await prisma.contract.updateMany({
+        where: { id, caregiverSignedAt: null },
+        data: { caregiverSignature: signature, caregiverSignedAt: now },
+      });
+      if (lockResult.count === 0) {
         throw new AppError('이미 서명을 완료했습니다.', 400);
       }
-      updateData = { caregiverSignature: signature, caregiverSignedAt: now };
       signerRole = 'CAREGIVER';
     } else {
       throw new AppError('서명 권한이 없습니다.', 403);
     }
 
-    // 서명 후 양측 모두 서명 완료되면 PENDING_SIGNATURE → ACTIVE 전환
-    const willBothSigned =
-      (signerRole === 'GUARDIAN' && contract.caregiverSignedAt) ||
-      (signerRole === 'CAREGIVER' && contract.guardianSignedAt);
-
-    if (willBothSigned && contract.status === 'PENDING_SIGNATURE') {
-      updateData.status = 'ACTIVE';
-    }
-
-    const updated = await prisma.contract.update({
-      where: { id },
-      data: updateData,
+    // 양측 모두 서명되었는지 확인 후 ACTIVE 전환 (별도 트랜지션 락)
+    // PENDING_SIGNATURE 이고 양측 signedAt 모두 not null 일 때만 ACTIVE
+    await prisma.contract.updateMany({
+      where: {
+        id,
+        status: 'PENDING_SIGNATURE',
+        guardianSignedAt: { not: null },
+        caregiverSignedAt: { not: null },
+      },
+      data: { status: 'ACTIVE' },
     });
+
+    const updated = await prisma.contract.findUnique({ where: { id } });
 
     // 알림 발송
     if (signerRole === 'GUARDIAN') {
@@ -1025,9 +1045,9 @@ export const signContract = async (req: AuthRequest, res: Response, next: NextFu
     res.json({
       success: true,
       data: {
-        guardianSigned: !!updated.guardianSignedAt,
-        caregiverSigned: !!updated.caregiverSignedAt,
-        status: updated.status,
+        guardianSigned: !!updated?.guardianSignedAt,
+        caregiverSigned: !!updated?.caregiverSignedAt,
+        status: updated?.status,
       },
     });
   } catch (error) {
@@ -1077,14 +1097,21 @@ export const rejectExtension = async (req: AuthRequest, res: Response, next: Nex
       throw new AppError('접근 권한이 없습니다.', 403);
     }
 
-    await prisma.contractExtension.update({
-      where: { id: extensionId },
+    // 트랜지션 락: PENDING 상태일 때만 1회 REJECTED 처리
+    const lock = await prisma.contractExtension.updateMany({
+      where: {
+        id: extensionId,
+        status: { in: ['PENDING_CAREGIVER_APPROVAL', 'PENDING_PAYMENT'] },
+      },
       data: {
         status: 'REJECTED',
         rejectedAt: new Date(),
         rejectReason: reason || (role === 'CAREGIVER' ? '간병인이 연장 거절' : '보호자가 연장 취소'),
       },
     });
+    if (lock.count === 0) {
+      throw new AppError('이미 처리된 연장입니다.', 400);
+    }
 
     // 알림: 상대방에게
     const targetUserId =
@@ -1143,13 +1170,18 @@ export const approveExtension = async (req: AuthRequest, res: Response, next: Ne
       throw new AppError('이 계약의 간병인이 아닙니다.', 403);
     }
 
-    const updated = await prisma.contractExtension.update({
-      where: { id: extensionId },
+    // 트랜지션 락: PENDING_CAREGIVER_APPROVAL 인 경우에만 1회 PENDING_PAYMENT 로 전이
+    const lockResult = await prisma.contractExtension.updateMany({
+      where: { id: extensionId, status: 'PENDING_CAREGIVER_APPROVAL' },
       data: {
         status: 'PENDING_PAYMENT',
         approvedByCaregiver: true,
       },
     });
+    if (lockResult.count === 0) {
+      throw new AppError('이미 처리된 연장입니다.', 400);
+    }
+    const updated = await prisma.contractExtension.findUnique({ where: { id: extensionId } });
 
     // 보호자에게 결제 안내
     await sendFromTemplate({
