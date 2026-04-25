@@ -3,7 +3,7 @@
 import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
-import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, reportAPI, paymentAPI } from "@/lib/api";
+import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, reportAPI, paymentAPI, extensionAPI } from "@/lib/api";
 import { formatDate, formatContractStatus, formatCareType, formatLocation, formatPenaltyType } from "@/lib/format";
 import { showToast } from "@/components/Toast";
 import SignaturePad from "@/components/SignaturePad";
@@ -59,6 +59,13 @@ interface ActivityHistory {
   hasTodayRecord?: boolean; // 오늘 간병일지 작성 여부
   guardianSigned?: boolean;
   caregiverSigned?: boolean;
+  pendingExtension?: {
+    id: string;
+    additionalDays: number;
+    additionalAmount: number;
+    newEndDate: string;
+    status: string;
+  } | null;
 }
 
 // 로컬 날짜 YYYY-MM-DD
@@ -307,6 +314,9 @@ function CaregiverDashboard() {
           if (!r.date) return false;
           return localYMD(r.date) === todayYMD;
         });
+        // 간병인 수락 대기 중 연장
+        const exts = Array.isArray(c.extensions) ? c.extensions : [];
+        const pendingExt = exts.find((e: any) => e.status === 'PENDING_CAREGIVER_APPROVAL') || null;
         return {
           id: c.id,
           patientName: c.careRequest?.patient?.name || '-',
@@ -322,6 +332,15 @@ function CaregiverDashboard() {
           hasTodayRecord,
           guardianSigned: !!c.guardianSignedAt,
           caregiverSigned: !!c.caregiverSignedAt,
+          pendingExtension: pendingExt
+            ? {
+                id: pendingExt.id,
+                additionalDays: pendingExt.additionalDays,
+                additionalAmount: pendingExt.additionalAmount,
+                newEndDate: formatDate(pendingExt.newEndDate),
+                status: pendingExt.status,
+              }
+            : null,
         };
       }));
 
@@ -1308,6 +1327,56 @@ function CaregiverDashboard() {
                           기간: {activity.startDate} ~ {activity.endDate}
                         </span>
                       </div>
+                      {activity.pendingExtension && activity.pendingExtension.status === 'PENDING_CAREGIVER_APPROVAL' && (
+                        <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                          <div className="text-sm font-semibold text-amber-800">
+                            🔔 연장 수락 요청
+                          </div>
+                          <div className="mt-1 text-xs text-amber-700">
+                            +{activity.pendingExtension.additionalDays}일 (~{activity.pendingExtension.newEndDate}) · 추가금 {activity.pendingExtension.additionalAmount.toLocaleString()}원
+                          </div>
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!activity.pendingExtension) return;
+                                try {
+                                  await extensionAPI.approve(activity.id, activity.pendingExtension.id);
+                                  showToast('연장을 수락했습니다. 보호자 결제 대기 중', 'success');
+                                  await fetchData();
+                                } catch (e: any) {
+                                  showToast(e?.response?.data?.error || '수락 실패', 'error');
+                                }
+                              }}
+                              className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg"
+                            >
+                              수락
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!activity.pendingExtension) return;
+                                const reason = window.prompt('거절 사유를 입력해주세요. (선택)') || '';
+                                try {
+                                  await extensionAPI.reject(activity.id, activity.pendingExtension.id, reason);
+                                  showToast('연장을 거절했습니다.', 'info');
+                                  await fetchData();
+                                } catch (e: any) {
+                                  showToast(e?.response?.data?.error || '거절 실패', 'error');
+                                }
+                              }}
+                              className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg"
+                            >
+                              거절
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {activity.pendingExtension && activity.pendingExtension.status === 'PENDING_PAYMENT' && (
+                        <div className="mt-3 p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-800">
+                          ✓ 연장 수락 완료 · 보호자 결제 대기 중 (+{activity.pendingExtension.additionalDays}일)
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:shrink-0">
                       <div className="text-right">

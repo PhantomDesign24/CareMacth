@@ -300,6 +300,11 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
                 select: { id: true, rating: true, comment: true, wouldRehire: true, createdAt: true },
                 take: 1,
               },
+              extensions: {
+                where: { status: { in: ['PENDING_CAREGIVER_APPROVAL', 'PENDING_PAYMENT'] } },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
             },
           },
           _count: { select: { applications: true } },

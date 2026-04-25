@@ -260,6 +260,10 @@ export const careRecordAPI = {
 export const extensionAPI = {
   extend: (contractId: string, data: { additionalDays: number; isNewCaregiver?: boolean }) =>
     api.post(`/contracts/${contractId}/extend`, data),
+  approve: (contractId: string, extensionId: string) =>
+    api.post(`/contracts/${contractId}/extension/${extensionId}/approve`),
+  reject: (contractId: string, extensionId: string, reason?: string) =>
+    api.post(`/contracts/${contractId}/extension/${extensionId}/reject`, { reason }),
 };
 
 export const careRequestExtAPI = {

@@ -65,4 +65,11 @@ router.post(
   contractController.rejectExtension,
 );
 
+// POST /:contractId/extension/:extensionId/approve - 간병인 연장 수락
+router.post(
+  '/:contractId/extension/:extensionId/approve',
+  authorize('CAREGIVER'),
+  contractController.approveExtension,
+);
+
 export default router;

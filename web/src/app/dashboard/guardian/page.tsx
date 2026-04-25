@@ -36,6 +36,14 @@ interface CareHistory {
   // 디지털 서명
   guardianSigned?: boolean;
   caregiverSigned?: boolean;
+  // 진행 중 연장 (보호자 시점)
+  pendingExtension?: {
+    id: string;
+    additionalDays: number;
+    additionalAmount: number;
+    newEndDate: string;
+    status: string; // PENDING_CAREGIVER_APPROVAL | PENDING_PAYMENT
+  } | null;
 }
 
 interface Payment {
@@ -382,6 +390,21 @@ function GuardianDashboard() {
           createdAtRaw: c.careRequest?.createdAt || c.createdAt || '',
           guardianSigned: !!c.guardianSignedAt,
           caregiverSigned: !!c.caregiverSignedAt,
+          pendingExtension: (() => {
+            const exts = Array.isArray(c.extensions) ? c.extensions : [];
+            const pending = exts.find((e: any) =>
+              e.status === 'PENDING_CAREGIVER_APPROVAL' || e.status === 'PENDING_PAYMENT'
+            );
+            return pending
+              ? {
+                  id: pending.id,
+                  additionalDays: pending.additionalDays,
+                  additionalAmount: pending.additionalAmount,
+                  newEndDate: formatDate(pending.newEndDate),
+                  status: pending.status,
+                }
+              : null;
+          })(),
         };
       }));
 
@@ -613,25 +636,24 @@ function GuardianDashboard() {
         additionalDays: extraDays,
         isNewCaregiver: extendNewCaregiver,
       });
-      const data = res.data || {};
+      const data = res.data?.data || res.data || {};
       const extensionId = data?.extension?.id;
       const contractId = extendTarget.id;
       setExtendTarget(null);
 
-      // 연장 신청 후 결제 페이지로 이동 (extensionId 쿼리)
-      if (extensionId && !extendNewCaregiver) {
+      if (extendNewCaregiver) {
+        // 새 간병인: 즉시 결제 가능
         const proceed = confirm(
-          `연장 ${extraDays}일 추가금 ${additionalAmount.toLocaleString()}원\n바로 결제 페이지로 이동하시겠습니까?\n(취소 시 1시간 내 결제 미완료 시 자동 만료)`
+          `새 간병인 매칭으로 ${extraDays}일 연장이 신청되었습니다.\n추가금 ${additionalAmount.toLocaleString()}원 결제 페이지로 이동하시겠습니까?`
         );
-        if (proceed) {
+        if (proceed && extensionId) {
           window.location.href = `/dashboard/guardian/payment/${contractId}?extensionId=${extensionId}`;
           return;
         }
       } else {
+        // 기존 간병인: 간병인 수락 대기
         alert(
-          extendNewCaregiver
-            ? "연장 요청이 접수되었습니다. 새 간병인 공고가 올라갔습니다."
-            : `연장 신청이 접수되었습니다. 결제 후 적용됩니다.`
+          `연장 요청이 발송되었습니다.\n간병인 수락 후 결제 안내가 전달됩니다.`
         );
       }
       await fetchData();
@@ -1054,7 +1076,7 @@ function GuardianDashboard() {
                             취소
                           </button>
                         )}
-                        {showExtendButton(care.endDate, care.status) && (
+                        {showExtendButton(care.endDate, care.status) && !care.pendingExtension && (
                           <button
                             type="button"
                             className="btn-accent text-sm px-4 py-2"
@@ -1062,6 +1084,19 @@ function GuardianDashboard() {
                           >
                             연장 요청
                           </button>
+                        )}
+                        {care.pendingExtension && care.pendingExtension.status === 'PENDING_CAREGIVER_APPROVAL' && (
+                          <span className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+                            ⏱ 간병인 응답 대기 중 (+{care.pendingExtension.additionalDays}일)
+                          </span>
+                        )}
+                        {care.pendingExtension && care.pendingExtension.status === 'PENDING_PAYMENT' && (
+                          <Link
+                            href={`/dashboard/guardian/payment/${care.id}?extensionId=${care.pendingExtension.id}`}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+                          >
+                            💳 연장 결제 ({care.pendingExtension.additionalAmount.toLocaleString()}원)
+                          </Link>
                         )}
                         {!care.isVirtual && (
                           <button

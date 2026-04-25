@@ -427,6 +427,12 @@ export const getActivity = async (req: AuthRequest, res: Response, next: NextFun
             select: { id: true, date: true },
             take: 1,
           },
+          // 진행 중 연장 (수락/결제 대기) — 프론트 알림용
+          extensions: {
+            where: { status: { in: ['PENDING_CAREGIVER_APPROVAL', 'PENDING_PAYMENT'] } },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip,

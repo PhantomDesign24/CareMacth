@@ -570,6 +570,7 @@ export const extendContract = async (req: AuthRequest, res: Response, next: Next
     const contract = await prisma.contract.findUnique({
       where: { id },
       include: {
+        guardian: { select: { id: true, userId: true } },
         caregiver: {
           include: { user: { select: { name: true } } },
         },
@@ -600,33 +601,53 @@ export const extendContract = async (req: AuthRequest, res: Response, next: Next
     const currentEndDate = new Date(contract.endDate);
     const newEndDate = new Date(currentEndDate.getTime() + additionalDays * 86400000);
     const additionalAmount = contract.dailyRate * additionalDays;
+    const newCaregiverFlag = !!isNewCaregiver;
 
-    // 연장 기록만 생성 (status=PENDING_PAYMENT). Contract.endDate는 결제 완료 후 갱신
+    // 신규 간병인 모드: 즉시 새 공고 흐름 (현재 단순화 — 별도 CareRequest 생성 로직은 추후 확장)
+    // 기존 간병인 연장: PENDING_CAREGIVER_APPROVAL → 간병인 수락 후 PENDING_PAYMENT
+    const initialStatus = newCaregiverFlag ? 'PENDING_PAYMENT' : 'PENDING_CAREGIVER_APPROVAL';
+
     const extension = await prisma.contractExtension.create({
       data: {
         contractId: id,
         newEndDate,
         additionalDays: parseInt(additionalDays),
         additionalAmount,
-        isNewCaregiver: isNewCaregiver ?? false,
-        // status: 'PENDING_PAYMENT' default
+        isNewCaregiver: newCaregiverFlag,
+        status: initialStatus,
       },
     });
 
-    // 간병인에게 연장 요청 푸시
-    await sendFromTemplate({
-      userId: contract.caregiver.userId,
-      key: 'EXTENSION_REQUEST',
-      vars: {
-        patientName: contract.careRequest.patient.name,
-        additionalDays: String(additionalDays),
-        newEndDate: newEndDate.toLocaleDateString('ko-KR'),
-      },
-      fallbackTitle: '계약 연장 요청',
-      fallbackBody: `${contract.careRequest.patient.name} 환자의 간병 ${additionalDays}일 연장이 신청되었습니다. (보호자 결제 대기 중)`,
-      fallbackType: 'EXTENSION',
-      data: { contractId: id, extensionId: extension.id },
-    }).catch(() => {});
+    // 신규 간병인 모드: 보호자에게 즉시 결제 안내 (간병인 동의 단계 스킵)
+    if (newCaregiverFlag) {
+      await sendFromTemplate({
+        userId: contract.guardian.userId,
+        key: 'PAYMENT_EXTENSION_REQUIRED',
+        vars: {
+          additionalDays: String(additionalDays),
+          additionalAmount: additionalAmount.toLocaleString(),
+        },
+        fallbackTitle: '연장 결제 진행',
+        fallbackBody: `새 간병인 매칭으로 ${additionalDays}일 연장이 신청되었습니다. 추가금 ${additionalAmount.toLocaleString()}원 결제를 진행해주세요.`,
+        fallbackType: 'EXTENSION',
+        data: { contractId: id, extensionId: extension.id },
+      }).catch(() => {});
+    } else {
+      // 기존 간병인: 간병인에게 수락/거절 요청 푸시
+      await sendFromTemplate({
+        userId: contract.caregiver.userId,
+        key: 'EXTENSION_REQUEST',
+        vars: {
+          patientName: contract.careRequest.patient.name,
+          additionalDays: String(additionalDays),
+          newEndDate: newEndDate.toLocaleDateString('ko-KR'),
+        },
+        fallbackTitle: '간병 연장 수락 요청',
+        fallbackBody: `${contract.careRequest.patient.name} 환자 ${additionalDays}일 연장 수락 여부를 알려주세요.`,
+        fallbackType: 'EXTENSION',
+        data: { contractId: id, extensionId: extension.id, requiresApproval: true },
+      }).catch(() => {});
+    }
 
     res.status(201).json({
       success: true,
@@ -634,7 +655,9 @@ export const extendContract = async (req: AuthRequest, res: Response, next: Next
         extension,
         newEndDate,
         additionalAmount,
-        message: '연장이 신청되었습니다. 결제를 진행해주세요.',
+        message: newCaregiverFlag
+          ? '신규 간병인 연장 신청이 접수되었습니다. 결제를 진행해주세요.'
+          : '간병인 수락 후 결제 단계로 진행됩니다.',
       },
     });
   } catch (error) {
@@ -1034,7 +1057,7 @@ export const rejectExtension = async (req: AuthRequest, res: Response, next: Nex
     if (!ext || ext.contractId !== contractId) {
       throw new AppError('연장 정보를 찾을 수 없습니다.', 404);
     }
-    if (ext.status !== 'PENDING_PAYMENT') {
+    if (ext.status !== 'PENDING_PAYMENT' && ext.status !== 'PENDING_CAREGIVER_APPROVAL') {
       throw new AppError(`이미 처리된 연장입니다. (${ext.status})`, 400);
     }
 
@@ -1080,6 +1103,72 @@ export const rejectExtension = async (req: AuthRequest, res: Response, next: Nex
     }).catch(() => {});
 
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /:contractId/extension/:extensionId/approve - 간병인 연장 수락
+// PENDING_CAREGIVER_APPROVAL → PENDING_PAYMENT 전환, 보호자에게 결제 안내
+export const approveExtension = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { contractId, extensionId } = req.params;
+
+    const ext = await prisma.contractExtension.findUnique({
+      where: { id: extensionId },
+      include: {
+        contract: {
+          include: {
+            guardian: true,
+            caregiver: true,
+            careRequest: { include: { patient: true } },
+          },
+        },
+      },
+    });
+    if (!ext || ext.contractId !== contractId) {
+      throw new AppError('연장 정보를 찾을 수 없습니다.', 404);
+    }
+    if (ext.status !== 'PENDING_CAREGIVER_APPROVAL') {
+      throw new AppError(`수락 대기 상태가 아닙니다. (${ext.status})`, 400);
+    }
+
+    // 간병인 본인 검증
+    const role = req.user!.role;
+    if (role !== 'CAREGIVER') {
+      throw new AppError('간병인만 연장을 수락할 수 있습니다.', 403);
+    }
+    const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+    if (!caregiver || ext.contract.caregiverId !== caregiver.id) {
+      throw new AppError('이 계약의 간병인이 아닙니다.', 403);
+    }
+
+    const updated = await prisma.contractExtension.update({
+      where: { id: extensionId },
+      data: {
+        status: 'PENDING_PAYMENT',
+        approvedByCaregiver: true,
+      },
+    });
+
+    // 보호자에게 결제 안내
+    await sendFromTemplate({
+      userId: ext.contract.guardian.userId,
+      key: 'PAYMENT_EXTENSION_REQUIRED',
+      vars: {
+        additionalDays: String(ext.additionalDays),
+        additionalAmount: ext.additionalAmount.toLocaleString(),
+      },
+      fallbackTitle: '간병인이 연장을 수락했습니다',
+      fallbackBody: `간병인이 연장을 수락했습니다. 추가금 ${ext.additionalAmount.toLocaleString()}원 결제를 진행해주세요.`,
+      fallbackType: 'EXTENSION',
+      data: { contractId, extensionId },
+    }).catch(() => {});
+
+    res.json({
+      success: true,
+      data: { extension: updated, message: '연장을 수락했습니다. 보호자 결제 후 적용됩니다.' },
+    });
   } catch (error) {
     next(error);
   }

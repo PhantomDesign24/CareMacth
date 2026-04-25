@@ -356,10 +356,11 @@ enum ContractStatus {
 }
 
 enum ExtensionStatus {
-  PENDING_PAYMENT // 결제 대기 (보호자가 추가금 결제 필요)
+  PENDING_CAREGIVER_APPROVAL // 간병인 수락 대기 (기존 간병인 연장)
+  PENDING_PAYMENT // 결제 대기 (간병인 수락 완료, 보호자 결제 필요)
   CONFIRMED       // 결제 완료 → 적용됨
-  EXPIRED         // 결제 미완료로 만료
-  REJECTED        // 간병인 거절
+  EXPIRED         // 시간 초과로 만료 (수락 또는 결제 미완료)
+  REJECTED        // 간병인 거절 또는 보호자 취소
 }
 
 model Contract {
