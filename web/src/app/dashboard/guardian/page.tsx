@@ -609,16 +609,31 @@ function GuardianDashboard() {
     setExtendLoading(true);
     setExtendError("");
     try {
-      await extensionAPI.extend(extendTarget.id, {
+      const res = await extensionAPI.extend(extendTarget.id, {
         additionalDays: extraDays,
         isNewCaregiver: extendNewCaregiver,
       });
-      alert(
-        extendNewCaregiver
-          ? "연장 요청이 접수되었습니다. 새 간병인 공고가 올라갔습니다."
-          : `연장 완료되었습니다. (추가 ${extraDays}일 · ${additionalAmount.toLocaleString()}원)`
-      );
+      const data = res.data || {};
+      const extensionId = data?.extension?.id;
+      const contractId = extendTarget.id;
       setExtendTarget(null);
+
+      // 연장 신청 후 결제 페이지로 이동 (extensionId 쿼리)
+      if (extensionId && !extendNewCaregiver) {
+        const proceed = confirm(
+          `연장 ${extraDays}일 추가금 ${additionalAmount.toLocaleString()}원\n바로 결제 페이지로 이동하시겠습니까?\n(취소 시 1시간 내 결제 미완료 시 자동 만료)`
+        );
+        if (proceed) {
+          window.location.href = `/dashboard/guardian/payment/${contractId}?extensionId=${extensionId}`;
+          return;
+        }
+      } else {
+        alert(
+          extendNewCaregiver
+            ? "연장 요청이 접수되었습니다. 새 간병인 공고가 올라갔습니다."
+            : `연장 신청이 접수되었습니다. 결제 후 적용됩니다.`
+        );
+      }
       await fetchData();
     } catch (err: unknown) {
       const message =

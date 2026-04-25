@@ -57,4 +57,12 @@ router.post('/:id/sign', authorize('GUARDIAN', 'HOSPITAL', 'CAREGIVER'), [
   body('signature').notEmpty().withMessage('서명 이미지가 필요합니다.'),
 ], contractController.signContract);
 
+// POST /:contractId/extension/:extensionId/reject - 연장 거절/취소
+router.post(
+  '/:contractId/extension/:extensionId/reject',
+  authorize('GUARDIAN', 'HOSPITAL', 'CAREGIVER', 'ADMIN'),
+  [body('reason').optional().trim().isLength({ max: 500 })],
+  contractController.rejectExtension,
+);
+
 export default router;

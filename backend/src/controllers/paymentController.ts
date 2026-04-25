@@ -25,7 +25,7 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       throw new AppError('보호자 정보를 찾을 수 없습니다.', 404);
     }
 
-    const { contractId, method, pointsUsed, useAllPoints, isRecurring, recurringWeek, testMode } = req.body;
+    const { contractId, method, pointsUsed, useAllPoints, isRecurring, recurringWeek, testMode, extensionId } = req.body;
 
     if (!contractId || !method) {
       throw new AppError('계약 ID와 결제 방법은 필수입니다.', 400);
@@ -42,6 +42,20 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
 
     if (!contract) {
       throw new AppError('유효한 계약을 찾을 수 없습니다.', 404);
+    }
+
+    // 연장 결제 모드: extension 검증
+    let extension: any = null;
+    if (extensionId) {
+      extension = await prisma.contractExtension.findUnique({
+        where: { id: extensionId },
+      });
+      if (!extension || extension.contractId !== contractId) {
+        throw new AppError('연장 정보를 찾을 수 없습니다.', 404);
+      }
+      if (extension.status !== 'PENDING_PAYMENT') {
+        throw new AppError(`이미 처리된 연장입니다. (${extension.status})`, 400);
+      }
     }
 
     // 중복 결제 시도 방지: 10초 이내 PENDING 결제가 있으면 기존 것 반환
@@ -68,8 +82,12 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
     // 금액 계산
     let paymentAmount = contract.totalAmount;
 
+    // 연장 결제: extension.additionalAmount 사용
+    if (extension) {
+      paymentAmount = extension.additionalAmount;
+    }
     // 주 단위 결제인 경우
-    if (isRecurring && recurringWeek) {
+    else if (isRecurring && recurringWeek) {
       paymentAmount = contract.dailyRate * 7;
     }
 
@@ -140,6 +158,14 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
         },
       });
 
+      // 연장 결제: payment ↔ extension 연결
+      if (extension) {
+        await tx.contractExtension.update({
+          where: { id: extension.id },
+          data: { paymentId: newPayment.id },
+        });
+      }
+
       // 직접 결제의 경우 즉시 완료 처리
       if (method === 'DIRECT') {
         // 간병인 정산 생성 (% 수수료 + 고정 수수료)
@@ -157,6 +183,27 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
             netAmount,
           },
         });
+
+        // 연장 + DIRECT: 즉시 endDate 갱신 + extension CONFIRMED
+        if (extension) {
+          const now = new Date();
+          await tx.contractExtension.update({
+            where: { id: extension.id },
+            data: { status: 'CONFIRMED', paidAt: now },
+          });
+          await tx.contract.update({
+            where: { id: contractId },
+            data: {
+              endDate: extension.newEndDate,
+              totalAmount: { increment: extension.additionalAmount },
+              status: 'EXTENDED',
+            },
+          });
+          await tx.careRequest.update({
+            where: { id: contract.careRequestId },
+            data: { endDate: extension.newEndDate },
+          });
+        }
       }
 
       return newPayment;
@@ -227,6 +274,11 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
       );
 
       if (tossResponse.data.status === 'DONE') {
+        // 연장 결제인지 확인
+        const linkedExtension = await prisma.contractExtension.findUnique({
+          where: { paymentId: payment.id },
+        });
+
         await prisma.$transaction(async (tx) => {
           // 결제 완료 처리
           await tx.payment.update({
@@ -238,8 +290,28 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
             },
           });
 
-          // 간병 요청 상태 업데이트
-          if (payment.contract) {
+          // 연장 결제: extension CONFIRMED + Contract.endDate 갱신
+          if (linkedExtension && payment.contract) {
+            const now = new Date();
+            await tx.contractExtension.update({
+              where: { id: linkedExtension.id },
+              data: { status: 'CONFIRMED', paidAt: now },
+            });
+            await tx.contract.update({
+              where: { id: payment.contract.id },
+              data: {
+                endDate: linkedExtension.newEndDate,
+                totalAmount: { increment: linkedExtension.additionalAmount },
+                status: 'EXTENDED',
+              },
+            });
+            await tx.careRequest.update({
+              where: { id: payment.contract.careRequestId },
+              data: { endDate: linkedExtension.newEndDate },
+            });
+          }
+          // 일반 결제: 간병 요청 상태 업데이트
+          else if (payment.contract) {
             await tx.careRequest.update({
               where: { id: payment.contract.careRequestId },
               data: { status: 'IN_PROGRESS' },
@@ -256,9 +328,11 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
                 data: {
                   userId: caregiver.userId,
                   type: 'PAYMENT',
-                  title: '결제가 완료되었습니다',
-                  body: `결제가 완료되어 간병이 시작됩니다. 결제금액: ${parseInt(amount).toLocaleString()}원`,
-                  data: { paymentId: payment.id },
+                  title: linkedExtension ? '연장 결제 완료' : '결제가 완료되었습니다',
+                  body: linkedExtension
+                    ? `연장 결제가 완료되어 ${linkedExtension.additionalDays}일 추가됩니다. (${parseInt(amount).toLocaleString()}원)`
+                    : `결제가 완료되어 간병이 시작됩니다. 결제금액: ${parseInt(amount).toLocaleString()}원`,
+                  data: { paymentId: payment.id, ...(linkedExtension && { extensionId: linkedExtension.id }) },
                 },
               });
             }

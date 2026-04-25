@@ -360,5 +360,51 @@ export function setupCronJobs() {
     }
   });
 
+  // 매 5분: 연장 결제 미완료(1시간 초과) 자동 만료
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const cutoff = new Date(Date.now() - 60 * 60 * 1000);
+      const stale = await prisma.contractExtension.findMany({
+        where: {
+          status: 'PENDING_PAYMENT',
+          createdAt: { lt: cutoff },
+        },
+        include: {
+          contract: {
+            include: {
+              guardian: { select: { userId: true } },
+              caregiver: { select: { userId: true } },
+              careRequest: { include: { patient: { select: { name: true } } } },
+            },
+          },
+        },
+      });
+      if (stale.length === 0) return;
+
+      for (const ext of stale) {
+        await prisma.contractExtension.update({
+          where: { id: ext.id },
+          data: { status: 'EXPIRED', expiredAt: new Date() },
+        });
+
+        await sendFromTemplate({
+          userId: ext.contract.guardian.userId,
+          key: 'EXTENSION_CONFIRMED',
+          vars: {
+            patientName: ext.contract.careRequest.patient.name,
+            additionalDays: String(ext.additionalDays),
+          },
+          fallbackTitle: '연장 신청이 만료되었습니다',
+          fallbackBody: `결제 미완료로 ${ext.contract.careRequest.patient.name} 환자 연장 신청이 자동 만료되었습니다.`,
+          fallbackType: 'EXTENSION',
+          data: { contractId: ext.contractId, extensionId: ext.id, autoExpired: true },
+        }).catch(() => {});
+      }
+      console.log(`[CRON] 연장 결제 자동 만료: ${stale.length}건`);
+    } catch (error) {
+      console.error('[CRON] 연장 결제 만료 오류:', error);
+    }
+  });
+
   console.log('[CRON] 스케줄 작업 설정 완료');
 }

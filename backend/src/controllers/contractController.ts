@@ -601,38 +601,19 @@ export const extendContract = async (req: AuthRequest, res: Response, next: Next
     const newEndDate = new Date(currentEndDate.getTime() + additionalDays * 86400000);
     const additionalAmount = contract.dailyRate * additionalDays;
 
-    const extension = await prisma.$transaction(async (tx) => {
-      // 연장 기록 생성
-      const ext = await tx.contractExtension.create({
-        data: {
-          contractId: id,
-          newEndDate,
-          additionalDays: parseInt(additionalDays),
-          additionalAmount,
-          isNewCaregiver: isNewCaregiver ?? false,
-        },
-      });
-
-      // 계약 종료일 업데이트
-      await tx.contract.update({
-        where: { id },
-        data: {
-          endDate: newEndDate,
-          totalAmount: { increment: additionalAmount },
-          status: 'EXTENDED',
-        },
-      });
-
-      // 간병 요청 종료일도 업데이트
-      await tx.careRequest.update({
-        where: { id: contract.careRequestId },
-        data: { endDate: newEndDate },
-      });
-
-      return ext;
+    // 연장 기록만 생성 (status=PENDING_PAYMENT). Contract.endDate는 결제 완료 후 갱신
+    const extension = await prisma.contractExtension.create({
+      data: {
+        contractId: id,
+        newEndDate,
+        additionalDays: parseInt(additionalDays),
+        additionalAmount,
+        isNewCaregiver: isNewCaregiver ?? false,
+        // status: 'PENDING_PAYMENT' default
+      },
     });
 
-    // 간병인에게 연장 요청 푸시 (트랜잭션 밖)
+    // 간병인에게 연장 요청 푸시
     await sendFromTemplate({
       userId: contract.caregiver.userId,
       key: 'EXTENSION_REQUEST',
@@ -642,7 +623,7 @@ export const extendContract = async (req: AuthRequest, res: Response, next: Next
         newEndDate: newEndDate.toLocaleDateString('ko-KR'),
       },
       fallbackTitle: '계약 연장 요청',
-      fallbackBody: `${contract.careRequest.patient.name} 환자의 간병이 ${additionalDays}일 연장되었습니다. 새 종료일: ${newEndDate.toLocaleDateString('ko-KR')}`,
+      fallbackBody: `${contract.careRequest.patient.name} 환자의 간병 ${additionalDays}일 연장이 신청되었습니다. (보호자 결제 대기 중)`,
       fallbackType: 'EXTENSION',
       data: { contractId: id, extensionId: extension.id },
     }).catch(() => {});
@@ -653,6 +634,7 @@ export const extendContract = async (req: AuthRequest, res: Response, next: Next
         extension,
         newEndDate,
         additionalAmount,
+        message: '연장이 신청되었습니다. 결제를 진행해주세요.',
       },
     });
   } catch (error) {
@@ -1030,3 +1012,75 @@ export const signContract = async (req: AuthRequest, res: Response, next: NextFu
   }
 };
 
+
+// POST /:contractId/extension/:extensionId/reject - 연장 거절 (간병인 또는 보호자)
+export const rejectExtension = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { contractId, extensionId } = req.params;
+    const { reason } = req.body;
+
+    const ext = await prisma.contractExtension.findUnique({
+      where: { id: extensionId },
+      include: {
+        contract: {
+          include: {
+            guardian: true,
+            caregiver: true,
+            careRequest: { include: { patient: true } },
+          },
+        },
+      },
+    });
+    if (!ext || ext.contractId !== contractId) {
+      throw new AppError('연장 정보를 찾을 수 없습니다.', 404);
+    }
+    if (ext.status !== 'PENDING_PAYMENT') {
+      throw new AppError(`이미 처리된 연장입니다. (${ext.status})`, 400);
+    }
+
+    // 권한 검증
+    const role = req.user!.role;
+    if (role === 'GUARDIAN' || role === 'HOSPITAL') {
+      const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
+      if (!guardian || ext.contract.guardianId !== guardian.id) {
+        throw new AppError('접근 권한이 없습니다.', 403);
+      }
+    } else if (role === 'CAREGIVER') {
+      const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+      if (!caregiver || ext.contract.caregiverId !== caregiver.id) {
+        throw new AppError('접근 권한이 없습니다.', 403);
+      }
+    } else if (role !== 'ADMIN') {
+      throw new AppError('접근 권한이 없습니다.', 403);
+    }
+
+    await prisma.contractExtension.update({
+      where: { id: extensionId },
+      data: {
+        status: 'REJECTED',
+        rejectedAt: new Date(),
+        rejectReason: reason || (role === 'CAREGIVER' ? '간병인이 연장 거절' : '보호자가 연장 취소'),
+      },
+    });
+
+    // 알림: 상대방에게
+    const targetUserId =
+      role === 'CAREGIVER' ? ext.contract.guardian.userId : ext.contract.caregiver.userId;
+    await sendFromTemplate({
+      userId: targetUserId,
+      key: 'EXTENSION_CONFIRMED', // 임시 — 별도 REJECTED 템플릿 추가 가능
+      vars: {
+        patientName: ext.contract.careRequest.patient.name,
+        reason: reason || '취소됨',
+      },
+      fallbackTitle: '연장 신청이 취소되었습니다',
+      fallbackBody: `${ext.contract.careRequest.patient.name} 환자 연장이 취소되었습니다. ${reason ? `사유: ${reason}` : ''}`,
+      fallbackType: 'EXTENSION',
+      data: { contractId, extensionId },
+    }).catch(() => {});
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
