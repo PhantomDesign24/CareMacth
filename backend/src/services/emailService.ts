@@ -109,6 +109,21 @@ export function emailExtensionReminder(patientName: string, daysLeft: number) {
   );
 }
 
+// 비밀번호 재설정 — 임시 비밀번호 안내
+export function emailPasswordReset(name: string, tempPassword: string) {
+  return baseTemplate(
+    '임시 비밀번호 발급 안내',
+    `
+    <p><b>${name}</b>님, 임시 비밀번호가 발급되었습니다.</p>
+    <p style="font-size:18px;background:#F1F5F9;padding:12px 16px;border-radius:6px;letter-spacing:1px;font-family:monospace;text-align:center;">
+      <b>${tempPassword}</b>
+    </p>
+    <p>이 비밀번호로 로그인하신 뒤 <b>마이페이지 → 비밀번호 변경</b>에서 새로운 비밀번호로 즉시 변경해 주세요.</p>
+    <p style="color:#B91C1C;font-size:13px;">본인이 요청하지 않으셨다면 즉시 고객센터로 연락주시기 바랍니다.</p>
+    `,
+  );
+}
+
 // 회원가입 환영
 export function emailWelcome(name: string) {
   return baseTemplate(

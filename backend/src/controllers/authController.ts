@@ -8,6 +8,7 @@ import { config } from '../config';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { generateReferralCode } from '../utils/generateCode';
+import { sendEmail, emailPasswordReset } from '../services/emailService';
 import { sendToAdmins } from '../services/notificationService';
 
 const generateToken = (user: { id: string; email: string; role: string; tokenVersion?: number }) => {
@@ -445,9 +446,18 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
       },
     });
 
+    // 이메일로 임시 비밀번호 발송 (응답 body 에는 노출하지 않음)
+    sendEmail(
+      user.email,
+      '[케어매치] 임시 비밀번호 안내',
+      emailPasswordReset(user.name, tempPassword),
+    ).catch((err) => {
+      console.error('[resetPassword] 이메일 발송 실패:', err?.message || err);
+    });
+
     res.json({
       success: true,
-      data: { tempPassword },
+      message: '임시 비밀번호를 등록된 이메일로 발송했습니다. 메일함을 확인해주세요.',
     });
   } catch (error) {
     next(error);

@@ -16,11 +16,17 @@ import {
 } from 'react-native';
 
 // Android 전용 네이티브 모듈: finishAndRemoveTask + Process.killProcess
+// 네이티브 모듈이 없거나 iOS 인 경우 BackHandler.exitApp() 으로 fallback
 function killApp() {
   if (Platform.OS === 'android' && NativeModules.AppExit?.killApp) {
     NativeModules.AppExit.killApp();
-  } else {
-    killApp();
+    return;
+  }
+  // fallback: 안드로이드 BackHandler 또는 무동작 (iOS는 Apple 정책상 종료 API 없음)
+  try {
+    BackHandler.exitApp();
+  } catch {
+    // iOS: 종료 불가 — 사용자에게 홈 버튼 안내
   }
 }
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';

@@ -352,6 +352,73 @@ export const getCareRequestById = async (req: AuthRequest, res: Response, next: 
       }
     }
 
+    // 간병인 view: 공개 일감 필드만 응답 (개인정보·경쟁자 정보 제거)
+    if (req.user!.role === 'CAREGIVER') {
+      // OPEN/MATCHING 외 상태는 간병인에게 비공개
+      if (!['OPEN', 'MATCHING'].includes(careRequest.status)) {
+        throw new AppError('현재 지원이 불가능한 일감입니다.', 404);
+      }
+      // 본인 application 만 추려서 노출
+      const cg = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+      const myApp = cg
+        ? (careRequest as any).applications?.find((a: any) => a.caregiverId === cg.id) || null
+        : null;
+      const safeView = {
+        id: careRequest.id,
+        careType: careRequest.careType,
+        scheduleType: careRequest.scheduleType,
+        location: careRequest.location,
+        hospitalName: careRequest.hospitalName,
+        // 자택 주소는 매칭 전엔 시·구 단위까지만 노출
+        address: typeof careRequest.address === 'string'
+          ? careRequest.address.split(' ').slice(0, 2).join(' ')
+          : null,
+        startDate: careRequest.startDate,
+        endDate: careRequest.endDate,
+        durationDays: careRequest.durationDays,
+        dailyRate: careRequest.dailyRate,
+        hourlyRate: (careRequest as any).hourlyRate ?? null,
+        status: careRequest.status,
+        medicalActAgreed: (careRequest as any).medicalActAgreed,
+        regions: (careRequest as any).regions ?? null,
+        latitude: careRequest.latitude,
+        longitude: careRequest.longitude,
+        createdAt: careRequest.createdAt,
+        // 환자: 식별정보 제외, 간병에 필요한 일반 정보만
+        patient: careRequest.patient
+          ? {
+              gender: careRequest.patient.gender,
+              // 나이 (생년월일 직접 노출 X)
+              age: careRequest.patient.birthDate
+                ? new Date().getFullYear() - new Date(careRequest.patient.birthDate).getFullYear()
+                : null,
+              mobilityStatus: careRequest.patient.mobilityStatus,
+              hasDementia: (careRequest.patient as any).hasDementia ?? false,
+              hasInfection: (careRequest.patient as any).hasInfection ?? false,
+              weight: (careRequest.patient as any).weight ?? null,
+              consciousness: (careRequest.patient as any).consciousness ?? null,
+              // 진단명·의료기록은 매칭 후에만
+            }
+          : null,
+        // 보호자: 이름·연락처·이메일 모두 비노출
+        // 다른 지원자 정보 비노출 (경쟁자 정보)
+        // matchScores 비노출
+        myApplication: myApp
+          ? {
+              id: myApp.id,
+              status: myApp.status,
+              proposedRate: myApp.proposedRate,
+              isAccepted: myApp.isAccepted,
+              message: myApp.message,
+              createdAt: myApp.createdAt,
+            }
+          : null,
+        // 지원자 수만 (경쟁률 표시용)
+        applicantCount: (careRequest as any).applications?.length ?? 0,
+      };
+      return res.json({ success: true, data: safeView });
+    }
+
     // 기존 API 호환: contract(단수) 필드로 활성 계약 1건 제공
     const anyCr: any = careRequest;
     anyCr.contract = anyCr.contracts?.[0] || null;

@@ -267,6 +267,16 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
       throw new AppError('결제 정보를 찾을 수 없습니다.', 404);
     }
 
+    // 소유자 검증 (해당 결제의 보호자 본인 또는 ADMIN 만 confirm 가능)
+    if (req.user!.role !== 'ADMIN') {
+      const guardian = await prisma.guardian.findUnique({
+        where: { userId: req.user!.id },
+      });
+      if (!guardian || payment.guardianId !== guardian.id) {
+        throw new AppError('이 결제에 대한 권한이 없습니다.', 403);
+      }
+    }
+
     if (payment.status !== 'PENDING') {
       throw new AppError('이미 처리된 결제입니다.', 400);
     }
