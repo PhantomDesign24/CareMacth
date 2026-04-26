@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CareMatch — 사이트 흐름 및 시나리오 검증</title>
+<style>
+  :root {
+    --c-bg: #f8fafc;
+    --c-card: #ffffff;
+    --c-border: #e2e8f0;
+    --c-text: #0f172a;
+    --c-sub: #64748b;
+    --c-primary: #1e3a5f;
+    --c-accent: #f97316;
+    --c-ok: #059669;
+    --c-warn: #d97706;
+    --c-bad: #dc2626;
+    --c-info: #2563eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    line-height: 1.65;
+    font-size: 15px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 20px 80px; }
+  header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
+    color: #fff;
+    padding: 48px 20px;
+    text-align: center;
+    border-radius: 0 0 16px 16px;
+    margin-bottom: 32px;
+  }
+  header h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -0.5px; }
+  header p { margin: 0; opacity: 0.85; font-size: 15px; }
+  h2 {
+    margin: 48px 0 18px;
+    font-size: 22px;
+    border-bottom: 2px solid var(--c-primary);
+    padding-bottom: 8px;
+    letter-spacing: -0.3px;
+  }
+  h3 {
+    margin: 28px 0 12px;
+    font-size: 17px;
+    color: var(--c-primary);
+  }
+  .card {
+    background: var(--c-card);
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left; padding: 10px 12px;
+    border-bottom: 1px solid var(--c-border);
+    vertical-align: top;
+  }
+  th { background: #f1f5f9; font-weight: 600; color: var(--c-primary); }
+  tr:last-child td { border-bottom: none; }
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 9px; border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+    line-height: 1.6;
+  }
+  .b-ok { background: #d1fae5; color: var(--c-ok); }
+  .b-warn { background: #fef3c7; color: var(--c-warn); }
+  .b-bad { background: #fee2e2; color: var(--c-bad); }
+  .b-info { background: #dbeafe; color: var(--c-info); }
+  .b-gray { background: #e2e8f0; color: #475569; }
+
+  /* Flow diagram steps */
+  .flow {
+    display: flex; flex-direction: column; gap: 0;
+    margin: 16px 0;
+  }
+  .step {
+    background: #fff;
+    border: 1px solid var(--c-border);
+    border-left: 4px solid var(--c-primary);
+    padding: 14px 16px;
+    border-radius: 6px;
+    position: relative;
+    margin-bottom: 8px;
+  }
+  .step.active { border-left-color: var(--c-accent); }
+  .step.warn { border-left-color: var(--c-warn); background: #fefce8; }
+  .step.bad { border-left-color: var(--c-bad); background: #fef2f2; }
+  .step.ok { border-left-color: var(--c-ok); background: #f0fdf4; }
+  .step .num {
+    display: inline-block;
+    width: 22px; height: 22px;
+    background: var(--c-primary);
+    color: #fff;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 22px;
+    font-size: 12px;
+    margin-right: 8px;
+  }
+  .step .title { font-weight: 600; }
+  .step .desc { color: var(--c-sub); font-size: 13.5px; margin-top: 4px; }
+  .step .api {
+    display: inline-block;
+    background: #1e293b; color: #cbd5e1;
+    padding: 1px 7px; border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; margin-top: 6px; margin-right: 6px;
+  }
+  .arrow {
+    text-align: center;
+    color: var(--c-sub);
+    font-size: 18px;
+    line-height: 1;
+    padding: 2px 0;
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+  }
+  @media (max-width: 720px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+  .stat {
+    background: #fff;
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+  }
+  .stat .num { font-size: 26px; font-weight: 700; color: var(--c-primary); }
+  .stat .label { font-size: 12px; color: var(--c-sub); margin-top: 4px; }
+  code {
+    background: #e2e8f0;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  pre {
+    background: #1e293b; color: #e2e8f0;
+    padding: 14px; border-radius: 6px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  pre code { background: transparent; color: inherit; padding: 0; font-size: 13px; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    font-size: 12px; color: var(--c-sub);
+    margin: 8px 0 16px;
+  }
+  .legend span { display: flex; align-items: center; gap: 4px; }
+  .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .role-tabs {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 720px) { .role-tabs { grid-template-columns: 1fr; } }
+  .role-card {
+    background: #fff; border: 1px solid var(--c-border);
+    border-radius: 10px; padding: 18px;
+  }
+  .role-card.guardian { border-top: 3px solid #2563eb; }
+  .role-card.caregiver { border-top: 3px solid #f97316; }
+  .role-card h3 { margin-top: 0; }
+  ul.compact { margin: 6px 0 0; padding-left: 22px; }
+  ul.compact li { margin: 3px 0; }
+  details { margin-top: 8px; }
+  summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--c-primary);
+    padding: 4px 0;
+  }
+  .toc {
+    background: #fff; border: 1px solid var(--c-border);
+    border-radius: 10px; padding: 16px 20px;
+    margin-bottom: 24px;
+  }
+  .toc ol { margin: 6px 0 0; padding-left: 22px; }
+  .toc li { margin: 4px 0; }
+  .toc a { color: var(--c-primary); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  footer {
+    text-align: center;
+    color: var(--c-sub);
+    font-size: 12px;
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--c-border);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CareMatch — 사이트 흐름 및 시나리오 검증</h1>
+  <p>보호자 / 간병인 사용자 흐름, 시나리오 테스트 결과, 위험 변수 분석</p>
+</header>
+
+<div class="container">
+
+  <div class="toc">
+    <strong>목차</strong>
+    <ol>
+      <li><a href="#summary">검증 결과 요약</a></li>
+      <li><a href="#flow-guardian">보호자 흐름</a> · <a href="#flow-caregiver">간병인 흐름</a></li>
+      <li><a href="#flow-extension">연장 흐름</a> · <a href="#flow-additional">추가비</a> · <a href="#flow-refund">환불</a> · <a href="#flow-dispute">분쟁</a></li>
+      <li><a href="#race">위험 변수 — race condition / 캐시 우회</a></li>
+      <li><a href="#fixes">발견된 버그 및 수정 사항</a></li>
+      <li><a href="#scenarios">시나리오 테스트 상세</a></li>
+    </ol>
+  </div>
+
+  <!-- 1. 검증 결과 요약 -->
+  <section id="summary">
+    <h2>1. 검증 결과 요약</h2>
+    <div class="card">
+      <div class="stat-grid">
+        <div class="stat"><div class="num">111</div><div class="label">총 시나리오 통과</div></div>
+        <div class="stat"><div class="num">0</div><div class="label">실패</div></div>
+        <div class="stat"><div class="num">8</div><div class="label">발견된 race 버그</div></div>
+        <div class="stat"><div class="num">100%</div><div class="label">수정 완료</div></div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>분류</th><th>스크립트</th><th>건수</th><th>상태</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Jest 단위/통합</td><td><code>npm test</code></td><td>54</td><td><span class="badge b-ok">통과</span></td></tr>
+          <tr><td>서명 · 연장 · 동시성</td><td><code>test-extension-flow.ts</code></td><td>18</td><td><span class="badge b-ok">통과</span></td></tr>
+          <tr><td>고위험 · 권한 · 입력 검증</td><td><code>test-advanced-scenarios.ts</code></td><td>21</td><td><span class="badge b-ok">통과</span></td></tr>
+          <tr><td>도메인 (환불 · 추가비 · 지원 · 리뷰 · 패널티)</td><td><code>test-domain-scenarios.ts</code></td><td>18</td><td><span class="badge b-ok">통과</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 2. 보호자 / 간병인 흐름 -->
+  <section>
+    <h2 id="flow-guardian">2. 사용자 흐름 (사이트 접속 → 계약 체결)</h2>
+
+    <div class="legend">
+      <span><span class="dot" style="background:#1e3a5f"></span>공통</span>
+      <span><span class="dot" style="background:#f97316"></span>핵심 액션</span>
+      <span><span class="dot" style="background:#d97706"></span>주의 단계</span>
+      <span><span class="dot" style="background:#dc2626"></span>차단 가능</span>
+      <span><span class="dot" style="background:#059669"></span>완료 단계</span>
+    </div>
+
+    <div class="role-tabs">
+      <!-- 보호자 -->
+      <div class="role-card guardian">
+        <h3>👨‍👩‍👧 보호자 (Guardian)</h3>
+        <div class="flow">
+          <div class="step"><span class="num">1</span><span class="title">회원가입 / 로그인</span>
+            <div class="desc">전화번호 인증 → 보호자 역할 선택</div>
+            <span class="api">POST /api/auth/register</span>
+            <span class="api">POST /api/auth/login</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step"><span class="num">2</span><span class="title">환자 등록</span>
+            <div class="desc">이름, 생년월일, 진단명, 거동 가능 여부 등</div>
+            <span class="api">POST /api/guardian/patients</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step active"><span class="num">3</span><span class="title">간병 요청 (공고) 작성</span>
+            <div class="desc">환자 선택, 간병 유형(1:1/가족), 기간, 일당, 위치(병원/자택)</div>
+            <span class="api">POST /api/care-requests</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step warn"><span class="num">4</span><span class="title">지원자 대기 / 검토</span>
+            <div class="desc">간병인이 지원할 때까지 OPEN 상태. 1시간 경과 시 상담사 연결 노출</div>
+            <span class="api">GET /api/care-requests/:id</span>
+            <span class="badge b-warn">미매칭 → 자동 EXPIRED 가능</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step active"><span class="num">5</span><span class="title">간병인 선택 → 계약 생성</span>
+            <div class="desc">선택 즉시 contract 생성, 다른 지원자 자동 REJECTED</div>
+            <span class="api">POST /api/contracts</span>
+            <span class="badge b-info">PENDING_SIGNATURE</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step active"><span class="num">6</span><span class="title">디지털 서명 (보호자측)</span>
+            <div class="desc">캔버스 서명 패드 → base64 PNG 저장</div>
+            <span class="api">POST /api/contracts/:id/sign</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step warn"><span class="num">7</span><span class="title">간병인 서명 대기</span>
+            <div class="desc">양측 서명 완료 시 자동으로 ACTIVE 전이</div>
+            <span class="badge b-info">트랜지션 락 적용</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step active"><span class="num">8</span><span class="title">결제</span>
+            <div class="desc">카드(토스) / 무통장 / 직접결제 / 포인트 사용</div>
+            <span class="api">POST /api/payments</span>
+            <span class="api">POST /api/payments/confirm</span>
+            <span class="badge b-info">10초 dedup + tossPaymentKey 클레임</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step ok"><span class="num">9</span><span class="title">간병 진행 → 일지 확인 → 완료</span>
+            <div class="desc">매일 간병일지 확인, 종료일 도래 시 자동 COMPLETED</div>
+            <span class="api">GET /api/care-records/:contractId</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step ok"><span class="num">10</span><span class="title">리뷰 작성</span>
+            <div class="desc">평점 + 코멘트 + 재고용 의사 → 간병인 평점 자동 갱신</div>
+            <span class="api">POST /api/reviews</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 간병인 -->
+      <div class="role-card caregiver">
+        <h3>🩺 간병인 (Caregiver)</h3>
+        <div class="flow">
+          <div class="step"><span class="num">1</span><span class="title">회원가입 / 로그인</span>
+            <div class="desc">간병인 역할 선택, 초기 status=PENDING (관리자 승인 대기)</div>
+            <span class="api">POST /api/auth/register</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step warn"><span class="num">2</span><span class="title">필수 서류 등록</span>
+            <div class="desc">신분증 + 범죄이력 조회서 + (선택) 자격증 — 미등록 시 지원 차단</div>
+            <span class="api">POST /api/caregiver/certificates</span>
+            <span class="badge b-warn">미등록 → 403</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step warn"><span class="num">3</span><span class="title">관리자 승인 대기</span>
+            <div class="desc">PENDING → APPROVED 전환되어야 로그인 가능 (SUSPENDED 시 로그인 차단)</div>
+            <span class="api">PUT /api/admin/caregivers/:id/approve</span>
+            <span class="badge b-bad">SUSPENDED 로그인 시 403</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step active"><span class="num">4</span><span class="title">공고 검색 / 지원</span>
+            <div class="desc">지역 · 간병유형 · 일당 필터, 보호자 일당 수락 또는 제안 금액 입력</div>
+            <span class="api">GET /api/care-requests</span>
+            <span class="api">POST /api/care-requests/:id/apply</span>
+            <span class="badge b-warn">진행 중 계약 있으면 차단</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step warn"><span class="num">5</span><span class="title">매칭 대기</span>
+            <div class="desc">보호자가 간병인을 선택하면 contract 생성 + 알림 수신</div>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step active"><span class="num">6</span><span class="title">디지털 서명 (간병인측)</span>
+            <div class="desc">계약 내용 확인 → 서명 → 양측 완료 시 ACTIVE</div>
+            <span class="api">POST /api/contracts/:id/sign</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step active"><span class="num">7</span><span class="title">간병 진행 + 매일 간병일지 작성</span>
+            <div class="desc">출퇴근, 케어 기록, 사진 업로드</div>
+            <span class="api">POST /api/care-records</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="step ok"><span class="num">8</span><span class="title">정산 수령</span>
+            <div class="desc">매일 자동 정산 (총액 - 플랫폼 수수료 - 원천징수 3.3%)</div>
+            <span class="api">GET /api/caregiver/earnings</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 확장 시나리오 -->
+  <section>
+    <h2 id="flow-extension">3. 확장 시나리오</h2>
+
+    <h3>3-1. 간병 연장 (Extension)</h3>
+    <div class="card">
+      <p>보호자가 추가 일수 신청 → 간병인 수락 → 보호자 결제 → 적용</p>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><span class="title">보호자: 연장 신청</span>
+          <div class="desc">기존 간병인 / 새 간병인 선택. 기존 간병인은 수락 단계 필요.</div>
+          <span class="api">POST /api/contracts/:id/extend</span>
+          <span class="badge b-info">PENDING_CAREGIVER_APPROVAL</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step warn"><span class="num">2</span><span class="title">간병인: 수락 / 거절 (24시간 내)</span>
+          <div class="desc">미응답 시 자동 EXPIRED, 수락 시 보호자에게 결제 안내</div>
+          <span class="api">POST /api/contracts/:cid/extension/:eid/approve</span>
+          <span class="api">POST /api/contracts/:cid/extension/:eid/reject</span>
+          <span class="badge b-info">PENDING_PAYMENT 전이</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step active"><span class="num">3</span><span class="title">보호자: 결제 (1시간 내)</span>
+          <div class="desc">미결제 시 자동 EXPIRED (cron 5분 주기)</div>
+          <span class="api">POST /api/payments {extensionId}</span>
+          <span class="badge b-info">CONFIRMED → endDate 갱신</span>
+        </div>
+      </div>
+      <details>
+        <summary>변수 발생 시 문제점</summary>
+        <ul class="compact">
+          <li><strong>간병인 무응답</strong>: 24h cron 으로 EXPIRED 처리 + 보호자 알림. 다음 신청 가능.</li>
+          <li><strong>중복 신청</strong>: 트랜지션 락으로 in-flight 가드. 진행 중 연장 있으면 400.</li>
+          <li><strong>동시 수락 race</strong>: <code>updateMany where status=PENDING_CAREGIVER_APPROVAL</code> 로 1회만 통과.</li>
+          <li><strong>결제 미완료 만료</strong>: 1h cron → EXPIRED. 보호자 재시도 시 새 연장 신청 필요.</li>
+          <li><strong>EXTENDED 상태에서 다시 연장</strong>: 현재 ACTIVE 만 허용 → 400.</li>
+        </ul>
+      </details>
+    </div>
+
+    <h3 id="flow-additional">3-2. 추가비 청구 (AdditionalFee)</h3>
+    <div class="card">
+      <p>간병인이 야간/위험수당 청구 → 보호자 승인 → 합계에 가산</p>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><span class="title">간병인: 추가비 요청</span>
+          <span class="api">POST /api/payments/additional-fees</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step warn"><span class="num">2</span><span class="title">보호자: 승인 / 거절</span>
+          <span class="api">POST /api/payments/additional-fees/:id/approve</span>
+          <span class="api">POST /api/payments/additional-fees/:id/reject</span>
+          <span class="badge b-info">트랜지션 락: 미처리 상태에서만 1회</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step ok"><span class="num">3</span><span class="title">정산에 자동 합산</span>
+          <div class="desc">간병인 Earning 에 반영, 보호자 결제 내역에 표기</div>
+        </div>
+      </div>
+      <details>
+        <summary>변수 발생 시 문제점</summary>
+        <ul class="compact">
+          <li><strong>중복 승인</strong>: 락으로 차단 (이전: 알림 두 번 발송).</li>
+          <li><strong>승인 후 거절 시도</strong>: 409 응답.</li>
+          <li><strong>금액 음수</strong>: 입력 검증으로 400.</li>
+        </ul>
+      </details>
+    </div>
+
+    <h3 id="flow-refund">3-3. 환불 (Refund)</h3>
+    <div class="card">
+      <p>2단계 흐름 — 보호자 요청 → 관리자 검토 → 환불 실행</p>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><span class="title">보호자: 환불 요청</span>
+          <div class="desc">사유 + 금액(전체/부분) 입력</div>
+          <span class="api">POST /api/payments/:id/refund</span>
+          <span class="badge b-info">refundRequestStatus = PENDING</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step warn"><span class="num">2</span><span class="title">관리자: 검토 + 승인 / 거절</span>
+          <div class="desc">승인 시 토스 cancel API 호출, Earning 자동 차감, 전액 환불 시 계약 자동 취소</div>
+          <span class="api">POST /api/admin/payments/:id/refund-approve</span>
+          <span class="api">POST /api/admin/payments/:id/refund-reject</span>
+          <span class="badge b-info">refundReviewedAt 클레임 락</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step ok"><span class="num">3</span><span class="title">정산 / 알림</span>
+          <div class="desc">미정산 Earning 차감, 보호자/간병인 양측 푸시</div>
+          <span class="badge b-ok">PARTIAL_REFUND / REFUNDED</span>
+        </div>
+      </div>
+      <details>
+        <summary>변수 발생 시 문제점</summary>
+        <ul class="compact">
+          <li><strong>동시 관리자 승인 race</strong>: <span class="badge b-bad">실손실</span> 이전: Earning 두 번 차감 (간병인 정산 손실). 수정: <code>refundReviewedAt</code> 클레임 락.</li>
+          <li><strong>토스 API 실패</strong>: 락 해제(refundReviewedAt=null) 후 재시도 가능.</li>
+          <li><strong>환불 금액 초과</strong>: 결제액 초과 입력 시 400.</li>
+          <li><strong>이미 PARTIAL_REFUND 인 결제 재요청</strong>: 가능 (남은 금액 한도 내).</li>
+        </ul>
+      </details>
+    </div>
+
+    <h3 id="flow-dispute">3-4. 분쟁 (Dispute)</h3>
+    <div class="card">
+      <p>보호자/간병인이 분쟁 신고 → 관리자 처리 → 정산 보류 또는 환불 연계</p>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><span class="title">분쟁 신고</span>
+          <div class="desc">카테고리(서비스 품질/금액/사고 등), 증거 첨부</div>
+          <span class="api">POST /api/disputes</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step warn"><span class="num">2</span><span class="title">관리자: 처리</span>
+          <div class="desc">PROCESSING → 양측 의견 수렴 → 환불 / 패널티 / 계약 취소 등 결정</div>
+          <span class="api">PATCH /api/disputes/admin/:id</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step ok"><span class="num">3</span><span class="title">RESOLVED</span>
+          <div class="desc">계약 취소 시 관련 분쟁 자동 RESOLVED</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. 위험 변수 -->
+  <section>
+    <h2 id="race">4. 위험 변수 — Race Condition / 캐시 우회</h2>
+
+    <div class="card">
+      <h3>4-1. Race Condition (동시 요청)</h3>
+      <p>두 요청이 동시 도착할 때 발생하는 문제. 모두 트랜지션 락 패턴 적용 완료.</p>
+      <table>
+        <thead>
+          <tr><th>지점</th><th>위험</th><th>적용한 락</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>signContract</code></td>
+            <td>같은 사람이 동시 서명 시도 → 양측 통과</td>
+            <td><code>updateMany where signedAt=null</code></td>
+          </tr>
+          <tr>
+            <td><code>extendContract</code></td>
+            <td>동시 신청 시 in-flight 가드 통과 → 중복 생성</td>
+            <td><code>SELECT FOR UPDATE</code> + 트랜잭션 내 검증</td>
+          </tr>
+          <tr>
+            <td><code>approveExtension</code></td>
+            <td>동시 수락 시 PENDING_PAYMENT 두 번 전이</td>
+            <td><code>updateMany where status=PENDING_CAREGIVER_APPROVAL</code></td>
+          </tr>
+          <tr>
+            <td><code>cancelContract</code></td>
+            <td><span class="badge b-bad">실손실</span> 보호자+간병인 동시 취소 → 환불 두 번 처리</td>
+            <td><code>updateMany where status=ACTIVE</code></td>
+          </tr>
+          <tr>
+            <td><code>createContract</code></td>
+            <td>같은 간병인이 두 careRequest 에 동시 매칭</td>
+            <td><code>SELECT FOR UPDATE</code> + 실제 contract 카운트</td>
+          </tr>
+          <tr>
+            <td><code>confirmPayment</code></td>
+            <td><span class="badge b-bad">실손실</span> 동시 confirm → ESCROW + FAILED 충돌, totalAmount 이중 가산</td>
+            <td>tossPaymentKey 클레임 패턴</td>
+          </tr>
+          <tr>
+            <td><code>createPayment</code></td>
+            <td>동시 DIRECT 결제 → Earning 두 건 생성 (이중 정산)</td>
+            <td><code>SELECT FOR UPDATE Contract</code> + 트랜잭션 내 dedup (PENDING/COMPLETED/ESCROW)</td>
+          </tr>
+          <tr>
+            <td><code>approveRefundRequest</code></td>
+            <td><span class="badge b-bad">실손실</span> 동시 관리자 승인 → Earning 두 번 차감</td>
+            <td><code>refundReviewedAt</code> 클레임 패턴</td>
+          </tr>
+          <tr>
+            <td><code>approveAdditionalFee</code> / reject</td>
+            <td>중복 승인 → 알림 2회 발송</td>
+            <td><code>updateMany where approved=false AND rejected=false</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>4-2. 캐시 필드 우회 (단일 진실 원천 위반)</h3>
+      <p>denormalized 캐시 필드가 실제 데이터와 동기화 안 될 때 발생.</p>
+      <table>
+        <thead>
+          <tr><th>필드</th><th>이전 검사</th><th>현재 검사</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>caregiver.workStatus</code></td>
+            <td>이 필드만 보고 진행 중 판정 → 임의로 AVAILABLE 변경 시 우회</td>
+            <td>실제 <code>Contract</code> 테이블에서 ACTIVE/EXTENDED/PENDING_SIGNATURE 카운트로 판정</td>
+          </tr>
+        </tbody>
+      </table>
+      <details>
+        <summary>실제 검증 결과</summary>
+        <pre><code>대상: cg2@test.com (ACTIVE 계약 보유)
+workStatus + 인증서류 모두 통과 상태로 강제 설정
+지원 시도 → ✅ 차단: 400 "현재 진행 중인 계약이 있어..."</code></pre>
+      </details>
+    </div>
+
+    <div class="card">
+      <h3>4-3. 외부 API 실패 처리</h3>
+      <ul class="compact">
+        <li><strong>토스 결제 confirm 실패</strong>: tossPaymentKey 클레임 후 Toss 호출 실패 시 PENDING 상태에서만 FAILED 마킹 (이미 ESCROW 됐으면 overwrite 금지).</li>
+        <li><strong>토스 cancel 실패 (환불)</strong>: 락 해제(refundReviewedAt=null) → 재시도 가능.</li>
+        <li><strong>FCM 푸시 실패</strong>: 알림 DB 저장은 성공, 푸시만 pushSuccess=false. 토큰 만료 시 자동 제거.</li>
+        <li><strong>Firebase 미초기화</strong>: 푸시 발송만 건너뛰고 비즈니스 로직은 정상 동작.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 5. 발견된 버그 및 수정 -->
+  <section>
+    <h2 id="fixes">5. 발견된 버그 및 수정 사항 (시간 순)</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>#</th><th>버그</th><th>위험도</th><th>커밋</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>signContract / approveExtension / rejectExtension TOCTOU race</td><td><span class="badge b-warn">중</span></td><td><code>f90db63</code></td></tr>
+          <tr><td>2</td><td>confirmPayment 동시 호출 → 토스 호출 충돌 + ESCROW/FAILED 동시 마킹</td><td><span class="badge b-bad">실손실</span></td><td><code>f90db63</code></td></tr>
+          <tr><td>3</td><td>createPayment 10초 dedup 가드가 트랜잭션 밖이라 race</td><td><span class="badge b-warn">중</span></td><td><code>f90db63</code></td></tr>
+          <tr><td>4</td><td>extendContract 동시 신청 시 중복 생성</td><td><span class="badge b-warn">중</span></td><td><code>f90db63</code></td></tr>
+          <tr><td>5</td><td>cancelContract 동시 취소 → 환불 두 번 처리</td><td><span class="badge b-bad">실손실</span></td><td><code>ac9cde6</code></td></tr>
+          <tr><td>6</td><td>createContract 동시 매칭 시 같은 간병인 중복 배정</td><td><span class="badge b-warn">중</span></td><td><code>ac9cde6</code></td></tr>
+          <tr><td>7</td><td>approveRefundRequest 동시 승인 → Earning 두 번 차감</td><td><span class="badge b-bad">실손실</span></td><td><code>517780d</code></td></tr>
+          <tr><td>8</td><td>createPayment dedup 이 PENDING 만 봐서 DIRECT 동시 결제 통과</td><td><span class="badge b-bad">실손실</span></td><td><code>517780d</code></td></tr>
+          <tr><td>9</td><td>알림 템플릿 빈 변수 치환 시 앞 공백 잔존</td><td><span class="badge b-info">UX</span></td><td><code>4093407</code></td></tr>
+          <tr><td>10</td><td>workStatus 캐시 필드 우회로 진행 중 간병인이 새 공고 지원 가능</td><td><span class="badge b-warn">중</span></td><td><code>33bd19c</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 6. 시나리오 테스트 상세 -->
+  <section>
+    <h2 id="scenarios">6. 시나리오 테스트 상세</h2>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>test-extension-flow.ts (18건)</h3>
+        <ul class="compact">
+          <li><strong>서명</strong>: 단독, 양측 완료, 중복, 크기 초과</li>
+          <li><strong>연장</strong>: 신청, 수락, 거절, 권한, 자동 만료(24h/1h), 신규 간병인</li>
+          <li><strong>동시성</strong>: 서명, 연장 신청, 수락, 결제 race</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>test-advanced-scenarios.ts (21건)</h3>
+        <ul class="compact">
+          <li><strong>고위험</strong>: 환불 race, 같은 간병인 동시 매칭</li>
+          <li><strong>입력 검증</strong>: 음수 포인트, 보유 초과, 입력 형식</li>
+          <li><strong>흐름</strong>: DIRECT 결제 + 토스 confirm 충돌, EXTENDED 다중 연장</li>
+          <li><strong>권한</strong>: 다른 보호자 계약 접근/취소/PDF 차단</li>
+          <li><strong>SUSPENDED</strong>: 로그인 + 지원 차단</li>
+          <li><strong>PDF</strong>: ACTIVE / CANCELLED 워터마크</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>test-domain-scenarios.ts (18건)</h3>
+        <ul class="compact">
+          <li><strong>환불</strong>: 요청, 동시 승인 race, 거절</li>
+          <li><strong>추가비</strong>: 요청, 동시 승인 race, 검증</li>
+          <li><strong>지원</strong>: 중복 차단, 매칭 시 자동 처리</li>
+          <li><strong>리뷰</strong>: 작성, 중복 차단, 평점 갱신, 권한</li>
+          <li><strong>패널티</strong>: 누적 → SUSPENDED 자동 전환</li>
+          <li><strong>Earning</strong>: DIRECT 동시 결제 race</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>실행 방법</h3>
+        <pre><code># 백엔드 디렉토리에서
+cd /var/www/carematch/backend
+
+# Jest
+npm test
+
+# 시나리오 스크립트
+npx tsx scripts/test-extension-flow.ts
+npx tsx scripts/test-advanced-scenarios.ts
+npx tsx scripts/test-domain-scenarios.ts
+        </code></pre>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    CareMatch v1.0 · 검증 일자: 2026-04-26 · 통과 시나리오 111건 · 발견 버그 10건 (모두 수정)
+  </footer>
+
+</div>
+</body>
+</html>

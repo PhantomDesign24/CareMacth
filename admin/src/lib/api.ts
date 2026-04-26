@@ -436,6 +436,35 @@ export async function deleteEducation(id: string) {
   return apiRequest(`/admin/education/${id}`, { method: "DELETE" });
 }
 
+// ─── Notices (공지사항) ────────────────────────────────
+export interface AdminNotice {
+  id: string;
+  title: string;
+  content: string;
+  category: "GENERAL" | "UPDATE" | "EVENT" | "MAINTENANCE";
+  isPinned: boolean;
+  isPublished: boolean;
+  viewCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getAdminNotices() {
+  return apiRequest<AdminNotice[]>("/admin/notices");
+}
+
+export async function createNotice(data: { title: string; content: string; category?: string; isPinned?: boolean; isPublished?: boolean }) {
+  return apiRequest<AdminNotice>("/admin/notices", { method: "POST", body: data });
+}
+
+export async function updateNotice(id: string, data: { title?: string; content?: string; category?: string; isPinned?: boolean; isPublished?: boolean }) {
+  return apiRequest<AdminNotice>(`/admin/notices/${id}`, { method: "PUT", body: data });
+}
+
+export async function deleteNotice(id: string) {
+  return apiRequest(`/admin/notices/${id}`, { method: "DELETE" });
+}
+
 // ─── Care Requests (일감) ─────────────────────────────
 export interface AdminCareRequestRow {
   id: string;

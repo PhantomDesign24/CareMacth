@@ -129,6 +129,14 @@ export default function Footer() {
               </li>
               <li>
                 <Link
+                  href="/notices"
+                  className="text-sm text-gray-400 hover:text-primary-400 transition-colors"
+                >
+                  공지사항
+                </Link>
+              </li>
+              <li>
+                <Link
                   href="/terms"
                   className="text-sm text-gray-400 hover:text-primary-400 transition-colors"
                 >

@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import { authenticate, authorize } from '../middlewares/auth';
 import * as adminController from '../controllers/adminController';
 import * as reportController from '../controllers/reportController';
+import * as noticeController from '../controllers/noticeController';
 
 const router = Router();
 
@@ -173,5 +174,11 @@ router.put('/education/:id', [
   body('order').optional().isInt({ min: 0 }).withMessage('순서는 0 이상이어야 합니다.'),
 ], adminController.updateEducation);
 router.delete('/education/:id', adminController.deleteEducation);
+
+// 공지사항
+router.get('/notices', noticeController.adminListNotices);
+router.post('/notices', noticeController.adminCreateNotice);
+router.put('/notices/:id', noticeController.adminUpdateNotice);
+router.delete('/notices/:id', noticeController.adminDeleteNotice);
 
 export default router;

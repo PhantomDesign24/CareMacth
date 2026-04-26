@@ -21,6 +21,7 @@ import educationRoutes from './routes/education';
 import notificationRoutes from './routes/notification';
 import insuranceRoutes from './routes/insurance';
 import disputeRoutes from './routes/dispute';
+import noticeRoutes from './routes/notice';
 import { errorHandler } from './middlewares/errorHandler';
 import { generalLimiter } from './middlewares/rateLimiter';
 import { sanitizeInput } from './middlewares/sanitize';
@@ -129,6 +130,7 @@ app.use('/api/education', educationRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/insurance', insuranceRoutes);
 app.use('/api/disputes', disputeRoutes);
+app.use('/api/notices', noticeRoutes);
 
 // Error handler
 app.use(errorHandler);

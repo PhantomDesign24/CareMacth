@@ -64,15 +64,20 @@ export default function Header() {
 
   const roleInfo = user ? ROLE_LABELS[user.role] : null;
 
-  // 역할별 메뉴 필터링: 비로그인/ADMIN 은 둘 다, GUARDIAN/HOSPITAL 은 "간병인 찾기"만, CAREGIVER 는 "일감 찾기"만
+  // 액션 페이지(간병인 찾기/일감 찾기)는 역할 기반 필터링, 소개 페이지는 모두 노출
   const role = user?.role;
-  const allNavItems = [
-    { href: "/care-request", label: "간병인 찾기", icon: FiSearch, desc: "지금 간병인 매칭하기", roles: ["GUARDIAN", "HOSPITAL", "ADMIN", null] },
-    { href: "/find-work", label: "간병 일감 찾기", icon: FiBriefcase, desc: "간병인이 일감 탐색", roles: ["CAREGIVER", "ADMIN", null] },
-    { href: "/business", label: "병원·기업회원", icon: FiHome, desc: "기업 단체 매칭 서비스", roles: ["GUARDIAN", "HOSPITAL", "ADMIN", null] },
-    { href: "/home-care", label: "방문요양", icon: FiHeart, desc: "장기요양 방문서비스", roles: ["GUARDIAN", "HOSPITAL", "ADMIN", null] },
+  const allNavItems: { href: string; label: string; icon: any; desc: string; roles?: string[] }[] = [
+    { href: "/care-request", label: "간병인 찾기", icon: FiSearch, desc: "지금 간병인 매칭하기", roles: ["GUARDIAN", "HOSPITAL", "ADMIN"] },
+    { href: "/find-work", label: "간병 일감 찾기", icon: FiBriefcase, desc: "간병인이 일감 탐색", roles: ["CAREGIVER", "ADMIN"] },
+    { href: "/business", label: "병원·기업회원", icon: FiHome, desc: "기업 단체 매칭 서비스" },
+    { href: "/home-care", label: "방문요양", icon: FiHeart, desc: "장기요양 방문서비스" },
+    { href: "/notices", label: "공지사항", icon: FiBell, desc: "서비스 공지·안내" },
   ];
-  const navItems = allNavItems.filter((item) => item.roles.includes((role as any) || null));
+  const navItems = allNavItems.filter((item) => {
+    if (!item.roles) return true; // 소개/공지: 모두 노출
+    if (!role) return true; // 비로그인: 모두 노출 (마케팅)
+    return item.roles.includes(role);
+  });
 
   return (
     <>

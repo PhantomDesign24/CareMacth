@@ -34,10 +34,10 @@ export default function HomePage() {
   return (
     <>
       <HeroSection />
-      <HomeBannerSection />
       <LiveDashboardSection />
       <SpecialServiceSection />
       <CareMatchTVSection />
+      <HomeBannerSection />
       <PremiumFeaturesSection />
       <CareFieldsSection />
       <WhyCareMatchSection />

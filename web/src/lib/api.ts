@@ -346,6 +346,12 @@ export const reviewAPI = {
   byCaregiver: (caregiverId: string) => api.get(`/reviews/caregiver/${caregiverId}`),
 };
 
+export const noticeAPI = {
+  list: (params?: { page?: number; limit?: number; category?: string }) =>
+    api.get('/notices', { params }),
+  detail: (id: string) => api.get(`/notices/${id}`),
+};
+
 export const reportAPI = {
   create: (data: { targetType: string; targetId: string; reason: string; detail?: string }) =>
     api.post('/reports', data),
