@@ -53,3 +53,4 @@ firebase-service-account.json
 # 업로드 파일
 backend/uploads/*
 !backend/uploads/.gitkeep
+.codex
