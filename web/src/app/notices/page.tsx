@@ -98,19 +98,19 @@ export default function NoticesPage() {
                 <Link
                   key={it.id}
                   href={`/notices/${it.id}`}
-                  className="block p-4 sm:p-5 hover:bg-gray-50 transition-colors"
+                  className={`block p-4 sm:p-5 hover:bg-gray-50 transition-colors ${
+                    it.isPinned ? "bg-red-50/30" : ""
+                  }`}
                 >
                   <div className="flex items-start gap-3">
-                    {it.isPinned && (
-                      <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-50 text-red-600">
-                        고정
-                      </span>
-                    )}
                     <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${CATEGORY_COLOR[it.category]}`}>
                       {CATEGORY_LABEL[it.category]}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 break-words">{it.title}</h3>
+                      <h3 className="font-semibold text-gray-900 break-words flex items-center gap-1.5">
+                        {it.isPinned && <span className="text-red-500" title="고정 공지">📌</span>}
+                        <span>{it.title}</span>
+                      </h3>
                       <div className="mt-1 flex items-center gap-3 text-xs text-gray-400">
                         <span>{formatDate(it.createdAt)}</span>
                         <span>조회 {it.viewCount.toLocaleString()}</span>

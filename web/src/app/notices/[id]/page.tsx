@@ -80,17 +80,15 @@ export default function NoticeDetailPage() {
             </div>
           ) : (
             <article className="bg-white rounded-xl p-6 sm:p-8 border border-gray-200">
-              <div className="flex items-center gap-2 mb-4">
-                {notice.isPinned && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-50 text-red-600">
-                    고정
-                  </span>
-                )}
+              <div className="mb-3">
                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${CATEGORY_COLOR[notice.category]}`}>
                   {CATEGORY_LABEL[notice.category]}
                 </span>
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 break-words">{notice.title}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 break-words flex items-center gap-2">
+                {notice.isPinned && <span className="text-red-500" title="고정 공지">📌</span>}
+                <span>{notice.title}</span>
+              </h1>
               <div className="mt-2 flex items-center gap-3 text-xs text-gray-400 pb-4 border-b border-gray-100">
                 <span>{new Date(notice.createdAt).toLocaleDateString("ko-KR")}</span>
                 <span>조회 {notice.viewCount.toLocaleString()}</span>
