@@ -1038,13 +1038,15 @@ function CaregiverDashboard() {
               <div className="p-6">
                 <h3 className="text-lg font-bold text-gray-900 mb-2">매칭 가능 공고</h3>
                 <p className="text-sm text-gray-500">조건에 맞는 간병 요청 목록입니다.</p>
-                {currentStatus === 'working' && (
+                {activityHistory.some((a) =>
+                  ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'].includes(a.contractStatus)
+                ) && (
                   <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 flex items-start gap-2">
                     <span className="text-base">⚠</span>
                     <div>
                       <div className="font-semibold">현재 간병 진행 중입니다.</div>
                       <div className="text-xs text-amber-700 mt-0.5">
-                        진행 중 상태에서는 새로운 지원을 할 수 없습니다. 현재 간병 종료 후 상단 상태를 &apos;근무 가능&apos;으로 변경하시면 지원할 수 있습니다.
+                        진행 중인 계약이 있어 새로운 지원을 할 수 없습니다. 현재 간병 종료 후 다시 시도해주세요.
                       </div>
                     </div>
                   </div>
@@ -1124,7 +1126,9 @@ function CaregiverDashboard() {
                         </div>
                       </div>
                       <div className="flex flex-col gap-2">
-                        {currentStatus === 'working' ? (
+                        {activityHistory.some((a) =>
+                          ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'].includes(a.contractStatus)
+                        ) ? (
                           <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2 text-center">
                             ⚠ 진행 중 간병이 있어<br />지원할 수 없습니다
                           </div>
