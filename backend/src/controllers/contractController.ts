@@ -89,15 +89,23 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
         throw new AppError('이미 계약이 생성된 간병 요청입니다.', 400);
       }
 
-      // 트랜지션 락: caregiver 행을 WORKING 으로 클레임 (workStatus != WORKING 일 때만 1회 성공)
-      // 동시 두 createContract 호출 시 한쪽만 클레임 성공
-      const claim = await tx.caregiver.updateMany({
-        where: { id: caregiverId, workStatus: { not: 'WORKING' } },
-        data: { workStatus: 'WORKING', totalMatches: { increment: 1 } },
+      // 실제 진행 중 계약 확인 (workStatus 캐시 의존하지 않음)
+      // — 동시성: caregiver 행을 SELECT FOR UPDATE 로 잠근 후 contract 카운트로 검증
+      await tx.$queryRaw`SELECT id FROM "Caregiver" WHERE id = ${caregiverId} FOR UPDATE`;
+      const ongoing = await tx.contract.count({
+        where: {
+          caregiverId,
+          status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
+        },
       });
-      if (claim.count === 0) {
+      if (ongoing > 0) {
         throw new AppError('간병인이 이미 다른 간병을 진행 중입니다.', 400);
       }
+      // workStatus 캐시 동기화
+      await tx.caregiver.update({
+        where: { id: caregiverId },
+        data: { workStatus: 'WORKING', totalMatches: { increment: 1 } },
+      });
 
       // 계약 생성
       const newContract = await tx.contract.create({

@@ -600,8 +600,15 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
       if (!caregiver.criminalCheckDone || !caregiver.criminalCheckDoc) {
         throw new AppError('범죄이력 조회서 등록이 완료된 후 지원 가능합니다.', 403);
       }
-      if (caregiver.workStatus === 'WORKING') {
-        throw new AppError('현재 간병 진행 중에는 새로운 지원을 할 수 없습니다.', 400);
+      // workStatus 는 캐시 — 실제 진행 중 계약 존재 여부로 판정 (단일 진실 원천)
+      const ongoingContracts = await prisma.contract.count({
+        where: {
+          caregiverId: caregiver.id,
+          status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
+        },
+      });
+      if (ongoingContracts > 0) {
+        throw new AppError('현재 진행 중인 계약이 있어 새로운 지원을 할 수 없습니다.', 400);
       }
     }
 
