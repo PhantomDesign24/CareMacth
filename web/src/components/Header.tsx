@@ -64,12 +64,15 @@ export default function Header() {
 
   const roleInfo = user ? ROLE_LABELS[user.role] : null;
 
-  const navItems = [
-    { href: "/care-request", label: "간병인 찾기", icon: FiSearch, desc: "지금 간병인 매칭하기" },
-    { href: "/find-work", label: "간병 일감 찾기", icon: FiBriefcase, desc: "간병인이 일감 탐색" },
-    { href: "/business", label: "병원·기업회원", icon: FiHome, desc: "기업 단체 매칭 서비스" },
-    { href: "/home-care", label: "방문요양", icon: FiHeart, desc: "장기요양 방문서비스" },
+  // 역할별 메뉴 필터링: 비로그인/ADMIN 은 둘 다, GUARDIAN/HOSPITAL 은 "간병인 찾기"만, CAREGIVER 는 "일감 찾기"만
+  const role = user?.role;
+  const allNavItems = [
+    { href: "/care-request", label: "간병인 찾기", icon: FiSearch, desc: "지금 간병인 매칭하기", roles: ["GUARDIAN", "HOSPITAL", "ADMIN", null] },
+    { href: "/find-work", label: "간병 일감 찾기", icon: FiBriefcase, desc: "간병인이 일감 탐색", roles: ["CAREGIVER", "ADMIN", null] },
+    { href: "/business", label: "병원·기업회원", icon: FiHome, desc: "기업 단체 매칭 서비스", roles: ["GUARDIAN", "HOSPITAL", "ADMIN", null] },
+    { href: "/home-care", label: "방문요양", icon: FiHeart, desc: "장기요양 방문서비스", roles: ["GUARDIAN", "HOSPITAL", "ADMIN", null] },
   ];
+  const navItems = allNavItems.filter((item) => item.roles.includes((role as any) || null));
 
   return (
     <>
