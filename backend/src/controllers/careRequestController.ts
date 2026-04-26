@@ -773,36 +773,36 @@ export const raiseRate = async (req: AuthRequest, res: Response, next: NextFunct
       throw new AppError(`새 일당은 현재 일당(${currentRate.toLocaleString()}원)보다 높아야 합니다.`, 400);
     }
 
-    // 금액 인상 및 매칭된 간병인들에게 알림 발송
-    await prisma.$transaction(async (tx) => {
-      // 일당 업데이트
-      await tx.careRequest.update({
-        where: { id },
-        data: { dailyRate: newDailyRate },
-      });
-
-      // 매칭 점수가 있는 간병인들에게 알림 발송
-      const matchedCaregiverIds = careRequest.matchScores.map((ms) => ms.caregiverId);
-
-      if (matchedCaregiverIds.length > 0) {
-        const caregivers = await tx.caregiver.findMany({
-          where: { id: { in: matchedCaregiverIds } },
-          select: { userId: true },
-        });
-
-        const notifications = caregivers.map((cg) => ({
-          userId: cg.userId,
-          type: 'MATCHING' as const,
-          title: '간병 요청 금액 인상',
-          body: `일당이 ${currentRate.toLocaleString()}원 → ${newDailyRate.toLocaleString()}원으로 인상되었습니다`,
-          data: { careRequestId: id },
-        }));
-
-        if (notifications.length > 0) {
-          await tx.notification.createMany({ data: notifications });
-        }
-      }
+    // 금액 인상
+    await prisma.careRequest.update({
+      where: { id },
+      data: { dailyRate: newDailyRate },
     });
+
+    // 매칭 점수가 있는 간병인들에게 푸시+알림 발송 (템플릿 기반)
+    const matchedCaregiverIds = careRequest.matchScores.map((ms) => ms.caregiverId);
+    if (matchedCaregiverIds.length > 0) {
+      const caregivers = await prisma.caregiver.findMany({
+        where: { id: { in: matchedCaregiverIds } },
+        select: { userId: true },
+      });
+      await Promise.all(
+        caregivers.map((cg) =>
+          sendFromTemplate({
+            userId: cg.userId,
+            key: 'MATCHING_RATE_RAISED',
+            vars: {
+              currentRate: currentRate.toLocaleString(),
+              newRate: newDailyRate.toLocaleString(),
+            },
+            fallbackTitle: '간병 요청 금액 인상',
+            fallbackBody: `일당이 ${currentRate.toLocaleString()}원 → ${newDailyRate.toLocaleString()}원으로 인상되었습니다`,
+            fallbackType: 'MATCHING',
+            data: { careRequestId: id },
+          }).catch(() => {}),
+        ),
+      );
+    }
 
     const updated = await prisma.careRequest.findUnique({
       where: { id },
