@@ -114,3 +114,13 @@ export const adminDeleteNotice = async (req: AuthRequest, res: Response, next: N
     res.json({ success: true });
   } catch (e) { next(e); }
 };
+
+// POST /admin/notices/upload — 본문 삽입용 이미지/파일 업로드 (URL 반환)
+export const adminUploadNoticeFile = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const file = (req as any).file as Express.Multer.File | undefined;
+    if (!file) throw new AppError('파일을 첨부해주세요.', 400);
+    const url = `/uploads/${file.filename}`;
+    res.json({ success: true, data: { url, filename: file.originalname, size: file.size, mimeType: file.mimetype } });
+  } catch (e) { next(e); }
+};

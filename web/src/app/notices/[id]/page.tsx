@@ -51,7 +51,7 @@ export default function NoticeDetailPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-      <main className="pt-16 sm:pt-28 pb-16">
+      <main className="pt-14 sm:pt-20 pb-12">
         <div className="max-w-3xl mx-auto px-4">
           <Link href="/notices" className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4">
             ← 공지사항 목록
@@ -88,11 +88,10 @@ export default function NoticeDetailPage() {
                 <span>조회 {notice.viewCount.toLocaleString()}</span>
               </div>
               <div
-                className="mt-6 text-gray-800 leading-relaxed whitespace-pre-wrap break-words"
+                className="mt-6 text-gray-800 leading-relaxed break-words notice-content"
                 style={{ wordBreak: "break-word" }}
-              >
-                {notice.content}
-              </div>
+                dangerouslySetInnerHTML={{ __html: notice.content }}
+              />
             </article>
           )}
         </div>

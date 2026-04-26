@@ -465,6 +465,20 @@ export async function deleteNotice(id: string) {
   return apiRequest(`/admin/notices/${id}`, { method: "DELETE" });
 }
 
+export async function uploadNoticeFile(file: File): Promise<{ url: string; filename: string; size: number; mimeType: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
+  const res = await fetch("/api/admin/notices/upload", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.message || "업로드 실패");
+  return json.data;
+}
+
 // ─── Care Requests (일감) ─────────────────────────────
 export interface AdminCareRequestRow {
   id: string;

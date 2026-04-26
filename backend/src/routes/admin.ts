@@ -176,9 +176,11 @@ router.put('/education/:id', [
 router.delete('/education/:id', adminController.deleteEducation);
 
 // 공지사항
+import { upload, handleUploadError } from '../middlewares/upload';
 router.get('/notices', noticeController.adminListNotices);
 router.post('/notices', noticeController.adminCreateNotice);
 router.put('/notices/:id', noticeController.adminUpdateNotice);
 router.delete('/notices/:id', noticeController.adminDeleteNotice);
+router.post('/notices/upload', upload.single('file'), handleUploadError, noticeController.adminUploadNoticeFile);
 
 export default router;

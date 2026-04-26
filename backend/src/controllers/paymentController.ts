@@ -893,7 +893,7 @@ export const generatePaymentReceipt = async (req: AuthRequest, res: Response, ne
       throw new AppError('완료된 결제만 영수증 발급 가능합니다.', 400);
     }
 
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const doc = new PDFDocument({ size: 'A4', margin: 0 });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="receipt-${payment.tossOrderId}.pdf"`);
     doc.pipe(res);
@@ -901,64 +901,202 @@ export const generatePaymentReceipt = async (req: AuthRequest, res: Response, ne
     if (fs.existsSync(FONT_REGULAR)) doc.registerFont('Kor', FONT_REGULAR);
     if (fs.existsSync(FONT_BOLD)) doc.registerFont('KorBold', FONT_BOLD);
 
+    // ── 디자인 토큰
     const PAGE_W = 595.28;
-    const COLOR_PRIMARY = '#1E3A5F';
-    const COLOR_SUB = '#4A5568';
-    const COLOR_BORDER = '#CBD5E0';
-
-    // 헤더
-    doc.font('KorBold').fontSize(11).fillColor(COLOR_PRIMARY).text('CAREMATCH', 50, 50);
-    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB).text('케어매치 주식회사', 50, 64);
-    doc.font('Kor').fontSize(8).fillColor(COLOR_SUB)
-      .text(`영수증 번호  ${payment.tossOrderId}`, 50, 50, { width: PAGE_W - 100, align: 'right' });
-    doc.text(`발행일  ${new Date().toISOString().slice(0, 10)}`, 50, 64, { width: PAGE_W - 100, align: 'right' });
-
-    // 타이틀
-    doc.font('KorBold').fontSize(24).fillColor(COLOR_PRIMARY)
-      .text('결제 영수증', 50, 100, { width: PAGE_W - 100, align: 'center', characterSpacing: 2 });
-    doc.font('Kor').fontSize(9).fillColor(COLOR_SUB)
-      .text('Payment Receipt', 50, 130, { width: PAGE_W - 100, align: 'center' });
-    doc.lineWidth(1.5).strokeColor(COLOR_PRIMARY).moveTo(50, 150).lineTo(PAGE_W - 50, 150).stroke();
-
-    // 내용
-    let y = 170;
-    const rowH = 26;
-    const labelW = 110;
-    const valueX = 50 + labelW;
-    const valueW = PAGE_W - 100 - labelW;
-
-    const drawRow = (label: string, value: string, isBold = false) => {
-      doc.lineWidth(0.5).strokeColor(COLOR_BORDER).moveTo(50, y + rowH).lineTo(PAGE_W - 50, y + rowH).stroke();
-      doc.font('KorBold').fontSize(10).fillColor(COLOR_PRIMARY).text(label, 50, y + 8, { width: labelW });
-      doc.font(isBold ? 'KorBold' : 'Kor').fontSize(isBold ? 14 : 11).fillColor('#1A202C')
-        .text(value, valueX, y + 8, { width: valueW });
-      y += rowH;
-    };
+    const PAGE_H = 841.89;
+    const M = 48;                 // 좌우 여백
+    const C = PAGE_W - M * 2;     // 본문 너비
+    const PRIMARY = '#1E3A5F';
+    const ACCENT = '#0F766E';     // 청록 — 결제 완료 강조
+    const TEXT = '#0F172A';
+    const SUB = '#64748B';
+    const BORDER = '#E2E8F0';
+    const BG_SOFT = '#F8FAFC';
+    const BG_HEAD = '#F1F5F9';
 
     const guardian = payment.contract?.guardian.user;
     const patient = payment.contract?.careRequest.patient;
     const caregiver = payment.contract?.caregiver.user;
 
-    drawRow('결제자', guardian?.name || '-');
-    drawRow('연락처', guardian?.phone || '-');
-    drawRow('이메일', guardian?.email || '-');
-    drawRow('환자명', patient?.name || '-');
-    drawRow('간병인', caregiver?.name || '-');
-    drawRow('결제 방법', ({ CARD: '카드', BANK_TRANSFER: '무통장입금', DIRECT: '직접결제' } as any)[payment.method] || payment.method);
-    drawRow('서비스 금액', `${payment.amount.toLocaleString()}원`);
-    drawRow('VAT', `${payment.vatAmount.toLocaleString()}원`);
-    if (payment.pointsUsed > 0) drawRow('포인트 사용', `-${payment.pointsUsed.toLocaleString()}원`);
-    drawRow('결제일시', payment.paidAt ? new Date(payment.paidAt).toLocaleString('ko-KR') : new Date(payment.createdAt).toLocaleString('ko-KR'));
-    y += 10;
-    drawRow('총 결제 금액', `${payment.totalAmount.toLocaleString()}원`, true);
+    const methodLabel = ({ CARD: '신용카드', BANK_TRANSFER: '무통장입금', DIRECT: '직접결제' } as any)[payment.method] || payment.method;
+    const paidStr = payment.paidAt
+      ? new Date(payment.paidAt).toLocaleString('ko-KR', { dateStyle: 'long', timeStyle: 'short' })
+      : new Date(payment.createdAt).toLocaleString('ko-KR', { dateStyle: 'long', timeStyle: 'short' });
+    const issuedStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 
-    // 푸터
-    y += 30;
-    doc.font('Kor').fontSize(9).fillColor(COLOR_SUB)
-      .text('본 영수증은 전자적으로 발행된 문서입니다.', 50, y, { width: PAGE_W - 100, align: 'center' });
-    y += 16;
-    doc.fontSize(8)
-      .text('케어매치 주식회사 | 사업자등록번호 173-81-03376', 50, y, { width: PAGE_W - 100, align: 'center' });
+    // ── 1. 상단 컬러 밴드 + 브랜드
+    doc.rect(0, 0, PAGE_W, 96).fill(PRIMARY);
+    doc.font('KorBold').fontSize(20).fillColor('#FFFFFF').text('CAREMATCH', M, 30);
+    doc.font('Kor').fontSize(9).fillColor('#CBD5E0').text('케어매치 주식회사 · 간병인 매칭 플랫폼', M, 56);
+
+    // 우측: 영수증 타이틀
+    doc.font('KorBold').fontSize(15).fillColor('#FFFFFF')
+      .text('PAYMENT  RECEIPT', M, 28, { width: C, align: 'right', characterSpacing: 1.5 });
+    doc.font('Kor').fontSize(8).fillColor('#CBD5E0')
+      .text('전자 결제 영수증', M, 50, { width: C, align: 'right' });
+    doc.fontSize(9).fillColor('#FFFFFF')
+      .text(`발행일  ${issuedStr}`, M, 66, { width: C, align: 'right' });
+
+    // ── 2. 영수증 번호 강조 박스
+    let y = 116;
+    doc.roundedRect(M, y, C, 56, 6).fillAndStroke(BG_SOFT, BORDER);
+    doc.font('Kor').fontSize(8).fillColor(SUB).text('영수증 번호', M + 16, y + 10);
+    doc.font('KorBold').fontSize(13).fillColor(TEXT).text(payment.tossOrderId || payment.id.slice(0, 18), M + 16, y + 24);
+    // 우측 결제 완료 배지
+    const badgeW = 110, badgeH = 30, badgeX = PAGE_W - M - 16 - badgeW, badgeY = y + 13;
+    doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 15).fill(ACCENT);
+    doc.font('KorBold').fontSize(11).fillColor('#FFFFFF')
+      .text(payment.status === 'ESCROW' ? '에스크로 보관' : '결제 완료', badgeX, badgeY + 8, { width: badgeW, align: 'center' });
+
+    y += 56 + 22;
+
+    // ── 3. 받는 분 / 공급자 (2컬럼)
+    const colW = (C - 14) / 2;
+    const drawPartyBox = (x: number, title: string, lines: { k: string; v: string }[]) => {
+      doc.roundedRect(x, y, colW, 110, 6).fillAndStroke('#FFFFFF', BORDER);
+      // 헤더
+      doc.rect(x, y, colW, 26).fill(BG_HEAD);
+      doc.font('KorBold').fontSize(9).fillColor(PRIMARY).text(title, x + 14, y + 9);
+      // 라인
+      let ly = y + 36;
+      for (const ln of lines) {
+        doc.font('Kor').fontSize(8).fillColor(SUB).text(ln.k, x + 14, ly, { width: 50 });
+        doc.font('Kor').fontSize(9).fillColor(TEXT).text(ln.v || '-', x + 70, ly, { width: colW - 84 });
+        ly += 18;
+      }
+    };
+    drawPartyBox(M, '받는 분 (BILL TO)', [
+      { k: '성명', v: guardian?.name || '-' },
+      { k: '연락처', v: guardian?.phone || '-' },
+      { k: '이메일', v: guardian?.email || '-' },
+      { k: '환자', v: patient?.name || '-' },
+    ]);
+    drawPartyBox(M + colW + 14, '공급자 (PROVIDER)', [
+      { k: '상호', v: '케어매치 주식회사' },
+      { k: '등록번호', v: '173-81-03376' },
+      { k: '대표', v: '관리자' },
+      { k: '간병인', v: caregiver?.name || '-' },
+    ]);
+    y += 110 + 24;
+
+    // ── 4. 서비스 / 결제 금액 표
+    // 헤더 행
+    const colSvc = C - 110 - 110; // 항목 / 단위 / 금액
+    doc.rect(M, y, C, 28).fill(BG_HEAD);
+    doc.lineWidth(0.5).strokeColor(BORDER).rect(M, y, C, 28).stroke();
+    doc.font('KorBold').fontSize(9).fillColor(PRIMARY)
+      .text('항목 (DESCRIPTION)', M + 14, y + 9);
+    doc.text('수량/단위', M + 14 + colSvc, y + 9, { width: 110, align: 'center' });
+    doc.text('금액 (KRW)', M + 14 + colSvc + 110, y + 9, { width: 110 - 14, align: 'right' });
+    y += 28;
+
+    // 데이터 행 그리는 헬퍼
+    const drawAmtRow = (label: string, qty: string, amt: string, opts?: { bold?: boolean; bg?: string; color?: string; size?: number }) => {
+      const h = opts?.size === 13 ? 38 : 30;
+      if (opts?.bg) {
+        doc.rect(M, y, C, h).fill(opts.bg);
+      }
+      doc.lineWidth(0.5).strokeColor(BORDER).moveTo(M, y + h).lineTo(M + C, y + h).stroke();
+      const font = opts?.bold ? 'KorBold' : 'Kor';
+      const size = opts?.size || 10;
+      const color = opts?.color || TEXT;
+      const yMid = y + (h - size) / 2 - 1;
+      doc.font(font).fontSize(size).fillColor(color).text(label, M + 14, yMid, { width: colSvc - 14 });
+      doc.font('Kor').fontSize(9).fillColor(SUB).text(qty, M + 14 + colSvc, yMid + (size - 9) / 2, { width: 110, align: 'center' });
+      doc.font(font).fontSize(size).fillColor(color).text(amt, M + 14 + colSvc + 110, yMid, { width: 110 - 14, align: 'right' });
+      y += h;
+    };
+
+    // 간병 서비스 (메인 라인)
+    const ct = payment.contract;
+    let svcLabel = '간병 서비스 이용료';
+    let svcQty = '-';
+    if (ct?.startDate && ct?.endDate) {
+      const days = Math.max(1, Math.ceil((new Date(ct.endDate).getTime() - new Date(ct.startDate).getTime()) / 86400000));
+      svcQty = `${days}일`;
+      const sd = new Date(ct.startDate).toLocaleDateString('ko-KR');
+      const ed = new Date(ct.endDate).toLocaleDateString('ko-KR');
+      svcLabel = `간병 서비스 (${sd} ~ ${ed})`;
+    }
+    drawAmtRow(svcLabel, svcQty, `${payment.amount.toLocaleString()}원`);
+
+    // VAT
+    if (payment.vatAmount > 0) {
+      drawAmtRow('부가가치세 (VAT 10%)', '-', `${payment.vatAmount.toLocaleString()}원`);
+    }
+
+    // 포인트 사용 (할인)
+    if (payment.pointsUsed > 0) {
+      drawAmtRow('포인트 사용', '-', `-${payment.pointsUsed.toLocaleString()}원`, { color: '#2563EB' });
+    }
+
+    // 합계 (강조)
+    drawAmtRow(
+      '총 결제금액',
+      payment.method === 'CARD' && payment.vatAmount === 0 ? '(VAT 별도)' : '(VAT 포함)',
+      `${payment.totalAmount.toLocaleString()}원`,
+      { bold: true, bg: BG_SOFT, color: PRIMARY, size: 13 },
+    );
+
+    y += 24;
+
+    // ── 5. 결제 정보 박스
+    doc.roundedRect(M, y, C, 80, 6).fillAndStroke('#FFFFFF', BORDER);
+    doc.font('KorBold').fontSize(9).fillColor(PRIMARY).text('결제 정보', M + 14, y + 12);
+    // 3 컬럼
+    const infoColW = (C - 28) / 3;
+    const infoY = y + 32;
+    const drawInfoCol = (idx: number, k: string, v: string) => {
+      const x = M + 14 + idx * infoColW;
+      doc.font('Kor').fontSize(8).fillColor(SUB).text(k, x, infoY);
+      doc.font('KorBold').fontSize(10).fillColor(TEXT).text(v, x, infoY + 14, { width: infoColW - 8 });
+    };
+    drawInfoCol(0, '결제 수단', methodLabel);
+    drawInfoCol(1, '결제 일시', paidStr);
+    drawInfoCol(2, '거래 ID', (payment.tossPaymentKey || payment.tossOrderId || '').slice(0, 22));
+    y += 80 + 24;
+
+    // ── 6. 환불 정보 (있을 때만)
+    if (payment.refundAmount && payment.refundedAt) {
+      doc.roundedRect(M, y, C, 60, 6).fillAndStroke('#FEF2F2', '#FCA5A5');
+      doc.font('KorBold').fontSize(9).fillColor('#B91C1C').text('환불 처리 내역', M + 14, y + 12);
+      doc.font('Kor').fontSize(9).fillColor('#7F1D1D')
+        .text(`환불 금액: ${payment.refundAmount.toLocaleString()}원  ·  처리일: ${new Date(payment.refundedAt).toLocaleString('ko-KR')}`, M + 14, y + 30);
+      if (payment.refundReason) {
+        doc.fontSize(8).text(`사유: ${payment.refundReason}`, M + 14, y + 44, { width: C - 28 });
+      }
+      y += 60 + 16;
+    }
+
+    // ── 7. 안내 문구
+    if (y > PAGE_H - 130) { doc.addPage(); y = M; }
+    doc.font('Kor').fontSize(8).fillColor(SUB)
+      .text(
+        '※ 본 영수증은 전자적으로 발행된 문서이며, 별도의 서명·날인 없이 효력을 가집니다. 부가세 신고 자료로 사용 가능합니다.',
+        M, y, { width: C, align: 'left' },
+      );
+    y += 14;
+    doc.text(
+      '※ 환불 및 취소 문의는 케어매치 고객센터를 통해 접수해주시기 바라며, 관련 법령(전자상거래법, 개인정보보호법)에 따라 일정 기간 보관됩니다.',
+      M, y, { width: C, align: 'left' },
+    );
+
+    // ── 8. 하단 회사 정보 + 인감 자리
+    const bottomY = PAGE_H - 110;
+    doc.lineWidth(0.5).strokeColor(BORDER).moveTo(M, bottomY).lineTo(M + C, bottomY).stroke();
+    doc.font('KorBold').fontSize(10).fillColor(PRIMARY).text('케어매치 주식회사', M, bottomY + 14);
+    doc.font('Kor').fontSize(8).fillColor(SUB)
+      .text('사업자등록번호: 173-81-03376', M, bottomY + 32);
+    doc.text('통신판매업: 제2025-0000호  ·  대표이사: 관리자', M, bottomY + 46);
+    doc.text('고객센터 운영시간: 평일 09:30~17:30 (점심 12:00~13:00)', M, bottomY + 60);
+
+    // 인감
+    const stampX = PAGE_W - M - 80;
+    const stampY = bottomY + 14;
+    doc.lineWidth(2).strokeColor('#DC2626').circle(stampX + 40, stampY + 40, 36).stroke();
+    doc.font('KorBold').fontSize(11).fillColor('#DC2626')
+      .text('CAREMATCH', stampX, stampY + 22, { width: 80, align: 'center', characterSpacing: 1 });
+    doc.fontSize(8).text('확  인', stampX, stampY + 44, { width: 80, align: 'center' });
 
     doc.end();
   } catch (error) {

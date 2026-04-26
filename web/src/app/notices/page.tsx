@@ -55,11 +55,10 @@ export default function NoticesPage() {
     <div className="min-h-screen bg-gray-50">
       <Header />
 
-      <main className="pt-16 sm:pt-28 pb-16">
+      <main className="pt-14 sm:pt-20 pb-12">
         <div className="max-w-3xl mx-auto px-4">
-          <div className="mb-6">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">공지사항</h1>
-            <p className="text-sm text-gray-500 mt-1">서비스 안내, 업데이트 및 이벤트 소식</p>
+          <div className="mb-3">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">공지사항</h1>
           </div>
 
           {/* 카테고리 필터 */}

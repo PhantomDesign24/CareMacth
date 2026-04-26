@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getAdminNotices, createNotice, updateNotice, deleteNotice, type AdminNotice } from "@/lib/api";
+import { useEffect, useState, useRef } from "react";
+import { getAdminNotices, createNotice, updateNotice, deleteNotice, uploadNoticeFile, type AdminNotice } from "@/lib/api";
 
 const CATEGORY_LABEL: Record<string, string> = {
   GENERAL: "일반", UPDATE: "업데이트", EVENT: "이벤트", MAINTENANCE: "점검",
@@ -175,16 +175,10 @@ export default function AdminNoticesPage() {
                   <option value="MAINTENANCE">점검</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">내용</label>
-                <textarea
-                  value={editing.content}
-                  onChange={(e) => setEditing({ ...editing, content: e.target.value })}
-                  rows={10}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
-                  placeholder="본문 입력 (줄바꿈 그대로 표시됨)"
-                />
-              </div>
+              <NoticeEditor
+                value={editing.content}
+                onChange={(v) => setEditing({ ...editing, content: v })}
+              />
               <div className="flex gap-6">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -222,6 +216,109 @@ export default function AdminNoticesPage() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// 본문 에디터 (HTML + 이미지 업로드)
+// ============================================
+function NoticeEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const insertAtCursor = (text: string) => {
+    const ta = taRef.current;
+    if (!ta) { onChange(value + text); return; }
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const next = value.slice(0, start) + text + value.slice(end);
+    onChange(next);
+    setTimeout(() => {
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + text.length;
+    }, 0);
+  };
+
+  const wrap = (before: string, after: string = before) => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const s = ta.selectionStart;
+    const e = ta.selectionEnd;
+    const sel = value.slice(s, e);
+    const next = value.slice(0, s) + before + (sel || '여기에 텍스트') + after + value.slice(e);
+    onChange(next);
+    setTimeout(() => {
+      ta.focus();
+      ta.selectionStart = s + before.length;
+      ta.selectionEnd = s + before.length + (sel || '여기에 텍스트').length;
+    }, 0);
+  };
+
+  const handleFile = async (f: File) => {
+    setUploading(true);
+    try {
+      const r = await uploadNoticeFile(f);
+      const isImage = r.mimeType.startsWith('image/');
+      const tag = isImage
+        ? `<img src="${r.url}" alt="${r.filename}" style="max-width:100%;height:auto;" />\n`
+        : `<a href="${r.url}" target="_blank" rel="noopener">📎 ${r.filename}</a>\n`;
+      insertAtCursor(tag);
+    } catch (e: any) {
+      alert(e?.message || '업로드 실패');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">내용 (HTML 입력 가능)</label>
+      <div className="flex flex-wrap gap-1 mb-2 p-2 bg-gray-50 border border-gray-200 rounded-t-lg">
+        <button type="button" onClick={() => wrap('<b>', '</b>')} className="px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:bg-gray-100">굵게</button>
+        <button type="button" onClick={() => wrap('<i>', '</i>')} className="px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:bg-gray-100">기울임</button>
+        <button type="button" onClick={() => wrap('<u>', '</u>')} className="px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:bg-gray-100">밑줄</button>
+        <button type="button" onClick={() => wrap('<h3 style="font-weight:bold;font-size:1.15em;margin:1em 0 0.5em">', '</h3>')} className="px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:bg-gray-100">소제목</button>
+        <button type="button" onClick={() => insertAtCursor('<ul>\n  <li>항목</li>\n  <li>항목</li>\n</ul>\n')} className="px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:bg-gray-100">목록</button>
+        <button type="button" onClick={() => {
+          const url = prompt('링크 URL 입력 (https://...)');
+          if (url) wrap(`<a href="${url}" target="_blank" rel="noopener">`, '</a>');
+        }} className="px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:bg-gray-100">🔗 링크</button>
+        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+          {uploading ? '업로드 중...' : '🖼 이미지/파일 첨부'}
+        </button>
+        <button type="button" onClick={() => insertAtCursor('<hr style="margin:1em 0;border-color:#e5e7eb" />\n')} className="px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:bg-gray-100">— 구분선</button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+          }}
+        />
+      </div>
+      <textarea
+        ref={taRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={14}
+        className="w-full px-3 py-2 border border-gray-300 rounded-b-lg border-t-0 font-mono text-sm"
+        placeholder="본문 입력. HTML 태그 사용 가능. 이미지 첨부 시 자동으로 <img> 태그가 삽입됩니다."
+      />
+      {/* 미리보기 */}
+      {value && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-sm text-gray-600 font-medium">미리보기 ▾</summary>
+          <div
+            className="mt-2 p-4 bg-white border border-gray-200 rounded-lg prose prose-sm max-w-none"
+            dangerouslySetInnerHTML={{ __html: value }}
+          />
+        </details>
       )}
     </div>
   );
