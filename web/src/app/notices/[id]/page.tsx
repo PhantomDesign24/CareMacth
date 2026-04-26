@@ -7,6 +7,13 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { noticeAPI } from "@/lib/api";
 
+interface NoticeAttachment {
+  url: string;
+  filename: string;
+  size: number;
+  mimeType: string;
+}
+
 interface Notice {
   id: string;
   title: string;
@@ -15,6 +22,7 @@ interface Notice {
   isPinned: boolean;
   viewCount: number;
   createdAt: string;
+  attachments?: NoticeAttachment[] | null;
 }
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -92,6 +100,35 @@ export default function NoticeDetailPage() {
                 style={{ wordBreak: "break-word" }}
                 dangerouslySetInnerHTML={{ __html: notice.content }}
               />
+
+              {/* 첨부 파일 */}
+              {notice.attachments && notice.attachments.length > 0 && (
+                <div className="mt-8 pt-6 border-t border-gray-100">
+                  <div className="text-sm font-semibold text-gray-700 mb-3">📎 첨부 파일 ({notice.attachments.length})</div>
+                  <ul className="space-y-2">
+                    {notice.attachments.map((f, i) => (
+                      <li key={i}>
+                        <a
+                          href={f.url}
+                          download={f.filename}
+                          target="_blank"
+                          rel="noopener"
+                          className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <span className="text-xl">{f.mimeType?.startsWith('image/') ? '🖼' : '📄'}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm text-gray-900 font-medium truncate">{f.filename}</div>
+                            <div className="text-xs text-gray-400">
+                              {f.size < 1024 ? `${f.size}B` : f.size < 1024 * 1024 ? `${(f.size / 1024).toFixed(1)}KB` : `${(f.size / 1024 / 1024).toFixed(1)}MB`}
+                            </div>
+                          </div>
+                          <span className="text-xs text-blue-600 shrink-0">다운로드 ↓</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </article>
           )}
         </div>

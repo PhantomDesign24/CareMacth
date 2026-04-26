@@ -437,6 +437,13 @@ export async function deleteEducation(id: string) {
 }
 
 // ─── Notices (공지사항) ────────────────────────────────
+export interface NoticeAttachment {
+  url: string;
+  filename: string;
+  size: number;
+  mimeType: string;
+}
+
 export interface AdminNotice {
   id: string;
   title: string;
@@ -445,6 +452,7 @@ export interface AdminNotice {
   isPinned: boolean;
   isPublished: boolean;
   viewCount: number;
+  attachments: NoticeAttachment[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -453,11 +461,11 @@ export async function getAdminNotices() {
   return apiRequest<AdminNotice[]>("/admin/notices");
 }
 
-export async function createNotice(data: { title: string; content: string; category?: string; isPinned?: boolean; isPublished?: boolean }) {
+export async function createNotice(data: { title: string; content: string; category?: string; isPinned?: boolean; isPublished?: boolean; attachments?: NoticeAttachment[] | null }) {
   return apiRequest<AdminNotice>("/admin/notices", { method: "POST", body: data });
 }
 
-export async function updateNotice(id: string, data: { title?: string; content?: string; category?: string; isPinned?: boolean; isPublished?: boolean }) {
+export async function updateNotice(id: string, data: { title?: string; content?: string; category?: string; isPinned?: boolean; isPublished?: boolean; attachments?: NoticeAttachment[] | null }) {
   return apiRequest<AdminNotice>(`/admin/notices/${id}`, { method: "PUT", body: data });
 }
 
@@ -470,6 +478,20 @@ export async function uploadNoticeFile(file: File): Promise<{ url: string; filen
   formData.append("file", file);
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
   const res = await fetch("/api/admin/notices/upload", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.message || "업로드 실패");
+  return json.data;
+}
+
+export async function uploadNoticeFilesMulti(files: File[]): Promise<{ url: string; filename: string; size: number; mimeType: string }[]> {
+  const formData = new FormData();
+  for (const f of files) formData.append("files", f);
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
+  const res = await fetch("/api/admin/notices/upload-multi", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: formData,

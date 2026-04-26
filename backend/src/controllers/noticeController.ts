@@ -66,7 +66,7 @@ export const adminListNotices = async (req: AuthRequest, res: Response, next: Ne
 // POST /admin/notices — 등록
 export const adminCreateNotice = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { title, content, category, isPinned, isPublished } = req.body;
+    const { title, content, category, isPinned, isPublished, attachments } = req.body;
     if (!title || !content) {
       throw new AppError('제목과 내용은 필수입니다.', 400);
     }
@@ -79,6 +79,7 @@ export const adminCreateNotice = async (req: AuthRequest, res: Response, next: N
         category: cat as any,
         isPinned: !!isPinned,
         isPublished: isPublished !== false,
+        attachments: Array.isArray(attachments) ? (attachments as any) : null,
       },
     });
     res.status(201).json({ success: true, data: created });
@@ -89,7 +90,7 @@ export const adminCreateNotice = async (req: AuthRequest, res: Response, next: N
 export const adminUpdateNotice = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const { title, content, category, isPinned, isPublished } = req.body;
+    const { title, content, category, isPinned, isPublished, attachments } = req.body;
     const exist = await prisma.notice.findUnique({ where: { id } });
     if (!exist) throw new AppError('공지사항을 찾을 수 없습니다.', 404);
     const updated = await prisma.notice.update({
@@ -100,6 +101,7 @@ export const adminUpdateNotice = async (req: AuthRequest, res: Response, next: N
         ...(category !== undefined && { category }),
         ...(isPinned !== undefined && { isPinned: !!isPinned }),
         ...(isPublished !== undefined && { isPublished: !!isPublished }),
+        ...(attachments !== undefined && { attachments: Array.isArray(attachments) ? (attachments as any) : null }),
       },
     });
     res.json({ success: true, data: updated });
@@ -122,5 +124,20 @@ export const adminUploadNoticeFile = async (req: AuthRequest, res: Response, nex
     if (!file) throw new AppError('파일을 첨부해주세요.', 400);
     const url = `/uploads/${file.filename}`;
     res.json({ success: true, data: { url, filename: file.originalname, size: file.size, mimeType: file.mimetype } });
+  } catch (e) { next(e); }
+};
+
+// POST /admin/notices/upload-multi — 첨부파일 멀티 업로드
+export const adminUploadNoticeFilesMulti = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const files = (req as any).files as Express.Multer.File[] | undefined;
+    if (!files || files.length === 0) throw new AppError('파일을 첨부해주세요.', 400);
+    const result = files.map((f) => ({
+      url: `/uploads/${f.filename}`,
+      filename: f.originalname,
+      size: f.size,
+      mimeType: f.mimetype,
+    }));
+    res.json({ success: true, data: result });
   } catch (e) { next(e); }
 };

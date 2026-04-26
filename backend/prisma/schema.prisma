@@ -1047,11 +1047,12 @@ enum NoticeCategory {
 model Notice {
   id          String         @id @default(uuid())
   title       String
-  content     String         // 본문 (HTML 또는 마크다운)
+  content     String         // 본문 HTML
   category    NoticeCategory @default(GENERAL)
   isPinned    Boolean        @default(false) // 상단 고정
   isPublished Boolean        @default(true)  // 게시 여부 (false 면 비공개)
   viewCount   Int            @default(0)
+  attachments Json?          // [{ url, filename, size, mimeType }] 형태의 첨부 파일 목록
 
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt

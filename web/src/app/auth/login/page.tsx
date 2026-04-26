@@ -44,10 +44,11 @@ export default function LoginPage() {
       localStorage.setItem("user", JSON.stringify(data.data.user));
       const role = data.data.user.role;
       if (role === "ADMIN") {
-        // 어드민 패널은 별도 localStorage key('token') 사용
+        // 어드민 패널이 별도 'token' key 를 쓰므로 동기화만 해두고, 리디렉션은 보호자 대시보드
+        // (관리자가 직접 /admin 진입 시 토큰 인식되도록)
         localStorage.setItem("token", accessToken);
         localStorage.setItem("admin_user", JSON.stringify(data.data.user));
-        window.location.href = "/admin";
+        window.location.href = "/dashboard/guardian";
       } else if (role === "GUARDIAN") {
         window.location.href = "/dashboard/guardian";
       } else if (role === "CAREGIVER") {

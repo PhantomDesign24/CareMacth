@@ -182,5 +182,6 @@ router.post('/notices', noticeController.adminCreateNotice);
 router.put('/notices/:id', noticeController.adminUpdateNotice);
 router.delete('/notices/:id', noticeController.adminDeleteNotice);
 router.post('/notices/upload', upload.single('file'), handleUploadError, noticeController.adminUploadNoticeFile);
+router.post('/notices/upload-multi', upload.array('files', 10), handleUploadError, noticeController.adminUploadNoticeFilesMulti);
 
 export default router;
