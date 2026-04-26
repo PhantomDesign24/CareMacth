@@ -86,7 +86,12 @@ export default function NoticeDetailPage() {
                 </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 break-words flex items-center gap-2">
-                {notice.isPinned && <span className="text-red-500" title="고정 공지">📌</span>}
+                {notice.isPinned && (
+                  <svg className="w-6 h-6 shrink-0 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="고정 공지">
+                    <path d="M3 11l18-5v12L3 14v-3z" />
+                    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+                  </svg>
+                )}
                 <span>{notice.title}</span>
               </h1>
               <div className="mt-2 flex items-center gap-3 text-xs text-gray-400 pb-4 border-b border-gray-100">

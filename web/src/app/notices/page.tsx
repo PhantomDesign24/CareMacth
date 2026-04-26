@@ -108,7 +108,12 @@ export default function NoticesPage() {
                     </span>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-gray-900 break-words flex items-center gap-1.5">
-                        {it.isPinned && <span className="text-red-500" title="고정 공지">📌</span>}
+                        {it.isPinned && (
+                          <svg className="w-[18px] h-[18px] shrink-0 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="고정 공지">
+                            <path d="M3 11l18-5v12L3 14v-3z" />
+                            <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+                          </svg>
+                        )}
                         <span>{it.title}</span>
                       </h3>
                       <div className="mt-1 flex items-center gap-3 text-xs text-gray-400">
