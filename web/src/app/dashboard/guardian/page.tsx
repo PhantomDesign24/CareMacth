@@ -53,6 +53,25 @@ interface Payment {
   method: string;
   status: string;
   description: string;
+  // 상세 정보
+  rawAmount: number;        // amount (공급가)
+  vatAmount: number;
+  totalAmount: number;
+  pointsUsed: number;
+  paidAt: string | null;
+  createdAt: string;
+  rawStatus: string;        // PaymentStatus enum
+  rawMethod: string;
+  // 환불 정보
+  refundAmount: number | null;
+  refundedAt: string | null;
+  refundReason: string | null;
+  refundRequestStatus: string | null;
+  refundRequestedAt: string | null;
+  refundRequestAmount: number | null;
+  refundRequestReason: string | null;
+  refundReviewedAt: string | null;
+  refundRejectReason: string | null;
 }
 
 interface PatientRaw {
@@ -184,6 +203,7 @@ function GuardianDashboard() {
 
   // 환불 모달
   const [refundTarget, setRefundTarget] = useState<Payment | null>(null);
+  const [paymentDetail, setPaymentDetail] = useState<Payment | null>(null);
   const [refundReason, setRefundReason] = useState("");
   const [refundLoading, setRefundLoading] = useState(false);
 
@@ -414,7 +434,24 @@ function GuardianDashboard() {
         amount: p.totalAmount,
         method: formatPaymentMethod(p.method),
         status: formatPaymentStatus(p.status),
-        description: '간병 서비스 이용료',
+        description: p.method === 'DIRECT' ? '간병 서비스 이용료 (직접결제)' : '간병 서비스 이용료',
+        rawAmount: p.amount || 0,
+        vatAmount: p.vatAmount || 0,
+        totalAmount: p.totalAmount || 0,
+        pointsUsed: p.pointsUsed || 0,
+        paidAt: p.paidAt || null,
+        createdAt: p.createdAt || '',
+        rawStatus: p.status || '',
+        rawMethod: p.method || '',
+        refundAmount: p.refundAmount ?? null,
+        refundedAt: p.refundedAt || null,
+        refundReason: p.refundReason || null,
+        refundRequestStatus: p.refundRequestStatus || null,
+        refundRequestedAt: p.refundRequestedAt || null,
+        refundRequestAmount: p.refundRequestAmount ?? null,
+        refundRequestReason: p.refundRequestReason || null,
+        refundReviewedAt: p.refundReviewedAt || null,
+        refundRejectReason: p.refundRejectReason || null,
       })));
     } catch (err: unknown) {
       const message =
@@ -1255,9 +1292,18 @@ function GuardianDashboard() {
                             const canReceipt = /완료|COMPLETED|ESCROW|에스크로/i.test(pay.status);
                             const canRefund = canReceipt;
                             return (
-                            <tr key={pay.id} className="border-b border-gray-50 last:border-0">
+                            <tr
+                              key={pay.id}
+                              className="border-b border-gray-50 last:border-0 hover:bg-gray-50 cursor-pointer"
+                              onClick={() => setPaymentDetail(pay)}
+                            >
                               <td className="py-3 px-2 text-gray-700">{pay.date}</td>
-                              <td className="py-3 px-2 text-gray-700">{pay.description}</td>
+                              <td className="py-3 px-2 text-gray-700">
+                                {pay.description}
+                                {pay.refundRequestStatus === "PENDING" && (
+                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">환불 검토중</span>
+                                )}
+                              </td>
                               <td className="py-3 px-2 text-gray-500">{pay.method}</td>
                               <td className="py-3 px-2 text-right font-semibold text-gray-900">
                                 {pay.amount.toLocaleString()}원
@@ -1265,7 +1311,7 @@ function GuardianDashboard() {
                               <td className="py-3 px-2 text-center">
                                 {statusBadge(pay.status)}
                               </td>
-                              <td className="py-3 px-2 text-center">
+                              <td className="py-3 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex items-center justify-center gap-1">
                                   {canReceipt && (
                                     <button
@@ -1279,7 +1325,7 @@ function GuardianDashboard() {
                                       PDF
                                     </button>
                                   )}
-                                  {canRefund && (
+                                  {canRefund && pay.refundRequestStatus !== "PENDING" && (
                                     <button
                                       type="button"
                                       onClick={() => setRefundTarget(pay)}
@@ -1300,11 +1346,19 @@ function GuardianDashboard() {
                     {/* 모바일: 컴팩트 카드 */}
                     <div className="md:hidden divide-y divide-gray-100">
                       {filteredPayments.map((pay) => (
-                        <div key={pay.id} className="px-4 py-3">
+                        <button
+                          key={pay.id}
+                          type="button"
+                          className="w-full px-4 py-3 text-left hover:bg-gray-50"
+                          onClick={() => setPaymentDetail(pay)}
+                        >
                           <div className="flex items-center justify-between gap-2 mb-1">
-                            <div className="flex items-center gap-2 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0 flex-wrap">
                               <span className="text-xs text-gray-400 shrink-0">{pay.date}</span>
                               {statusBadge(pay.status)}
+                              {pay.refundRequestStatus === "PENDING" && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">환불 검토중</span>
+                              )}
                             </div>
                             <div className="font-bold text-gray-900 text-sm whitespace-nowrap">
                               {pay.amount.toLocaleString()}원
@@ -1312,9 +1366,9 @@ function GuardianDashboard() {
                           </div>
                           <div className="flex items-center justify-between text-xs text-gray-500">
                             <span className="truncate">{pay.description}</span>
-                            <span className="shrink-0 ml-2">{pay.method}</span>
+                            <span className="shrink-0 ml-2">{pay.method} ›</span>
                           </div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </>
@@ -1745,6 +1799,134 @@ function GuardianDashboard() {
               >
                 {insuranceLoading ? "처리 중..." : "신청"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 결제 상세 모달 */}
+      {paymentDetail && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">결제 상세</h3>
+              <button
+                type="button"
+                onClick={() => setPaymentDetail(null)}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                aria-label="닫기"
+              >×</button>
+            </div>
+            <div className="px-5 py-4 space-y-4 text-sm">
+              {/* 상태 */}
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">상태</span>
+                <div className="flex items-center gap-2">
+                  {statusBadge(paymentDetail.status)}
+                  {paymentDetail.refundRequestStatus === "PENDING" && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-700">환불 검토중</span>
+                  )}
+                  {paymentDetail.refundRequestStatus === "APPROVED" && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">환불 승인</span>
+                  )}
+                  {paymentDetail.refundRequestStatus === "REJECTED" && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-red-100 text-red-700">환불 거절</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 결제 정보 */}
+              <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
+                <div className="flex justify-between"><span className="text-gray-500">결제일</span><span className="text-gray-900 font-medium">{paymentDetail.date}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">결제 수단</span><span className="text-gray-900">{paymentDetail.method}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">결제번호</span><span className="text-gray-700 font-mono text-xs">{paymentDetail.id.slice(0, 12)}…</span></div>
+              </div>
+
+              {/* 금액 분해 */}
+              <div className="border border-gray-200 rounded-lg p-3 space-y-1.5">
+                <div className="flex justify-between text-gray-700"><span>공급가</span><span>{paymentDetail.rawAmount.toLocaleString()}원</span></div>
+                {paymentDetail.vatAmount > 0 && (
+                  <div className="flex justify-between text-gray-700"><span>VAT</span><span>{paymentDetail.vatAmount.toLocaleString()}원</span></div>
+                )}
+                {paymentDetail.pointsUsed > 0 && (
+                  <div className="flex justify-between text-blue-600"><span>포인트 사용</span><span>−{paymentDetail.pointsUsed.toLocaleString()}P</span></div>
+                )}
+                <div className="border-t border-gray-200 pt-1.5 flex justify-between font-bold text-gray-900"><span>총 결제금액</span><span>{paymentDetail.totalAmount.toLocaleString()}원</span></div>
+              </div>
+
+              {/* 환불 요청 진행 상태 */}
+              {paymentDetail.refundRequestStatus && (
+                <div className="border border-amber-200 bg-amber-50 rounded-lg p-3 space-y-2">
+                  <div className="font-semibold text-amber-800 text-sm">환불 요청 상태</div>
+                  <ol className="space-y-1.5 text-xs text-amber-900">
+                    <li className="flex items-start gap-2">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-600 mt-1.5 shrink-0"></span>
+                      <div>
+                        <div className="font-medium">접수</div>
+                        <div className="text-amber-700">{paymentDetail.refundRequestedAt ? formatDate(paymentDetail.refundRequestedAt) : '-'}</div>
+                        {paymentDetail.refundRequestAmount && (
+                          <div className="text-amber-700">요청 금액: {paymentDetail.refundRequestAmount.toLocaleString()}원</div>
+                        )}
+                        {paymentDetail.refundRequestReason && (
+                          <div className="text-amber-700">사유: {paymentDetail.refundRequestReason}</div>
+                        )}
+                      </div>
+                    </li>
+                    {paymentDetail.refundReviewedAt && (
+                      <li className="flex items-start gap-2">
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${paymentDetail.refundRequestStatus === 'APPROVED' ? 'bg-emerald-600' : 'bg-red-600'}`}></span>
+                        <div>
+                          <div className="font-medium">{paymentDetail.refundRequestStatus === 'APPROVED' ? '승인 처리' : '거절 처리'}</div>
+                          <div className="text-amber-700">{formatDate(paymentDetail.refundReviewedAt)}</div>
+                          {paymentDetail.refundRejectReason && (
+                            <div className="text-red-700">거절 사유: {paymentDetail.refundRejectReason}</div>
+                          )}
+                        </div>
+                      </li>
+                    )}
+                    {!paymentDetail.refundReviewedAt && paymentDetail.refundRequestStatus === 'PENDING' && (
+                      <li className="text-amber-700 pl-3.5">관리자 검토 대기 중...</li>
+                    )}
+                  </ol>
+                </div>
+              )}
+
+              {/* 실제 환불 완료 정보 */}
+              {paymentDetail.refundedAt && paymentDetail.refundAmount && (
+                <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-3 space-y-1.5">
+                  <div className="font-semibold text-emerald-800 text-sm">환불 완료</div>
+                  <div className="flex justify-between text-emerald-900"><span>환불 금액</span><span className="font-bold">{paymentDetail.refundAmount.toLocaleString()}원</span></div>
+                  <div className="flex justify-between text-emerald-900"><span>환불 일시</span><span>{formatDate(paymentDetail.refundedAt)}</span></div>
+                  {paymentDetail.refundReason && (
+                    <div className="text-emerald-900 text-xs">사유: {paymentDetail.refundReason}</div>
+                  )}
+                </div>
+              )}
+
+              {/* 액션 버튼 */}
+              <div className="flex gap-2 pt-2">
+                {(/완료|COMPLETED|ESCROW|에스크로/i.test(paymentDetail.status)) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
+                      window.open(`/api/payments/${paymentDetail.id}/receipt?token=${encodeURIComponent(t || "")}`, "_blank");
+                    }}
+                    className="flex-1 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-semibold"
+                  >
+                    영수증 PDF
+                  </button>
+                )}
+                {(/완료|COMPLETED|ESCROW|에스크로/i.test(paymentDetail.status)) && paymentDetail.refundRequestStatus !== "PENDING" && (
+                  <button
+                    type="button"
+                    onClick={() => { setPaymentDetail(null); setRefundTarget(paymentDetail); }}
+                    className="flex-1 py-2.5 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-semibold hover:bg-red-100"
+                  >
+                    환불 요청
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

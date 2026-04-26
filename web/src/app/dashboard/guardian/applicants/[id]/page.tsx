@@ -85,6 +85,7 @@ export default function ApplicantsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notFoundFlag, setNotFoundFlag] = useState(false);
   const [careRequest, setCareRequest] = useState<CareRequest | null>(null);
   const [selecting, setSelecting] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<{
@@ -166,12 +167,18 @@ export default function ApplicantsPage() {
           },
         })),
       });
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "데이터를 불러오는 중 오류가 발생했습니다.";
-      setError(message);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const apiMsg = err?.response?.data?.message;
+      // 404: 삭제되었거나 존재하지 않음 — notFound 플래그로 별도 처리
+      if (status === 404) {
+        setNotFoundFlag(true);
+      } else {
+        const message =
+          apiMsg ||
+          (err instanceof Error ? err.message : "데이터를 불러오는 중 오류가 발생했습니다.");
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -279,6 +286,38 @@ export default function ApplicantsPage() {
             />
           </svg>
           <p className="text-gray-500">지원자 정보를 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFoundFlag) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-gray-50 flex items-center justify-center px-4">
+        <div className="text-center max-w-md">
+          <div className="text-5xl mb-4">📭</div>
+          <h2 className="text-lg font-bold text-gray-900 mb-2">
+            만료되었거나 삭제된 공고입니다
+          </h2>
+          <p className="text-gray-500 mb-6">
+            해당 간병 요청을 더 이상 찾을 수 없습니다. 새 공고를 작성하거나 내 이력에서 다른 공고를 확인해주세요.
+          </p>
+          <div className="flex justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/guardian")}
+              className="btn-primary"
+            >
+              내 이력으로
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/care-request")}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              새 공고 작성
+            </button>
+          </div>
         </div>
       </div>
     );

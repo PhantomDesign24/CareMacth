@@ -51,7 +51,7 @@ export default function NoticeDetailPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-      <main className="pt-32 sm:pt-36 pb-16">
+      <main className="pt-16 sm:pt-28 pb-16">
         <div className="max-w-3xl mx-auto px-4">
           <Link href="/notices" className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4">
             ← 공지사항 목록

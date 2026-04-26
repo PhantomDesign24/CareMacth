@@ -55,7 +55,7 @@ export default function NoticesPage() {
     <div className="min-h-screen bg-gray-50">
       <Header />
 
-      <main className="pt-32 sm:pt-36 pb-16">
+      <main className="pt-16 sm:pt-28 pb-16">
         <div className="max-w-3xl mx-auto px-4">
           <div className="mb-6">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">공지사항</h1>
