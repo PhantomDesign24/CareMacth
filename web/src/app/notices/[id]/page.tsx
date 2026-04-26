@@ -47,7 +47,7 @@ export default function NoticeDetailPage() {
     (async () => {
       try {
         const res = await noticeAPI.detail(id);
-        setNotice(res.data?.data || null);
+        setNotice((res.data as any) || null);
       } catch (e: any) {
         setError(e?.response?.data?.message || "공지를 불러오지 못했습니다.");
       } finally {

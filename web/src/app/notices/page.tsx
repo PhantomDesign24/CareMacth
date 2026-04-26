@@ -44,7 +44,8 @@ export default function NoticesPage() {
     (async () => {
       try {
         const res = await noticeAPI.list({ limit: 50, ...(filter !== "ALL" && { category: filter }) });
-        setItems(res.data?.data?.items || []);
+        // axios response interceptor 가 이미 { success, data } 를 언래핑함 → res.data === { items, total, ... }
+        setItems((res.data as any)?.items || []);
       } catch {} finally {
         setLoading(false);
       }
