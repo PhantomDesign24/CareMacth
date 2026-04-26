@@ -626,6 +626,27 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
       throw new AppError('현재 지원이 불가능한 상태입니다.', 400);
     }
 
+    // 차단 검증: 보호자가 이 간병인을 차단했거나 간병인이 보호자를 차단한 경우 지원 불가
+    if (req.user!.role !== 'ADMIN') {
+      const guardianForBlock = await prisma.guardian.findUnique({
+        where: { id: careRequest.guardianId },
+        select: { userId: true },
+      });
+      if (guardianForBlock) {
+        const blocked = await prisma.userBlock.findFirst({
+          where: {
+            OR: [
+              { blockerId: guardianForBlock.userId, blockedId: caregiver.userId },
+              { blockerId: caregiver.userId, blockedId: guardianForBlock.userId },
+            ],
+          },
+        });
+        if (blocked) {
+          throw new AppError('차단된 사용자와는 매칭이 불가능합니다.', 403);
+        }
+      }
+    }
+
     // 중복 지원 확인 — PENDING/ACCEPTED 상태만 차단
     // REJECTED/CANCELLED 된 경우 재지원 허용
     const existingApplication = await prisma.careApplication.findUnique({

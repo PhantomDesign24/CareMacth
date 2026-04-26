@@ -439,7 +439,10 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { password: hashedPassword },
+      data: {
+        password: hashedPassword,
+        tokenVersion: { increment: 1 }, // 비밀번호 변경 → 기존 JWT 전부 무효화
+      },
     });
 
     res.json({

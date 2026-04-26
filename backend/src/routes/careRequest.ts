@@ -18,8 +18,8 @@ router.post('/', [
   body('startDate').notEmpty().isISO8601().withMessage('유효한 시작일을 입력해주세요.'),
   body('endDate').optional({ nullable: true }).isISO8601().withMessage('유효한 종료일을 입력해주세요.'),
   body('medicalActAgreed').optional(),
-  body('dailyRate').optional({ nullable: true }).isInt({ min: 0 }).withMessage('일당은 0 이상의 숫자여야 합니다.'),
-  body('hourlyRate').optional({ nullable: true }).isInt({ min: 0 }).withMessage('시급은 0 이상의 숫자여야 합니다.'),
+  body('dailyRate').optional({ nullable: true }).isInt({ min: 1 }).withMessage('일당은 1 이상의 숫자여야 합니다. (협의는 미입력)'),
+  body('hourlyRate').optional({ nullable: true }).isInt({ min: 1 }).withMessage('시급은 1 이상의 숫자여야 합니다. (협의는 미입력)'),
 ], careRequestController.createCareRequest);
 
 // GET /region-stats - 지역별 오픈 요청 수 (목록 앞에 위치해야 /:id 와 충돌 안 함)
@@ -35,8 +35,8 @@ router.get('/:id', careRequestController.getCareRequestById);
 router.put('/:id', authorize('GUARDIAN'), [
   body('startDate').optional().isISO8601().withMessage('유효한 시작일을 입력해주세요.'),
   body('endDate').optional().isISO8601().withMessage('유효한 종료일을 입력해주세요.'),
-  body('dailyRate').optional({ nullable: true }).isInt({ min: 0 }).withMessage('일당은 0 이상의 숫자여야 합니다.'),
-  body('hourlyRate').optional({ nullable: true }).isInt({ min: 0 }).withMessage('시급은 0 이상의 숫자여야 합니다.'),
+  body('dailyRate').optional({ nullable: true }).isInt({ min: 1 }).withMessage('일당은 1 이상의 숫자여야 합니다. (협의는 미입력)'),
+  body('hourlyRate').optional({ nullable: true }).isInt({ min: 1 }).withMessage('시급은 1 이상의 숫자여야 합니다. (협의는 미입력)'),
 ], careRequestController.updateCareRequest);
 
 // POST /:id/raise-rate - 금액 인상 재공고 (보호자)
