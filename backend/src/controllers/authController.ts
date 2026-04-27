@@ -438,21 +438,28 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
+    // 이메일 발송을 먼저 시도 — 성공해야 비밀번호 변경 (실패 시 사용자 잠김 방지)
+    try {
+      await sendEmail(
+        user.email,
+        '[케어매치] 임시 비밀번호 안내',
+        emailPasswordReset(user.name, tempPassword),
+      );
+    } catch (emailErr: any) {
+      console.error('[resetPassword] 이메일 발송 실패:', emailErr?.message || emailErr);
+      throw new AppError(
+        '이메일 발송에 실패했습니다. 잠시 후 다시 시도하거나 고객센터로 문의해주세요.',
+        503,
+      );
+    }
+
+    // 이메일 발송 성공 후에 비밀번호 변경 + 기존 토큰 무효화
     await prisma.user.update({
       where: { id: user.id },
       data: {
         password: hashedPassword,
-        tokenVersion: { increment: 1 }, // 비밀번호 변경 → 기존 JWT 전부 무효화
+        tokenVersion: { increment: 1 },
       },
-    });
-
-    // 이메일로 임시 비밀번호 발송 (응답 body 에는 노출하지 않음)
-    sendEmail(
-      user.email,
-      '[케어매치] 임시 비밀번호 안내',
-      emailPasswordReset(user.name, tempPassword),
-    ).catch((err) => {
-      console.error('[resetPassword] 이메일 발송 실패:', err?.message || err);
     });
 
     res.json({

@@ -262,10 +262,51 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
       prisma.careRequest.count({ where: whereClause }),
     ]);
 
+    // 간병인 view: 결제 전 개인정보 마스킹
+    // - 환자명/생년월일/진단명, 보호자명, 정확한 주소, 좌표 제거
+    // - 시·구 단위 주소, 연령대(10단위), 성별, 거동 상태만 노출
+    const sanitized =
+      req.user!.role === 'CAREGIVER'
+        ? careRequests.map((cr: any) => {
+            const birthY = cr.patient?.birthDate ? new Date(cr.patient.birthDate).getFullYear() : null;
+            const ageBucket = birthY
+              ? Math.floor((new Date().getFullYear() - birthY) / 10) * 10
+              : null;
+            return {
+              id: cr.id,
+              careType: cr.careType,
+              scheduleType: cr.scheduleType,
+              location: cr.location,
+              hospitalName: cr.hospitalName,
+              address: typeof cr.address === 'string' ? cr.address.split(' ').slice(0, 2).join(' ') : null,
+              region: cr.region,
+              regions: cr.regions,
+              startDate: cr.startDate,
+              endDate: cr.endDate,
+              durationDays: cr.durationDays,
+              dailyRate: cr.dailyRate,
+              hourlyRate: cr.hourlyRate ?? null,
+              status: cr.status,
+              medicalActAgreed: cr.medicalActAgreed,
+              createdAt: cr.createdAt,
+              patient: cr.patient
+                ? {
+                    gender: cr.patient.gender,
+                    ageBucket,
+                    mobilityStatus: cr.patient.mobilityStatus,
+                    hasDementia: cr.patient.hasDementia,
+                    hasInfection: cr.patient.hasInfection,
+                  }
+                : null,
+              applicantCount: cr._count?.applications ?? 0,
+            };
+          })
+        : careRequests;
+
     res.json({
       success: true,
       data: {
-        careRequests,
+        careRequests: sanitized,
         pagination: {
           page,
           limit,
@@ -381,23 +422,22 @@ export const getCareRequestById = async (req: AuthRequest, res: Response, next: 
         status: careRequest.status,
         medicalActAgreed: (careRequest as any).medicalActAgreed,
         regions: (careRequest as any).regions ?? null,
-        latitude: careRequest.latitude,
-        longitude: careRequest.longitude,
+        // 좌표는 결제/계약 확정 후에만 노출 — 매칭 전엔 거리는 별도 계산해서 내려야 안전
+        // latitude / longitude 는 의도적으로 응답에서 제외
         createdAt: careRequest.createdAt,
         // 환자: 식별정보 제외, 간병에 필요한 일반 정보만
+        // - 정확한 나이 대신 10세 단위 ageBucket
+        // - 진단명/의료기록은 매칭 후에만
         patient: careRequest.patient
           ? {
               gender: careRequest.patient.gender,
-              // 나이 (생년월일 직접 노출 X)
-              age: careRequest.patient.birthDate
-                ? new Date().getFullYear() - new Date(careRequest.patient.birthDate).getFullYear()
+              ageBucket: careRequest.patient.birthDate
+                ? Math.floor((new Date().getFullYear() - new Date(careRequest.patient.birthDate).getFullYear()) / 10) * 10
                 : null,
               mobilityStatus: careRequest.patient.mobilityStatus,
               hasDementia: (careRequest.patient as any).hasDementia ?? false,
               hasInfection: (careRequest.patient as any).hasInfection ?? false,
-              weight: (careRequest.patient as any).weight ?? null,
               consciousness: (careRequest.patient as any).consciousness ?? null,
-              // 진단명·의료기록은 매칭 후에만
             }
           : null,
         // 보호자: 이름·연락처·이메일 모두 비노출
