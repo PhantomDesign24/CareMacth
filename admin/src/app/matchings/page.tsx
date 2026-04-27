@@ -130,14 +130,29 @@ export default function MatchingsPage() {
 
   const handleForceCancel = async () => {
     if (!detailRow) return;
-    if (!cancelReason.trim()) { alert("취소 사유를 입력해주세요."); return; }
+    const trimmed = cancelReason.trim();
+    if (trimmed.length < 5) {
+      alert("취소 사유를 5자 이상 입력해주세요.");
+      return;
+    }
+    if (!confirm(
+      "강제 취소하시겠습니까?\n\n" +
+      "※ 정책: 단순 무효화입니다.\n" +
+      "  - 결제 완료된 건의 환불은 별도(결제 상세 → 환불 요청)\n" +
+      "  - 간병인 정산도 별도 메뉴에서 수동 처리해주세요."
+    )) return;
+
     setActionLoading(true);
     try {
-      await apiRequest(`/admin/contracts/${detailRow.contractId}/force-cancel`, {
+      const res: any = await apiRequest(`/admin/contracts/${detailRow.contractId}/force-cancel`, {
         method: "POST",
-        body: { reason: cancelReason.trim() },
+        body: { reason: trimmed },
       });
-      alert("계약이 강제 취소되었습니다.");
+      const next = res?.data?.nextActions || [];
+      const hint = Array.isArray(next) && next.length
+        ? "\n\n다음 처리 필요:\n- " + next.join("\n- ")
+        : "";
+      alert("계약이 강제 취소되었습니다." + hint);
       setCancelMode(false);
       setCancelReason("");
       await fetchData();

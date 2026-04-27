@@ -1922,16 +1922,28 @@ export const getAdminContractDetail = async (req: AuthRequest, res: Response, ne
 export const forceCancelContract = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { contractId } = req.params;
+    // express-validator 결과 확인 (reason 필수 + 길이)
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
     const { reason } = req.body;
     const contract = await prisma.contract.findUnique({
       where: { id: contractId },
       include: {
         caregiver: { select: { userId: true } },
         guardian: { select: { userId: true } },
+        payments: { select: { id: true, status: true, totalAmount: true } },
       },
     });
     if (!contract) throw new AppError('계약을 찾을 수 없습니다.', 404);
     if (contract.status === 'CANCELLED') throw new AppError('이미 취소된 계약입니다.', 400);
+
+    // 환불 처리 필요 여부 (별도 안내용 — 정책 A: 환불·정산은 자동 처리하지 않음)
+    const hasPaidPayment = contract.payments.some(
+      (p) => p.status === 'COMPLETED' || p.status === 'ESCROW',
+    );
 
     await prisma.$transaction(async (tx) => {
       // 트랜지션 락: 활성 계약(ACTIVE/EXTENDED/PENDING_SIGNATURE)에서만 1회 CANCELLED 전이
@@ -1984,10 +1996,24 @@ export const forceCancelContract = async (req: AuthRequest, res: Response, next:
 
     await logAdminAction(req, 'CONTRACT_FORCE_CANCEL', {
       targetType: 'Contract', targetId: contractId,
-      payload: { reason: reason || null, prevStatus: contract.status },
+      payload: { reason, prevStatus: contract.status, hasPaidPayment },
     });
 
-    res.json({ success: true, message: '계약이 강제 취소되었습니다.' });
+    res.json({
+      success: true,
+      message: '계약이 강제 취소되었습니다.',
+      data: {
+        cancelled: true,
+        hasPaidPayment,
+        // 정책 A: 환불·정산은 자동 처리되지 않음. 관리자가 별도 메뉴에서 수동 처리 필요.
+        nextActions: hasPaidPayment
+          ? [
+              '결제 완료된 건은 환불 메뉴(/admin/refund-requests 또는 결제 상세)에서 별도 처리해주세요.',
+              '간병인 정산은 정산 메뉴에서 일할 계산 후 별도 지급 처리해주세요.',
+            ]
+          : [],
+      },
+    });
   } catch (error) {
     next(error);
   }

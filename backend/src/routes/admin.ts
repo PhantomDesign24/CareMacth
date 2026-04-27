@@ -106,7 +106,17 @@ router.post('/contracts/:contractId/mid-settlement', adminController.createMidSe
 
 // 계약 통합 관리
 router.get('/contracts/:contractId/detail', adminController.getAdminContractDetail);
-router.post('/contracts/:contractId/force-cancel', adminController.forceCancelContract);
+// 강제 취소: reason 필수 (감사 로그 + 분쟁 자동 RESOLVED, 환불·정산은 별도 메뉴)
+router.post(
+  '/contracts/:contractId/force-cancel',
+  [
+    body('reason')
+      .notEmpty().withMessage('취소 사유 입력은 필수입니다.')
+      .trim()
+      .isLength({ min: 5, max: 500 }).withMessage('취소 사유는 5~500자로 입력해주세요.'),
+  ],
+  adminController.forceCancelContract,
+);
 router.post('/contracts/:contractId/force-complete', adminController.forceCompleteContract);
 
 // 환불 요청 관리 (2단계 플로우)
