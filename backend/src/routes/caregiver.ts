@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { authenticate, authorize } from '../middlewares/auth';
-import { upload, handleUploadError } from '../middlewares/upload';
+import { upload, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
 import * as caregiverController from '../controllers/caregiverController';
 
 const router = Router();
@@ -22,7 +22,7 @@ router.put('/profile', [
 ], caregiverController.updateProfile);
 
 // POST /certificates - 자격증 등록
-router.post('/certificates', upload.single('image'), [
+router.post('/certificates', upload.single('image'), verifyUploadMagicNumber, [
   body('name').notEmpty().trim().isLength({ min: 1, max: 100 }).withMessage('자격증 이름을 입력해주세요. (1~100자)'),
   body('issuer').notEmpty().trim().isLength({ min: 1, max: 100 }).withMessage('발급기관을 입력해주세요. (1~100자)'),
   body('issueDate').notEmpty().isISO8601().withMessage('유효한 발급일을 입력해주세요.'),
@@ -46,10 +46,10 @@ router.get('/activity', caregiverController.getActivity);
 router.get('/applications', caregiverController.getMyApplications);
 
 // POST /criminal-check - 범죄이력 확인서 업로드
-router.post('/criminal-check', upload.single('document'), handleUploadError, caregiverController.uploadCriminalCheck);
+router.post('/criminal-check', upload.single('document'), handleUploadError, verifyUploadMagicNumber, caregiverController.uploadCriminalCheck);
 
 // POST /id-card - 신분증 업로드
-router.post('/id-card', upload.single('image'), handleUploadError, caregiverController.uploadIdCard);
+router.post('/id-card', upload.single('image'), handleUploadError, verifyUploadMagicNumber, caregiverController.uploadIdCard);
 
 // 라우트 전체에 업로드 에러 핸들러 적용
 router.use(handleUploadError);

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import { Request, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../middlewares/auth';
-import { upload, handleUploadError } from '../middlewares/upload';
+import { upload, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
 import * as careRecordController from '../controllers/careRecordController';
 
 const router = Router();
@@ -49,6 +49,7 @@ router.post('/photos',
   authorize('CAREGIVER'),
   upload.array('photos', 10),
   handleUploadError,
+  verifyUploadMagicNumber,
   careRecordController.uploadPhotos,
 );
 

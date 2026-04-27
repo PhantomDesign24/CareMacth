@@ -188,14 +188,14 @@ router.put('/education/:id', [
 router.delete('/education/:id', adminController.deleteEducation);
 
 // 공지사항
-import { upload, uploadNotice, handleUploadError } from '../middlewares/upload';
+import { upload, uploadNotice, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
 router.get('/notices', noticeController.adminListNotices);
 router.post('/notices', noticeController.adminCreateNotice);
 router.put('/notices/:id', noticeController.adminUpdateNotice);
 router.delete('/notices/:id', noticeController.adminDeleteNotice);
-// 본문 삽입용 이미지: 일반 upload (이미지/PDF만)
-router.post('/notices/upload', upload.single('file'), handleUploadError, noticeController.adminUploadNoticeFile);
-// 첨부파일: noticeUpload (zip/doc/xls/ppt/hwp/txt 추가 허용, 20MB)
-router.post('/notices/upload-multi', uploadNotice.array('files', 10), handleUploadError, noticeController.adminUploadNoticeFilesMulti);
+// 본문 삽입용 이미지: 일반 upload (이미지/PDF만) + 매직넘버 검증
+router.post('/notices/upload', upload.single('file'), handleUploadError, verifyUploadMagicNumber, noticeController.adminUploadNoticeFile);
+// 첨부파일: noticeUpload (zip/doc/xls/ppt/hwp/txt 추가 허용, 20MB) + 매직넘버 검증
+router.post('/notices/upload-multi', uploadNotice.array('files', 10), handleUploadError, verifyUploadMagicNumber, noticeController.adminUploadNoticeFilesMulti);
 
 export default router;
