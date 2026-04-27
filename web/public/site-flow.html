@@ -364,7 +364,10 @@
           <div class="arrow">↓</div>
           <div class="step active"><span class="num">7</span><span class="title">간병 진행 + 매일 간병일지 작성</span>
             <div class="desc">출퇴근, 케어 기록, 사진 업로드</div>
-            <span class="api">POST /api/care-records</span>
+            <span class="api">POST /api/care-records/check-in</span>
+            <span class="api">POST /api/care-records/check-out</span>
+            <span class="api">POST /api/care-records/daily-log</span>
+            <span class="api">POST /api/care-records/photos</span>
           </div>
           <div class="arrow">↓</div>
           <div class="step ok"><span class="num">8</span><span class="title">정산 수령</span>
@@ -399,7 +402,7 @@
         <div class="arrow">↓</div>
         <div class="step active"><span class="num">3</span><span class="title">보호자: 결제 (1시간 내)</span>
           <div class="desc">미결제 시 자동 EXPIRED (cron 5분 주기)</div>
-          <span class="api">POST /api/payments {extensionId}</span>
+          <span class="api">POST /api/payments (body: { contractId, method, extensionId })</span>
           <span class="badge b-info">CONFIRMED → endDate 갱신</span>
         </div>
       </div>
