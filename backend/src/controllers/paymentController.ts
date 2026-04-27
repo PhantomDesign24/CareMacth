@@ -812,8 +812,13 @@ export const getPaymentHistory = async (req: AuthRequest, res: Response, next: N
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
     const status = req.query.status as string | undefined;
+    const contractId = req.query.contractId as string | undefined;
 
     let whereClause: any = {};
+
+    if (contractId) {
+      whereClause.contractId = contractId;
+    }
 
     if (req.user!.role === 'GUARDIAN') {
       const guardian = await prisma.guardian.findUnique({

@@ -50,6 +50,41 @@ export const upload = multer({
   },
 });
 
+// 공지사항 첨부용: 이미지/PDF + 일반 문서 형식 허용
+const noticeFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedMimes = [
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf',
+    'application/zip', 'application/x-zip-compressed',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/x-hwp', 'application/haansofthwp', 'application/vnd.hancom.hwp',
+    'text/plain',
+    'application/octet-stream', // hwp 등 일부 브라우저는 이걸로 보냄
+  ];
+  const allowedExts = [
+    '.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf',
+    '.zip', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    '.hwp', '.hwpx', '.txt',
+  ];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowedExts.includes(ext) && (allowedMimes.includes(file.mimetype) || file.mimetype === 'application/octet-stream')) {
+    cb(null, true);
+  } else {
+    cb(new UploadError(`허용되지 않는 파일 형식입니다. 허용: ${allowedExts.join(', ')}`));
+  }
+};
+
+export const uploadNotice = multer({
+  storage,
+  fileFilter: noticeFileFilter,
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB (오피스 파일 고려)
+});
+
 // Multer 에러 핸들러 - 라우트 다음에 적용해서 400/413으로 응답
 export const handleUploadError = (err: any, _req: Request, res: Response, next: NextFunction) => {
   if (err instanceof multer.MulterError) {

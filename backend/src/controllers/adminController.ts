@@ -2018,14 +2018,31 @@ export const forceCancelContract = async (req: AuthRequest, res: Response, next:
     if (contract.status === 'CANCELLED') throw new AppError('이미 취소된 계약입니다.', 400);
 
     await prisma.$transaction(async (tx) => {
-      await tx.contract.update({
-        where: { id: contractId },
+      // 트랜지션 락: 활성 계약(ACTIVE/EXTENDED/PENDING_SIGNATURE)에서만 1회 CANCELLED 전이
+      const lock = await tx.contract.updateMany({
+        where: {
+          id: contractId,
+          status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
+        },
         data: {
           status: 'CANCELLED',
           cancelledAt: new Date(),
           cancelledBy: req.user!.id,
           cancellationReason: reason || '관리자 강제 취소',
         },
+      });
+      if (lock.count === 0) {
+        throw new AppError('이미 취소되었거나 완료된 계약입니다.', 409);
+      }
+      // careRequest 도 CANCELLED 로 동기화
+      await tx.careRequest.update({
+        where: { id: contract.careRequestId },
+        data: { status: 'CANCELLED' },
+      });
+      // 분쟁 자동 해결 (cancelContract 와 동일)
+      await tx.dispute.updateMany({
+        where: { contractId, status: { in: ['PENDING', 'PROCESSING'] } },
+        data: { status: 'RESOLVED', resolution: '관리자 강제 취소로 처리됨', handledAt: new Date() },
       });
       await tx.careApplication.updateMany({
         where: { careRequestId: contract.careRequestId, status: { in: ['PENDING', 'ACCEPTED'] } },
@@ -2049,6 +2066,11 @@ export const forceCancelContract = async (req: AuthRequest, res: Response, next:
       }
     });
 
+    await logAdminAction(req, 'CONTRACT_FORCE_CANCEL', {
+      targetType: 'Contract', targetId: contractId,
+      payload: { reason: reason || null, prevStatus: contract.status },
+    });
+
     res.json({ success: true, message: '계약이 강제 취소되었습니다.' });
   } catch (error) {
     next(error);
@@ -2064,14 +2086,32 @@ export const forceCompleteContract = async (req: AuthRequest, res: Response, nex
     if (contract.status === 'CANCELLED' || contract.status === 'COMPLETED') {
       throw new AppError(`이미 ${contract.status === 'CANCELLED' ? '취소' : '완료'}된 계약입니다.`, 400);
     }
-    await prisma.contract.update({
-      where: { id: contractId },
-      data: { status: 'COMPLETED' },
+
+    await prisma.$transaction(async (tx) => {
+      // 트랜지션 락: ACTIVE/EXTENDED 인 경우에만 1회 COMPLETED 전이
+      const lock = await tx.contract.updateMany({
+        where: { id: contractId, status: { in: ['ACTIVE', 'EXTENDED'] } },
+        data: { status: 'COMPLETED' },
+      });
+      if (lock.count === 0) {
+        throw new AppError('이미 완료/취소되었거나 진행 가능한 상태가 아닙니다.', 409);
+      }
+      // careRequest 도 COMPLETED 동기화
+      await tx.careRequest.update({
+        where: { id: contract.careRequestId },
+        data: { status: 'COMPLETED' },
+      });
+      await tx.caregiver.update({
+        where: { id: contract.caregiverId },
+        data: { workStatus: 'AVAILABLE' },
+      });
     });
-    await prisma.caregiver.update({
-      where: { id: contract.caregiverId },
-      data: { workStatus: 'AVAILABLE' },
+
+    await logAdminAction(req, 'CONTRACT_FORCE_COMPLETE', {
+      targetType: 'Contract', targetId: contractId,
+      payload: { prevStatus: contract.status },
     });
+
     res.json({ success: true, message: '계약이 완료 처리되었습니다.' });
   } catch (error) {
     next(error);

@@ -154,8 +154,7 @@ export const careRequestAPI = {
     api.put(`/care-requests/${id}`, data),
   cancel: (id: string) =>
     api.delete(`/care-requests/${id}`),
-  extend: (id: string, data: Record<string, unknown>) =>
-    api.post(`/care-requests/${id}/extend`, data),
+  // 연장은 contracts API 를 사용 — extensionAPI.extend 참조
   raiseRate: (id: string, newDailyRate: number) =>
     api.post(`/care-requests/${id}/raise-rate`, { newDailyRate }),
   expandRegions: (id: string, regions: string[]) =>
@@ -197,8 +196,9 @@ export const caregiverAPI = {
 export const paymentAPI = {
   list: (params?: Record<string, unknown>) =>
     api.get("/payments/history", { params }),
-  get: (id: string) =>
-    api.get(`/payments/history`, { params: { id } }),
+  // 특정 계약의 결제 내역만 (contractId 필터)
+  byContract: (contractId: string) =>
+    api.get("/payments/history", { params: { contractId } }),
   create: (data: Record<string, unknown>) =>
     api.post("/payments", data),
   confirm: (data: Record<string, unknown>) =>
