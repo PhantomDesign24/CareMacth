@@ -377,11 +377,8 @@ export async function exportAssociationFees(year: number, months?: number | numb
 }
 
 // ─── Disputes ─────────────────────────────────────────
-export async function getDisputes(params?: { status?: string; priority?: string; page?: number; limit?: number }) {
-  return apiRequest<PaginatedResponse<Dispute>>("/admin/disputes", {
-    params: params as Record<string, string | number>,
-  });
-}
+// 분쟁 목록은 disputes/page.tsx 에서 직접 /disputes/admin 호출 (Dispute 테이블 기준)
+// 죽은 /admin/disputes (취소된 계약 목록) 함수는 제거됨
 
 export async function emergencyRematch(contractId: string) {
   return apiRequest(`/admin/emergency-rematch/${contractId}`, { method: "POST" });

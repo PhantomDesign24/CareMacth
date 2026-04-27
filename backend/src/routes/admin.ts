@@ -61,8 +61,7 @@ router.get('/stats/export', adminController.exportStats);
 router.get('/stats/export/caregivers', adminController.exportStats);
 router.get('/stats/export/patients', adminController.exportStats);
 
-// 분쟁
-router.get('/disputes', adminController.getDisputes);
+// 분쟁: /api/disputes/admin (disputeController) 단일 사용. 여기 라우트는 죽은 코드라 제거.
 
 // 긴급 재매칭
 router.post('/emergency-rematch/:contractId', [

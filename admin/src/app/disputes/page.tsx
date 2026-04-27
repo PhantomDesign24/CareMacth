@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import DataTable, { Column } from "@/components/DataTable";
-import { getDisputes, emergencyRematch, Dispute } from "@/lib/api";
+import { emergencyRematch, Dispute } from "@/lib/api";
 
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return "-";
