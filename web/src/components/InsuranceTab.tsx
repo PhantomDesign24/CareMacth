@@ -43,7 +43,8 @@ export default function InsuranceTab() {
     (async () => {
       try {
         const res = await insuranceAPI.list();
-        setList(res.data?.data || []);
+        // axios interceptor 가 이미 { success, data } 언래핑 → res.data 가 곧 payload
+        setList(Array.isArray(res.data) ? res.data : ((res.data as any)?.items || []));
       } catch {
         // ignore
       } finally {

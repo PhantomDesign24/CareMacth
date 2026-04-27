@@ -145,13 +145,26 @@ export async function getDashboard() {
 
 // ─── Caregivers ───────────────────────────────────────
 export async function getCaregivers(params?: { status?: string; search?: string; page?: number; limit?: number; region?: string; minExp?: number; maxExp?: number; workStatus?: string }) {
-  return apiRequest<PaginatedResponse<Caregiver>>("/admin/caregivers", {
+  const res = await apiRequest<any>("/admin/caregivers", {
     params: params as Record<string, string | number>,
   });
+  // 백엔드 totalMatches → 프론트 totalMatchings 매핑
+  if (res && Array.isArray(res.caregivers)) {
+    res.caregivers = res.caregivers.map((c: any) => ({
+      ...c,
+      totalMatchings: c.totalMatchings ?? c.totalMatches ?? 0,
+    }));
+  }
+  return res as PaginatedResponse<Caregiver>;
 }
 
 export async function getCaregiver(id: string) {
-  return apiRequest<CaregiverDetail>(`/admin/caregivers/${id}`);
+  const res = await apiRequest<CaregiverDetail>(`/admin/caregivers/${id}`);
+  // 필드명 매핑 (totalMatches → totalMatchings)
+  if (res) {
+    (res as any).totalMatchings = (res as any).totalMatchings ?? (res as any).totalMatches ?? 0;
+  }
+  return res;
 }
 
 export async function approveCaregiver(id: string) {
