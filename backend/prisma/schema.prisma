@@ -70,6 +70,7 @@ model User {
   receivedMessages Message[]  @relation("ReceivedMessages")
   disputesFiled Dispute[]     @relation("DisputeReporter")
   disputesReceived Dispute[]  @relation("DisputeTarget")
+  adminActions  AdminActionLog[] @relation("AdminActionLogs")
 
   @@index([role])
   @@index([referralCode])
@@ -1059,4 +1060,27 @@ model Notice {
 
   @@index([isPublished, isPinned, createdAt])
   @@index([category])
+}
+
+// ==========================================
+// 14. 관리자 감사 로그
+// ==========================================
+
+model AdminActionLog {
+  id          String   @id @default(uuid())
+  adminId     String   // 액션 실행한 관리자 userId
+  admin       User     @relation("AdminActionLogs", fields: [adminId], references: [id])
+
+  action      String   // CAREGIVER_APPROVE / REFUND_APPROVE / CONTRACT_FORCE_CANCEL / PENALTY_ADD ...
+  targetType  String?  // Caregiver / Payment / Contract / User ...
+  targetId    String?
+  payload     Json?    // 변경 전후, 사유 등 부가 정보
+  ip          String?
+  userAgent   String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
 }

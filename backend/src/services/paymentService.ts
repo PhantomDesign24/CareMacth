@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { USER_PUBLIC_SELECT } from '../utils/userSelect';
 import { PaymentMethod } from '@prisma/client';
 import { config } from '../config';
 import { generateOrderId } from '../utils/generateCode';
@@ -29,7 +30,7 @@ export async function createPayment(params: CreatePaymentParams) {
   if (pointsToUse > 0) {
     const guardian = await prisma.guardian.findUnique({
       where: { id: guardianId },
-      include: { user: true },
+      include: { user: { select: USER_PUBLIC_SELECT } },
     });
     if (!guardian || guardian.user.points < pointsToUse) {
       throw new Error('포인트가 부족합니다.');

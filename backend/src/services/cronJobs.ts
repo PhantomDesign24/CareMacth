@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { USER_PUBLIC_SELECT } from '../utils/userSelect';
 import krHolidays from '../data/kr-holidays.json';
 
 const KR_HOLIDAY_MAP: Record<string, string[]> = krHolidays as any;
@@ -233,7 +234,7 @@ export function setupCronJobs() {
           createdAt: { lt: cutoff },
         },
         include: {
-          guardian: { include: { user: true } },
+          guardian: { include: { user: { select: USER_PUBLIC_SELECT } } },
         },
       });
 
@@ -275,7 +276,7 @@ export function setupCronJobs() {
           noShowCount: { gte: threshold },
           status: 'APPROVED',
         },
-        include: { user: true },
+        include: { user: { select: USER_PUBLIC_SELECT } },
       });
 
       for (const cg of caregiversToSuspend) {

@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { USER_PUBLIC_SELECT } from '../utils/userSelect';
 import { validationResult } from 'express-validator';
 import PDFDocument from 'pdfkit';
 import path from 'path';
@@ -515,8 +516,8 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
       where: { id: contractId },
       include: {
         careRequest: { include: { patient: true } },
-        caregiver: { include: { user: true } },
-        guardian: { include: { user: true } },
+        caregiver: { include: { user: { select: USER_PUBLIC_SELECT } } },
+        guardian: { include: { user: { select: USER_PUBLIC_SELECT } } },
       },
     });
 

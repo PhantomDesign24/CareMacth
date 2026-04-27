@@ -1,4 +1,5 @@
 import { NotificationType } from '@prisma/client';
+import { USER_PUBLIC_SELECT } from '../utils/userSelect';
 import admin from '../config/firebase';
 import { prisma } from '../app';
 
@@ -130,8 +131,8 @@ export async function sendExtensionReminder(contractId: string, daysLeft: number
   const contract = await prisma.contract.findUnique({
     where: { id: contractId },
     include: {
-      guardian: { include: { user: true } },
-      caregiver: { include: { user: true } },
+      guardian: { include: { user: { select: USER_PUBLIC_SELECT } } },
+      caregiver: { include: { user: { select: USER_PUBLIC_SELECT } } },
       careRequest: { include: { patient: true } },
     },
   });
@@ -168,7 +169,7 @@ export async function sendMatchingNotification(
 ) {
   const caregiver = await prisma.caregiver.findUnique({
     where: { id: caregiverId },
-    include: { user: true },
+    include: { user: { select: USER_PUBLIC_SELECT } },
   });
 
   if (!caregiver) return;
@@ -190,7 +191,7 @@ export async function sendApplicationStatusNotification(
 ) {
   const caregiver = await prisma.caregiver.findUnique({
     where: { id: caregiverId },
-    include: { user: true },
+    include: { user: { select: USER_PUBLIC_SELECT } },
   });
 
   if (!caregiver) return;

@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { logAdminAction } from '../services/auditLog';
 import { renderTemplate, sendFromTemplate } from '../services/notificationService';
 
 // POST / - 계약 생성 (보호자가 간병인 선택 후)
@@ -536,6 +537,14 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
         fallbackType: 'CONTRACT',
         data: { contractId: id },
       }).catch(() => {});
+    }
+
+    // 관리자가 강제 취소한 경우만 감사 로그 기록 (보호자/간병인 본인 취소는 기록 X)
+    if (req.user!.role === 'ADMIN') {
+      await logAdminAction(req, 'CONTRACT_FORCE_CANCEL', {
+        targetType: 'Contract', targetId: id,
+        payload: { reason, totalDays, usedDays, refundAmount },
+      });
     }
 
     res.json({

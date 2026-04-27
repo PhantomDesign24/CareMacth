@@ -14,6 +14,9 @@ router.use(authorize('ADMIN'));
 // 대시보드
 router.get('/dashboard', adminController.getDashboard);
 
+// 감사 로그
+router.get('/audit-logs', adminController.getAuditLogs);
+
 // 간병인 관리
 router.get('/caregivers', adminController.getCaregivers);
 router.get('/caregivers/:id', adminController.getCaregiverDetail);

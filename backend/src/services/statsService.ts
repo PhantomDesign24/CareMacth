@@ -1,4 +1,5 @@
 import { prisma } from '../app';
+import { USER_PUBLIC_SELECT } from '../utils/userSelect';
 
 // 엑셀 다운로드용 데이터 조회
 export async function getCaregiverExportData() {
@@ -39,7 +40,7 @@ export async function getCaregiverExportData() {
 export async function getPatientExportData() {
   const patients = await prisma.patient.findMany({
     include: {
-      guardian: { include: { user: true } },
+      guardian: { include: { user: { select: USER_PUBLIC_SELECT } } },
       careRequests: {
         include: {
           contracts: {
@@ -124,8 +125,8 @@ export async function getDashboardStats() {
     prisma.contract.findMany({
       where: { status: 'CANCELLED', cancelledAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
       include: {
-        guardian: { include: { user: true } },
-        caregiver: { include: { user: true } },
+        guardian: { include: { user: { select: USER_PUBLIC_SELECT } } },
+        caregiver: { include: { user: { select: USER_PUBLIC_SELECT } } },
       },
       take: 10,
       orderBy: { cancelledAt: 'desc' },

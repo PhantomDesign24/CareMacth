@@ -1,4 +1,5 @@
 import { CareRequest, Caregiver } from '@prisma/client';
+import { USER_PUBLIC_SELECT } from '../utils/userSelect';
 import {
   calculateDistance,
   getDistanceScore,
@@ -143,7 +144,7 @@ export async function notifyCandidates(
   for (const candidate of topCandidates) {
     const caregiver = await prisma.caregiver.findUnique({
       where: { id: candidate.caregiverId },
-      include: { user: true },
+      include: { user: { select: USER_PUBLIC_SELECT } },
     });
 
     if (!caregiver) continue;

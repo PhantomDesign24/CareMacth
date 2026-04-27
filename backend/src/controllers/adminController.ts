@@ -1,8 +1,10 @@
 import { Response, NextFunction } from 'express';
+import { USER_PUBLIC_SELECT } from '../utils/userSelect';
 import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { logAdminAction } from '../services/auditLog';
 import { sendFromTemplate, renderTemplate } from '../services/notificationService';
 
 // GET /dashboard - 대시보드 통계
@@ -45,7 +47,7 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
     // 승인 대기 간병인 목록
     const pendingList = await prisma.caregiver.findMany({
       where: { status: 'PENDING' },
-      include: { user: true, certificates: true },
+      include: { user: { select: USER_PUBLIC_SELECT }, certificates: true },
       take: 10,
       orderBy: { createdAt: 'desc' },
     });
@@ -471,6 +473,42 @@ export const getCaregiverDetail = async (req: AuthRequest, res: Response, next: 
   }
 };
 
+// GET /admin/audit-logs — 감사 로그 조회
+export const getAuditLogs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const skip = (page - 1) * limit;
+    const action = req.query.action as string | undefined;
+    const adminId = req.query.adminId as string | undefined;
+    const targetType = req.query.targetType as string | undefined;
+    const targetId = req.query.targetId as string | undefined;
+
+    const where: any = {};
+    if (action) where.action = action;
+    if (adminId) where.adminId = adminId;
+    if (targetType) where.targetType = targetType;
+    if (targetId) where.targetId = targetId;
+
+    const [items, total] = await Promise.all([
+      prisma.adminActionLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip, take: limit,
+        include: {
+          admin: { select: { id: true, name: true, email: true } },
+        },
+      }),
+      prisma.adminActionLog.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      data: { items, total, page, limit, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (e) { next(e); }
+};
+
 // PUT /caregivers/:id/approve - 간병인 승인
 export const approveCaregiver = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -478,7 +516,7 @@ export const approveCaregiver = async (req: AuthRequest, res: Response, next: Ne
 
     const caregiver = await prisma.caregiver.findUnique({
       where: { id },
-      include: { user: true },
+      include: { user: { select: USER_PUBLIC_SELECT } },
     });
 
     if (!caregiver) {
@@ -504,6 +542,11 @@ export const approveCaregiver = async (req: AuthRequest, res: Response, next: Ne
       fallbackType: 'SYSTEM',
     }).catch(() => {});
 
+    await logAdminAction(req, 'CAREGIVER_APPROVE', {
+      targetType: 'Caregiver', targetId: id,
+      payload: { caregiverName: caregiver.user.name, prevStatus: caregiver.status },
+    });
+
     res.json({
       success: true,
       message: `${caregiver.user.name} 간병인이 승인되었습니다.`,
@@ -521,7 +564,7 @@ export const rejectCaregiver = async (req: AuthRequest, res: Response, next: Nex
 
     const caregiver = await prisma.caregiver.findUnique({
       where: { id },
-      include: { user: true },
+      include: { user: { select: USER_PUBLIC_SELECT } },
     });
 
     if (!caregiver) {
@@ -542,6 +585,11 @@ export const rejectCaregiver = async (req: AuthRequest, res: Response, next: Nex
       fallbackType: 'SYSTEM',
     }).catch(() => {});
 
+    await logAdminAction(req, 'CAREGIVER_REJECT', {
+      targetType: 'Caregiver', targetId: id,
+      payload: { caregiverName: caregiver.user.name, reason: reason || null },
+    });
+
     res.json({
       success: true,
       message: `${caregiver.user.name} 간병인이 거절되었습니다.`,
@@ -559,7 +607,7 @@ export const blacklistCaregiver = async (req: AuthRequest, res: Response, next: 
 
     const caregiver = await prisma.caregiver.findUnique({
       where: { id },
-      include: { user: true },
+      include: { user: { select: USER_PUBLIC_SELECT } },
     });
 
     if (!caregiver) {
@@ -640,6 +688,11 @@ export const blacklistCaregiver = async (req: AuthRequest, res: Response, next: 
         message: `${caregiver.user.name} 간병인이 블랙리스트에 등록되었습니다.`,
       });
     }
+
+    await logAdminAction(req, isBlacklisted ? 'CAREGIVER_UNBLACKLIST' : 'CAREGIVER_BLACKLIST', {
+      targetType: 'Caregiver', targetId: id,
+      payload: { caregiverName: caregiver.user.name, reason: reason || null },
+    });
   } catch (error) {
     next(error);
   }
@@ -652,7 +705,7 @@ export const grantBadge = async (req: AuthRequest, res: Response, next: NextFunc
 
     const caregiver = await prisma.caregiver.findUnique({
       where: { id },
-      include: { user: true },
+      include: { user: { select: USER_PUBLIC_SELECT } },
     });
 
     if (!caregiver) {
@@ -709,7 +762,7 @@ export const addPenalty = async (req: AuthRequest, res: Response, next: NextFunc
 
     const caregiver = await prisma.caregiver.findUnique({
       where: { id },
-      include: { user: true },
+      include: { user: { select: USER_PUBLIC_SELECT } },
     });
 
     if (!caregiver) {
@@ -789,6 +842,11 @@ export const addPenalty = async (req: AuthRequest, res: Response, next: NextFunc
           data: { penaltyType: type },
         },
       });
+    });
+
+    await logAdminAction(req, 'PENALTY_ADD', {
+      targetType: 'Caregiver', targetId: id,
+      payload: { caregiverName: caregiver.user.name, type, reason },
     });
 
     res.json({
@@ -1288,10 +1346,10 @@ export const emergencyRematch = async (req: AuthRequest, res: Response, next: Ne
           include: { patient: true },
         },
         caregiver: {
-          include: { user: true },
+          include: { user: { select: USER_PUBLIC_SELECT } },
         },
         guardian: {
-          include: { user: true },
+          include: { user: { select: USER_PUBLIC_SELECT } },
         },
       },
     });
@@ -2171,7 +2229,7 @@ export const paySettlement = async (req: AuthRequest, res: Response, next: NextF
     const { id } = req.params;
     const earning = await prisma.earning.findUnique({
       where: { id },
-      include: { caregiver: { include: { user: true } } },
+      include: { caregiver: { include: { user: { select: USER_PUBLIC_SELECT } } } },
     });
     if (!earning) throw new AppError('정산 내역을 찾을 수 없습니다.', 404);
     if (earning.isPaid) throw new AppError('이미 정산 처리된 건입니다.', 400);
@@ -3232,8 +3290,8 @@ export const revertEmergencyRematch = async (req: AuthRequest, res: Response, ne
       where: { id: contractId },
       include: {
         careRequest: true,
-        caregiver: { include: { user: true } },
-        guardian: { include: { user: true } },
+        caregiver: { include: { user: { select: USER_PUBLIC_SELECT } } },
+        guardian: { include: { user: { select: USER_PUBLIC_SELECT } } },
       },
     });
     if (!contract) throw new AppError('계약을 찾을 수 없습니다.', 404);

@@ -4,6 +4,7 @@ import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { logAdminAction } from '../services/auditLog';
 import { config } from '../config';
 import { generateOrderId } from '../utils/generateCode';
 import { sendEmail, emailPaymentCompleted } from '../services/emailService';
@@ -702,6 +703,11 @@ export const approveRefundRequest = async (req: AuthRequest, res: Response, next
       });
       throw e;
     }
+    await logAdminAction(req, 'REFUND_APPROVE', {
+      targetType: 'Payment', targetId: id,
+      payload: { refundAmount, reason },
+    });
+
     res.json({ success: true, data: { refundAmount }, message: '환불이 승인·처리되었습니다.' });
   } catch (error) {
     next(error);
@@ -747,6 +753,11 @@ export const rejectRefundRequest = async (req: AuthRequest, res: Response, next:
         data: { paymentId: id },
       }).catch(() => {});
     }
+
+    await logAdminAction(req, 'REFUND_REJECT', {
+      targetType: 'Payment', targetId: id,
+      payload: { reason: reason || null },
+    });
 
     res.json({ success: true, message: '환불 요청이 거절되었습니다.' });
   } catch (error) {
