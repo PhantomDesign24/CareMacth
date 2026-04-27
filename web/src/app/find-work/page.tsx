@@ -48,21 +48,15 @@ interface CareRequest {
   hourlyRate: number | null;
   status: string;
   specialRequirements: string | null;
+  // 간병인 목록 응답: 결제 전 비식별 정보만 (성별/연령대/거동/감염), 보호자 X
   patient: {
-    name: string;
     gender: string;
-    birthDate: string | null;
+    ageBucket: number | null; // 10세 단위 (예: 70 = 70대)
     mobilityStatus: string;
     hasDementia: boolean;
     hasInfection: boolean;
-    diagnosis: string | null;
-  };
-  guardian: {
-    user: { name: string };
-  };
-  _count?: {
-    applications: number;
-  };
+  } | null;
+  applicantCount?: number;
 }
 
 function parseRole(token: string | null): string | null {
@@ -183,7 +177,7 @@ export default function FindWorkPage() {
         isAccepted: true,
         message: "",
       });
-      setApplySuccess(`${request.patient.name} 환자의 간병에 지원했습니다. 보호자가 확인 후 연락드립니다.`);
+      setApplySuccess(`간병 요청에 지원했습니다. 보호자가 확인 후 연락드립니다.`);
       setAppliedIds(prev => [...prev, request.id]);
       setAppliedStatuses(prev => ({ ...prev, [request.id]: 'PENDING' }));
       fetchRequests();
@@ -224,7 +218,7 @@ export default function FindWorkPage() {
         message: applyMessage,
       });
       setShowModal(false);
-      setApplySuccess(`${modalTarget.patient.name} 환자의 간병에 제안(${rate.toLocaleString()}원)을 보냈습니다. 보호자가 확인 후 연락드립니다.`);
+      setApplySuccess(`간병 요청에 일당 ${rate.toLocaleString()}원으로 역제안을 보냈습니다. 보호자가 확인 후 연락드립니다.`);
       setAppliedIds(prev => [...prev, modalTarget.id]);
       setAppliedStatuses(prev => ({ ...prev, [modalTarget.id]: 'PENDING' }));
       fetchRequests();
@@ -576,7 +570,9 @@ export default function FindWorkPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <h3 className="font-semibold text-gray-900 text-base truncate">
-                          {req.patient.name} 환자
+                          {req.location === "HOSPITAL"
+                            ? `${req.hospitalName || (req.region || "병원")} 간병 요청`
+                            : `${req.region || req.address?.split(" ").slice(0, 2).join(" ") || "자택"} 간병 요청`}
                         </h3>
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-600">
                           {formatCareType(req.careType)}
@@ -614,30 +610,24 @@ export default function FindWorkPage() {
                           </p>
                         </div>
                         <div>
-                          <span className="text-gray-400 text-xs">환자 성별/나이</span>
+                          <span className="text-gray-400 text-xs">환자 성별/연령</span>
                           <p className="text-gray-700 font-medium">
-                            {req.patient.gender === 'F' ? '여' : '남'}
-                            {req.patient.birthDate ? ` / ${new Date().getFullYear() - new Date(req.patient.birthDate).getFullYear()}세` : ''}
+                            {req.patient?.gender === 'F' ? '여' : '남'}
+                            {req.patient?.ageBucket ? ` / ${req.patient.ageBucket}대` : ''}
                           </p>
                         </div>
                         <div>
                           <span className="text-gray-400 text-xs">환자 상태</span>
                           <p className="text-gray-700 font-medium">
-                            {req.patient.mobilityStatus === "DEPENDENT" ? "완전의존" : req.patient.mobilityStatus === "PARTIAL" ? "부분도움" : "독립보행"}
-                            {req.patient.hasDementia && " · 치매"}
-                            {req.patient.hasInfection && " · 감염"}
+                            {req.patient?.mobilityStatus === "DEPENDENT" ? "완전의존" : req.patient?.mobilityStatus === "PARTIAL" ? "부분도움" : "독립보행"}
+                            {req.patient?.hasDementia && " · 치매"}
+                            {req.patient?.hasInfection && " · 감염"}
                           </p>
                         </div>
-                        {req.patient.diagnosis && (
-                          <div>
-                            <span className="text-gray-400 text-xs">진단명</span>
-                            <p className="text-gray-700 font-medium">{req.patient.diagnosis}</p>
-                          </div>
-                        )}
-                        {req._count && (
+                        {typeof req.applicantCount === 'number' && (
                           <div>
                             <span className="text-gray-400 text-xs">지원자</span>
-                            <p className="text-gray-700 font-medium">{req._count.applications}명</p>
+                            <p className="text-gray-700 font-medium">{req.applicantCount}명</p>
                           </div>
                         )}
                       </div>
