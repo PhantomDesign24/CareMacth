@@ -64,7 +64,7 @@ function statusBadgeClass(status?: string): string {
 
 export default function DisputesPage() {
   const [statusFilter, setStatusFilter] = useState("");
-  const [priorityFilter, setPriorityFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -95,6 +95,7 @@ export default function DisputesPage() {
       };
       const params = new URLSearchParams();
       if (statusFilter && statusMap[statusFilter]) params.set("status", statusMap[statusFilter]);
+      if (categoryFilter) params.set("category", categoryFilter);
       const queryString = params.toString() ? `?${params.toString()}` : "";
       const raw: any = await apiRequest(`/disputes/admin${queryString}`);
       const list = Array.isArray(raw) ? raw : (raw?.data || []);
@@ -128,7 +129,7 @@ export default function DisputesPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, currentPage]);
+  }, [statusFilter, categoryFilter, currentPage]);
 
   useEffect(() => {
     fetchData();
@@ -136,7 +137,7 @@ export default function DisputesPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, priorityFilter]);
+  }, [statusFilter, categoryFilter]);
 
   const handleEmergencyRematch = async (dispute: Dispute) => {
     const contractId = dispute.contractId || dispute.matchingId || dispute.id;
@@ -316,15 +317,17 @@ export default function DisputesPage() {
             <option value="resolved">해결</option>
           </select>
           <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
             className="input-field w-auto"
           >
-            <option value="">전체 긴급도</option>
-            <option value="urgent">긴급</option>
-            <option value="high">높음</option>
-            <option value="medium">보통</option>
-            <option value="low">낮음</option>
+            <option value="">전체 카테고리</option>
+            <option value="CARE_QUALITY">간병 품질</option>
+            <option value="CANCELLATION">취소 관련</option>
+            <option value="PAYMENT">결제 관련</option>
+            <option value="ABUSE">욕설/폭언</option>
+            <option value="NO_SHOW">노쇼</option>
+            <option value="OTHER">기타</option>
           </select>
         </div>
       </div>

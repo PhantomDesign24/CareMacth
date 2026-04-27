@@ -148,7 +148,8 @@ export default function MatchingsPage() {
         method: "POST",
         body: { reason: trimmed },
       });
-      const next = res?.data?.nextActions || [];
+      // apiRequest 가 이미 { success, data } 를 언래핑하므로 res === payload (data)
+      const next = res?.nextActions || [];
       const hint = Array.isArray(next) && next.length
         ? "\n\n다음 처리 필요:\n- " + next.join("\n- ")
         : "";
