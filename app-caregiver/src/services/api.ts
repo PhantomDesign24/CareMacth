@@ -5,6 +5,10 @@ import { authService } from './auth';
 const DOMAIN = 'cm.phantomdesign.kr';
 const BASE_URL = `https://${DOMAIN}/api`;
 
+interface RetriableRequestConfig extends AxiosRequestConfig {
+  _retry?: boolean;
+}
+
 class ApiClient {
   private client: AxiosInstance;
 
@@ -32,21 +36,28 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
-        if (error.response?.status === 401) {
+        const originalRequest = error.config as RetriableRequestConfig | undefined;
+        if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+          originalRequest._retry = true;
           const refreshToken = await authService.getRefreshToken();
           if (refreshToken) {
             try {
               const res = await axios.post(`${BASE_URL}/auth/refresh`, {
                 refreshToken,
               });
-              await authService.setTokens(
-                res.data.accessToken,
-                res.data.refreshToken
-              );
-              if (error.config) {
-                error.config.headers.Authorization = `Bearer ${res.data.accessToken}`;
-                return this.client.request(error.config);
+              const tokenData = res.data?.data ?? res.data;
+              const accessToken = tokenData?.accessToken ?? tokenData?.access_token ?? tokenData?.token;
+              const nextRefreshToken = tokenData?.refreshToken ?? tokenData?.refresh_token ?? refreshToken;
+              if (!accessToken) {
+                throw new Error('No access token in refresh response');
               }
+              await authService.setTokens(
+                accessToken,
+                nextRefreshToken
+              );
+              originalRequest.headers = originalRequest.headers || {};
+              originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+              return this.client.request(originalRequest);
             } catch {
               await authService.logout();
             }

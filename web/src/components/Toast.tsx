@@ -38,6 +38,16 @@ export default function ToastContainer() {
       const id = ++toastId;
       const next = [...prev, { id, message, type }];
       const trimmed = next.length > 5 ? next.slice(next.length - 5) : next;
+      if (trimmed.length !== next.length) {
+        const visibleIds = new Set(trimmed.map((t) => t.id));
+        next.forEach((t) => {
+          if (!visibleIds.has(t.id)) {
+            const oldTimer = toastTimers.get(t.id);
+            if (oldTimer) clearTimeout(oldTimer);
+            toastTimers.delete(t.id);
+          }
+        });
+      }
       const timer = setTimeout(() => {
         setToasts((cur) => cur.filter((t) => t.id !== id));
         toastTimers.delete(id);
@@ -49,7 +59,11 @@ export default function ToastContainer() {
 
   useEffect(() => {
     addToastFn = addToast;
-    return () => { addToastFn = null; };
+    return () => {
+      addToastFn = null;
+      toastTimers.forEach((timer) => clearTimeout(timer));
+      toastTimers.clear();
+    };
   }, [addToast]);
 
   if (toasts.length === 0) return null;

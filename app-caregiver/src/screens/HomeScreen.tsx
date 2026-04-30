@@ -36,6 +36,13 @@ const STATUS_OPTIONS: { value: WorkStatus; label: string; color: string }[] = [
   { value: 'immediate', label: '즉시가능', color: '#2ECC71' },
 ];
 
+const isCurrentMonth = (value?: string) => {
+  if (!value) return false;
+  const date = new Date(value);
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+};
+
 export default function HomeScreen({ navigation }: any) {
   const [workStatus, setWorkStatus] = useState<WorkStatus>('available');
   const [refreshing, setRefreshing] = useState(false);
@@ -47,9 +54,10 @@ export default function HomeScreen({ navigation }: any) {
 
   const fetchHome = React.useCallback(async () => {
     try {
-      const [profileRes, earningsRes, notifRes] = await Promise.allSettled([
+      const [profileRes, earningsRes, activityRes, notifRes] = await Promise.allSettled([
         caregiverApi.getProfile(),
         caregiverApi.getEarnings(),
+        caregiverApi.getActivityHistory(),
         caregiverApi.getNotifications(),
       ]);
 
@@ -77,11 +85,37 @@ export default function HomeScreen({ navigation }: any) {
         }
       }
 
+      if (activityRes.status === 'fulfilled') {
+        const body: any = (activityRes.value as any)?.data ?? activityRes.value;
+        const data = body?.data ?? body;
+        const contracts = Array.isArray(data?.contracts) ? data.contracts : [];
+        const active = contracts.find((c: any) => ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'].includes(c.status));
+        if (active) {
+          setTodaySchedule([{
+            id: active.id,
+            patientName: active.careRequest?.patient?.name || active.patientName || '환자',
+            location: active.careRequest?.hospitalName || active.careRequest?.address || '-',
+            time: '07:00 ~ 19:00',
+            status: 'active',
+          }]);
+        }
+      }
+
       // 이번 달 수익
       if (earningsRes.status === 'fulfilled') {
         const body: any = (earningsRes.value as any)?.data ?? earningsRes.value;
         const data = body?.data ?? body;
-        const monthly = data?.monthlyTotal ?? data?.thisMonth ?? data?.summary?.monthlyTotal ?? 0;
+        const earnings = Array.isArray(data?.earnings) ? data.earnings : [];
+        const additionalFees = Array.isArray(data?.additionalFees) ? data.additionalFees : [];
+        const monthly =
+          data?.monthlyTotal ??
+          data?.thisMonth ??
+          earnings
+            .filter((e: any) => isCurrentMonth(e.paidAt || e.createdAt))
+            .reduce((sum: number, e: any) => sum + Number(e.netAmount || 0), 0) +
+            additionalFees
+              .filter((f: any) => f.approvedByGuardian && isCurrentMonth(f.createdAt))
+              .reduce((sum: number, f: any) => sum + Number(f.netAmount || 0), 0);
         setMonthlyEarnings(Number(monthly));
       }
 

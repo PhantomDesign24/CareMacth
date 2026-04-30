@@ -32,6 +32,13 @@ interface ActivityItem {
   earnings: number;
 }
 
+const isCurrentMonth = (value?: string) => {
+  if (!value) return false;
+  const date = new Date(value);
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+};
+
 export default function MyPageScreen({ navigation }: any) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,10 +99,27 @@ export default function MyPageScreen({ navigation }: any) {
       if (earningsRes.status === 'fulfilled') {
         const body: any = (earningsRes.value as any)?.data ?? earningsRes.value;
         const data = body?.data ?? body;
+        const earnings = Array.isArray(data?.earnings) ? data.earnings : [];
+        const additionalFees = Array.isArray(data?.additionalFees) ? data.additionalFees : [];
+        const monthlyEarning =
+          data?.monthlyTotal ??
+          data?.thisMonth ??
+          earnings
+            .filter((e: any) => isCurrentMonth(e.paidAt || e.createdAt))
+            .reduce((sum: number, e: any) => sum + Number(e.netAmount || 0), 0) +
+            additionalFees
+              .filter((f: any) => f.approvedByGuardian && isCurrentMonth(f.createdAt))
+              .reduce((sum: number, f: any) => sum + Number(f.netAmount || 0), 0);
+        const totalEarning =
+          data?.totalEarning ??
+          data?.lifetimeTotal ??
+          data?.combinedSummary?.totalNetAmount ??
+          data?.summary?.totalNetAmount ??
+          0;
         setProfile((prev) => ({
           ...prev,
-          monthlyEarning: Number(data?.monthlyTotal ?? data?.thisMonth ?? 0),
-          totalEarning: Number(data?.totalEarning ?? data?.lifetimeTotal ?? 0),
+          monthlyEarning: Number(monthlyEarning),
+          totalEarning: Number(totalEarning),
         }));
       }
 
@@ -121,7 +145,7 @@ export default function MyPageScreen({ navigation }: any) {
           startDate: c.startDate,
           endDate: c.endDate,
           status: (c.status === 'CANCELLED' ? 'cancelled' : 'completed') as 'completed' | 'cancelled',
-          earnings: Number(c.totalAmount || 0),
+          earnings: Number(c.totalAmount || c.amount || c.payment?.amount || 0),
         })));
       }
     } catch (err: any) {

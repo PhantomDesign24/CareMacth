@@ -498,15 +498,18 @@ export interface EducationRecordItem {
 export interface EducationRecordsResponse {
   education: { id: string; title: string; duration: number };
   items: EducationRecordItem[];
+  pagination?: { page: number; limit: number; total: number; totalPages: number };
   summary: { total: number; completed: number; inProgress: number };
 }
 
 export async function getEducationRecords(
   educationId: string,
   status: "all" | "completed" | "inProgress" = "all",
+  page = 1,
+  limit = 50,
 ) {
   return apiRequest<EducationRecordsResponse>(
-    `/admin/education/${educationId}/records?status=${status}`,
+    `/admin/education/${educationId}/records?status=${status}&page=${page}&limit=${limit}`,
   );
 }
 

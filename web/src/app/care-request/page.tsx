@@ -18,6 +18,12 @@ export default function CareRequestPage() {
   // 동일 프레임 더블 탭 차단용 즉시 락 (setSubmitting 비동기 갭 메움)
   const submitInFlightRef = useRef(false);
 
+  useEffect(() => {
+    return () => {
+      submitInFlightRef.current = false;
+    };
+  }, []);
+
   // 역할 가드: GUARDIAN / HOSPITAL / ADMIN 만 접근 가능
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -74,6 +80,10 @@ export default function CareRequestPage() {
       const resolvedMobility = mobilityMap[data.mobility?.toLowerCase()] || 'INDEPENDENT';
 
       const ynToBool = (v: string): boolean | undefined => v === 'YES' ? true : v === 'NO' ? false : undefined;
+      const normalizeNoneExclusive = (value: unknown): string[] | undefined => {
+        if (!Array.isArray(value)) return undefined;
+        return value.includes('NONE') ? ['NONE'] : value;
+      };
 
       const patientPayload: Record<string, unknown> = {
         name: data.patientName,
@@ -106,12 +116,12 @@ export default function CareRequestPage() {
         })(),
         medicalNotes: data.specialNotes || undefined,
         // ── 신규 환자 상태
-        infections: Array.isArray(data.infections) ? data.infections : undefined,
+        infections: normalizeNoneExclusive(data.infections),
         roomType: data.roomType || undefined,
         roomTypeEtc: data.roomTypeEtc || undefined,
         longTermCareGrade: data.longTermCareGrade || undefined,
         hasSurgery: ynToBool(data.hasSurgery),
-        treatments: Array.isArray(data.treatments) ? data.treatments : undefined,
+        treatments: normalizeNoneExclusive(data.treatments),
         treatmentsEtc: data.treatmentsEtc || undefined,
         paralysisStatus: data.paralysisStatus || undefined,
         hygieneStatus: data.hygieneStatus || undefined,
@@ -173,7 +183,7 @@ export default function CareRequestPage() {
         specialRequirements: data.specialNotes || undefined,
         // ── 신규: 신청인-환자 관계 / 희망 서비스
         relationToPatient: data.relationToPatient || undefined,
-        preferredServices: Array.isArray(data.preferredServices) ? data.preferredServices : undefined,
+        preferredServices: normalizeNoneExclusive(data.preferredServices),
       };
 
       await careRequestAPI.create(requestPayload);

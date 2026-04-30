@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { apiRequest } from "@/lib/api";
+import { ADMIN_SITE } from "@/config/site";
 
 interface BadgeCounts {
   caregivers: number;
@@ -247,6 +248,7 @@ interface SidebarProps {
 export default function Sidebar({ onLogout }: SidebarProps) {
   const pathname = usePathname();
   const { mobileOpen, setMobileOpen } = useSidebar();
+  const publicSiteUrl = ADMIN_SITE.url.replace(/\/admin\/?$/, "");
   const [userName, setUserName] = useState("관리자");
   const [userEmail, setUserEmail] = useState("");
   const [badges, setBadges] = useState<BadgeCounts>({
@@ -373,7 +375,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       {/* 홈페이지 바로가기 */}
       <div className="border-t border-white/10 px-4 py-3">
         <a
-          href="/"
+          href={publicSiteUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-sidebar-text hover:bg-sidebar-hover hover:text-white transition-colors"

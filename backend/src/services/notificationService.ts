@@ -382,7 +382,9 @@ export async function sendFromTemplate(params: {
 
   // 이메일 발송 (백그라운드) — 사용자 이메일이 있으면 단순 텍스트 본문으로 발송
   if (useEmail) {
-    void sendEmailForTemplate(userId, title, body).catch(() => {});
+    void sendEmailForTemplate(userId, title, body).catch((error) => {
+      console.error('[EMAIL] 템플릿 이메일 발송 실패:', error);
+    });
   }
 
   if (!usePush) {
@@ -399,7 +401,10 @@ async function sendEmailForTemplate(userId: string, title: string, body: string)
   const user: any = await prisma.user.findUnique({
     where: { id: userId },
     select: { email: true },
-  }).catch(() => null);
+  }).catch((error) => {
+    console.error('[EMAIL] 템플릿 이메일 수신자 조회 실패:', { userId, error });
+    return null;
+  });
   if (!user?.email) return;
   const escapedBody = body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>');
   const html = `
@@ -410,5 +415,7 @@ async function sendEmailForTemplate(userId: string, title: string, body: string)
       <p style="color:#94A3B8;font-size:12px;">케어매치 알림 메일입니다.</p>
     </div>
   `;
-  await sendEmail(user.email, `[케어매치] ${title}`, html).catch(() => {});
+  await sendEmail(user.email, `[케어매치] ${title}`, html).catch((error) => {
+    console.error('[EMAIL] 템플릿 이메일 sendEmail 실패:', { userId, email: user.email, error });
+  });
 }

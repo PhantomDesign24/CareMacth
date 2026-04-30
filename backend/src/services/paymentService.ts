@@ -56,10 +56,42 @@ export async function settleEarning(contractId: string) {
     return null;
   }
 
-  // 정산 일수 — careRequest.durationDays 우선, 없으면 계약 기간으로 산출
-  const crDurationDays = (contract.careRequest as any)?.durationDays;
-  const settleDays = crDurationDays
-    ?? Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000));
+  // 1단계: 에스크로 결제 release 를 먼저 시도. 모두 실패하면 Earning 생성하지 않음
+  //   — Earning 선생성 후 release 실패 시 장부-실자금 불일치 발생하던 버그 해결
+  let escrowAttempted = 0;
+  let escrowReleased = 0;
+  const releasedPayments: typeof contract.payments = [];
+  const stillEscrowPayments: typeof contract.payments = [];
+  const nonEscrowPayments: typeof contract.payments = [];
+
+  for (const payment of contract.payments) {
+    if (payment.status === 'ESCROW' && payment.tossPaymentKey) {
+      escrowAttempted += 1;
+      try {
+        await axios.post(
+          `${TOSS_API_URL}/payments/${payment.tossPaymentKey}/release`,
+          {},
+          { headers: { Authorization: getTossAuthHeader(), 'Content-Type': 'application/json' } },
+        );
+        escrowReleased += 1;
+        releasedPayments.push(payment);
+      } catch (error: any) {
+        console.error(`[settleEarning] Toss release 실패 (payment=${payment.id}):`, error?.response?.data || error?.message);
+        stillEscrowPayments.push(payment);
+      }
+    } else {
+      nonEscrowPayments.push(payment);
+    }
+  }
+
+  // 모든 ESCROW 가 release 실패 + non-escrow 도 없으면 → Earning 생성하지 않고 종료
+  if (escrowAttempted > 0 && escrowReleased === 0 && nonEscrowPayments.length === 0) {
+    console.warn(`[settleEarning] contract=${contractId}: 모든 escrow release 실패, Earning 미생성. 후속 cron/관리자 reconcile 필요`);
+    return null;
+  }
+
+  // 정산 일수 — 계약의 실제 startDate~endDate 기준 (연장이 endDate 를 갱신하므로 자동으로 포함)
+  const settleDays = Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000));
   const calc = calculateEarning({
     amount: remainingAmount,
     platformFeePercent: contract.platformFee,
@@ -68,54 +100,36 @@ export async function settleEarning(contractId: string) {
     taxRate: contract.taxRate,
   });
 
-  const earning = await prisma.earning.create({
-    data: {
-      caregiverId: contract.caregiverId,
-      contractId: contract.id,
-      amount: calc.amount,
-      platformFee: calc.platformFee,
-      taxAmount: calc.taxAmount,
-      netAmount: calc.netAmount,
-    },
-  });
-
-  // 에스크로 결제 완료 처리 — Toss release 성공 시에만 COMPLETED 로 전이.
-  // 실패 건은 ESCROW 상태 유지하여 관리자 reconcile/재시도 큐로 둠 (장부-실자금 불일치 방지).
-  for (const payment of contract.payments) {
-    if (payment.status === 'ESCROW' && payment.tossPaymentKey) {
-      let releaseOk = false;
-      try {
-        await axios.post(
-          `${TOSS_API_URL}/payments/${payment.tossPaymentKey}/release`,
-          {},
-          {
-            headers: {
-              Authorization: getTossAuthHeader(),
-              'Content-Type': 'application/json',
-            },
-          },
-        );
-        releaseOk = true;
-      } catch (error: any) {
-        console.error(`[settleEarning] Toss release 실패 (payment=${payment.id}):`, error?.response?.data || error?.message);
-      }
-      if (releaseOk) {
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: { status: 'COMPLETED', paidAt: new Date() },
-        });
-      }
-      // releaseOk === false → ESCROW 유지, COMPLETED 전이 차단
-      continue;
-    }
-
-    // ESCROW 가 아닌(이미 COMPLETED 또는 다른 상태) 결제는 그대로 둠 — 정산 base 만 새 Earning 으로 반영
-    if (payment.status !== 'COMPLETED') {
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'COMPLETED' },
+  // 2단계: release 성공 후에 Earning + Payment 상태를 트랜잭션으로 일괄 처리
+  const earning = await prisma.$transaction(async (tx) => {
+    const createdEarning = await tx.earning.create({
+      data: {
+        caregiverId: contract.caregiverId,
+        contractId: contract.id,
+        amount: calc.amount,
+        platformFee: calc.platformFee,
+        taxAmount: calc.taxAmount,
+        netAmount: calc.netAmount,
+      },
+    });
+    // release 성공한 ESCROW → COMPLETED + paidAt
+    for (const p of releasedPayments) {
+      await tx.payment.update({
+        where: { id: p.id },
+        data: { status: 'COMPLETED', paidAt: new Date() },
       });
     }
+    // 비-ESCROW 중 아직 COMPLETED 아닌 건 (이론상 거의 없음) — 정합성 정리
+    for (const p of nonEscrowPayments) {
+      if (p.status !== 'COMPLETED') {
+        await tx.payment.update({ where: { id: p.id }, data: { status: 'COMPLETED' } });
+      }
+    }
+    // release 실패한 ESCROW 는 ESCROW 유지 — 다음 cron 에서 재시도 (Earning 은 잔여금 기준으로 다시 계산됨)
+    return createdEarning;
+  });
+  if (stillEscrowPayments.length > 0) {
+    console.warn(`[settleEarning] contract=${contractId}: ${stillEscrowPayments.length}건 ESCROW 유지 (release 실패), 잔여 정산은 다음 cron 에서 처리`);
   }
 
   return earning;

@@ -52,15 +52,21 @@ export default function EducationPage() {
   const [recordsItems, setRecordsItems] = useState<EducationRecordItem[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [recordsFilter, setRecordsFilter] = useState<"all" | "completed" | "inProgress">("all");
+  const [recordsPage, setRecordsPage] = useState(1);
+  const [recordsTotalPages, setRecordsTotalPages] = useState(1);
+  const recordsLimit = 50;
 
-  const openRecordsModal = useCallback(async (course: EducationCourse, filter: "all" | "completed" | "inProgress" = "all") => {
-    setRecordsModalCourse(course);
-    setRecordsFilter(filter);
+  const loadRecords = useCallback(async (
+    course: EducationCourse,
+    filter: "all" | "completed" | "inProgress",
+    page: number,
+  ) => {
     setRecordsLoading(true);
-    setRecordsItems([]);
     try {
-      const res = await getEducationRecords(course.id, filter);
+      const res = await getEducationRecords(course.id, filter, page, recordsLimit);
       setRecordsItems(res?.items || []);
+      setRecordsPage(res?.pagination?.page || page);
+      setRecordsTotalPages(res?.pagination?.totalPages || 1);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "수강자 명단을 불러오지 못했습니다.");
     } finally {
@@ -68,19 +74,26 @@ export default function EducationPage() {
     }
   }, []);
 
+  const openRecordsModal = useCallback(async (course: EducationCourse, filter: "all" | "completed" | "inProgress" = "all") => {
+    setRecordsModalCourse(course);
+    setRecordsFilter(filter);
+    setRecordsItems([]);
+    setRecordsPage(1);
+    setRecordsTotalPages(1);
+    await loadRecords(course, filter, 1);
+  }, [loadRecords]);
+
   const refreshRecords = useCallback(async (filter: "all" | "completed" | "inProgress") => {
     if (!recordsModalCourse) return;
     setRecordsFilter(filter);
-    setRecordsLoading(true);
-    try {
-      const res = await getEducationRecords(recordsModalCourse.id, filter);
-      setRecordsItems(res?.items || []);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "수강자 명단을 불러오지 못했습니다.");
-    } finally {
-      setRecordsLoading(false);
-    }
-  }, [recordsModalCourse]);
+    setRecordsPage(1);
+    await loadRecords(recordsModalCourse, filter, 1);
+  }, [loadRecords, recordsModalCourse]);
+
+  const changeRecordsPage = useCallback(async (page: number) => {
+    if (!recordsModalCourse || page < 1 || page > recordsTotalPages || page === recordsPage) return;
+    await loadRecords(recordsModalCourse, recordsFilter, page);
+  }, [loadRecords, recordsFilter, recordsModalCourse, recordsPage, recordsTotalPages]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -457,7 +470,7 @@ export default function EducationPage() {
 
       {/* 수강자 명단 모달 */}
       {recordsModalCourse && (
-        <div className="modal-overlay" onClick={() => { setRecordsModalCourse(null); setRecordsItems([]); }}>
+        <div className="modal-overlay" onClick={() => { setRecordsModalCourse(null); setRecordsItems([]); setRecordsPage(1); setRecordsTotalPages(1); }}>
           <div className="modal-content max-w-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start justify-between">
               <div>
@@ -465,7 +478,7 @@ export default function EducationPage() {
                 <p className="mt-1 text-xs text-gray-500">수강자 명단 — 시청 진도/수료 현황</p>
               </div>
               <button
-                onClick={() => { setRecordsModalCourse(null); setRecordsItems([]); }}
+                onClick={() => { setRecordsModalCourse(null); setRecordsItems([]); setRecordsPage(1); setRecordsTotalPages(1); }}
                 className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -544,8 +557,25 @@ export default function EducationPage() {
               )}
             </div>
 
-            <div className="mt-4 flex justify-end">
-              <button className="btn-secondary" onClick={() => { setRecordsModalCourse(null); setRecordsItems([]); }}>
+            <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <button
+                  className="btn-secondary btn-sm"
+                  disabled={recordsLoading || recordsPage <= 1}
+                  onClick={() => changeRecordsPage(recordsPage - 1)}
+                >
+                  이전
+                </button>
+                <span>{recordsPage} / {recordsTotalPages}</span>
+                <button
+                  className="btn-secondary btn-sm"
+                  disabled={recordsLoading || recordsPage >= recordsTotalPages}
+                  onClick={() => changeRecordsPage(recordsPage + 1)}
+                >
+                  다음
+                </button>
+              </div>
+              <button className="btn-secondary" onClick={() => { setRecordsModalCourse(null); setRecordsItems([]); setRecordsPage(1); setRecordsTotalPages(1); }}>
                 닫기
               </button>
             </div>

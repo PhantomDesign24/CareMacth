@@ -1985,9 +1985,10 @@ export const getPayments = async (req: AuthRequest, res: Response, next: NextFun
         ?? (cStart && cEnd
           ? Math.max(1, Math.ceil((new Date(cEnd).getTime() - new Date(cStart).getTime()) / 86400000))
           : 1);
+      // 정산 base 는 공급가(p.amount, VAT 제외). totalAmount = amount + vat 이므로 totalAmount 를 base 로 쓰면 과대 계산됨.
       const calc = p.contract
         ? calculateEarning({
-            amount: p.totalAmount,
+            amount: p.amount,
             platformFeePercent,
             platformFeeFixed,
             durationDays: cDurationDays,
@@ -2005,7 +2006,8 @@ export const getPayments = async (req: AuthRequest, res: Response, next: NextFun
         amount: p.totalAmount,
         fee: platformFeeAmt,
         taxAmount: taxAmt,
-        netAmount: p.totalAmount - platformFeeAmt - taxAmt, // 간병인 실수령 (수수료+세금 차감)
+        // 간병인 실수령 = 공급가(p.amount) - 수수료 - 세금 (VAT 제외)
+        netAmount: calc.netAmount,
         status: p.status,
         contractStatus: p.contract?.status || null,
         contractCancelledAt: p.contract?.cancelledAt ? p.contract.cancelledAt.toISOString() : null,
@@ -2383,12 +2385,19 @@ export const forceCancelContract = async (req: AuthRequest, res: Response, next:
         }
       }
 
-      // ── 미정산 Earning 차감 (사용일수 기준) — 정액 수수료 × 사용일수
+      // ── 미정산 Earning 차감 (사용일수 기준) — calculateEarning 으로 통일
       if (usedDays > 0) {
         const usedAmount = contract.dailyRate * usedDays;
-        const platformFeeAmount = Math.round(usedAmount * (contract.platformFee / 100)) + ((contract as any).platformFeeFixed || 0) * usedDays;
-        const taxAmount = Math.round((Math.max(0, usedAmount - platformFeeAmount)) * (contract.taxRate / 100));
-        const netEarning = Math.max(0, usedAmount - platformFeeAmount - taxAmount);
+        const calc = calculateEarning({
+          amount: usedAmount,
+          platformFeePercent: contract.platformFee,
+          platformFeeFixed: (contract as any).platformFeeFixed || 0,
+          durationDays: usedDays,
+          taxRate: contract.taxRate,
+        });
+        const platformFeeAmount = calc.platformFee;
+        const taxAmount = calc.taxAmount;
+        const netEarning = calc.netAmount;
         const existingEarnings = await tx.earning.findMany({
           where: { contractId, isPaid: false },
           orderBy: { createdAt: 'asc' },

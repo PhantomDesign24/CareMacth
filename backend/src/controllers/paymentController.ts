@@ -268,9 +268,9 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       if (isImmediateComplete) {
         // 정산 base = amount (포인트 차감 후 실제 결제 base). 0원이면 Earning 미생성.
         if (amount > 0) {
-          // 정액 수수료 곱할 일수 — 연장이면 additionalDays, 아니면 careRequest.durationDays 또는 전체 기간
+          // 정액 수수료 곱할 일수 — 연장 결제면 그 연장의 additionalDays, 신규 계약 결제면 endDate-startDate
+          // (careRequest.durationDays 는 원본 요청 일수라 사용하지 않음)
           const settleDays = extension?.additionalDays
-            ?? (contract.careRequest as any)?.durationDays
             ?? Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000));
           const calc = calculateEarning({
             amount,
