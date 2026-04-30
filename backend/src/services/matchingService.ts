@@ -66,11 +66,17 @@ export async function runAutoMatching(careRequestId: string): Promise<MatchScore
       distanceScore = getDistanceScore(distance);
     }
 
-    // 희망 지역 매칭 보너스
-    if (caregiver.preferredRegions.length > 0 && careRequest.address) {
-      const regionMatch = caregiver.preferredRegions.some(
-        (region) => careRequest.address.includes(region)
-      );
+    // 희망 지역 매칭 보너스 — careRequest.regions(시·군·구 포함) + address 양쪽으로 매칭
+    if (caregiver.preferredRegions.length > 0) {
+      const requestRegions: string[] = Array.isArray((careRequest as any).regions) ? (careRequest as any).regions : [];
+      const regionMatch = caregiver.preferredRegions.some((cgRegion) => {
+        // 1) 정확 일치 또는 prefix (caregiver "서울" ⊂ request "서울 강남구")
+        if (requestRegions.some((r) => r === cgRegion || r.startsWith(`${cgRegion} `) || cgRegion.startsWith(`${r} `))) {
+          return true;
+        }
+        // 2) 주소 문자열 substring 매칭 (백워드 호환)
+        return typeof careRequest.address === 'string' && careRequest.address.includes(cgRegion);
+      });
       if (regionMatch) distanceScore = Math.min(30, distanceScore + 5);
     }
 

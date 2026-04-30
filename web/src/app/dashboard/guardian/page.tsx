@@ -185,6 +185,12 @@ function GuardianDashboard() {
     companyPhone: null,
     isNonBusinessDay: false,
   });
+  // 모바일 여부 — tel: 링크 vs 카톡 채널 분기용
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    setIsMobile(/Android|iPhone|iPad|iPod|Mobi/i.test(ua));
+  }, []);
   const [nowTick, setNowTick] = useState(Date.now());
   const [payments, setPayments] = useState<Payment[]>([]);
   const [paymentSummary, setPaymentSummary] = useState<{
@@ -1053,12 +1059,23 @@ function GuardianDashboard() {
                                 </span>
                               )}
                               {showConsultationButtons && (
-                                <a
-                                  href={`tel:${contactInfo.companyPhone}`}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors"
-                                >
-                                  📞 상담사와 연결하기
-                                </a>
+                                isMobile ? (
+                                  <a
+                                    href={`tel:${contactInfo.companyPhone}`}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors"
+                                  >
+                                    📞 상담사와 연결하기
+                                  </a>
+                                ) : (
+                                  <a
+                                    href={SITE.kakaoChannelUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-yellow-400 hover:bg-yellow-500 rounded-lg transition-colors"
+                                  >
+                                    💬 카카오톡 상담 ({contactInfo.companyPhone})
+                                  </a>
+                                )
                               )}
                               {(care.applicantCount === 0 || showConsultationButtons) && (
                                 <button

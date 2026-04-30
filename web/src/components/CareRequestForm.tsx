@@ -21,6 +21,7 @@ interface CareRequestFormData {
   mobility: string;
   specialNotes: string;
   diagnosis: string[];
+  diagnosisEtc: string;
 
   // Care type
   careType: string;
@@ -97,6 +98,7 @@ const initialFormData: CareRequestFormData = {
   mobility: "",
   specialNotes: "",
   diagnosis: [],
+  diagnosisEtc: "",
   careType: "",
   careSchedule: "",
   hourlyStart: "",
@@ -348,18 +350,6 @@ const CARE_TYPES = [
     desc: "자택에서 받는 전문 재택 간병",
     emoji: "🏠",
   },
-  {
-    value: "visit",
-    label: "방문요양",
-    desc: "요양이 필요한 분을 위한 방문요양",
-    emoji: "💝",
-  },
-  {
-    value: "daily",
-    label: "생활돌봄",
-    desc: "일상생활 지원 돌봄 서비스",
-    emoji: "🤝",
-  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -513,10 +503,13 @@ function RadioRow({ label, options, value, onChange }: { label: string; options:
   );
 }
 
-function RadioWithEtc({ label, options, value, etcValue, onChange, onEtcChange }: { label: string; options: { v: string; l: string }[]; value: string; etcValue: string; onChange: (v: string) => void; onEtcChange: (v: string) => void }) {
+function RadioWithEtc({ label, options, value, etcValue, onChange, onEtcChange, required = false }: { label: string; options: { v: string; l: string }[]; value: string; etcValue: string; onChange: (v: string) => void; onEtcChange: (v: string) => void; required?: boolean }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </label>
       <div className="flex flex-wrap gap-2">
         {options.map((o) => (
           <button key={o.v} type="button" onClick={() => onChange(o.v)}
@@ -580,9 +573,18 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
       DEPENDENT: "bedridden",
     };
     // 진단명: 신규 diagnoses[] 우선, 없으면 레거시 diagnosis (콤마구분 String)
-    const diagnosisList = Array.isArray(p.diagnoses) && p.diagnoses.length > 0
+    const rawDiagnosisList = Array.isArray(p.diagnoses) && p.diagnoses.length > 0
       ? p.diagnoses
       : (p.diagnosis ? p.diagnosis.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    // "기타: <텍스트>" 형태 분리 — UI는 "기타(직접입력)" 토글 + diagnosisEtc 입력값으로 표현
+    let restoredEtc = "";
+    const diagnosisList = rawDiagnosisList.map((item) => {
+      if (typeof item === "string" && item.startsWith("기타:")) {
+        restoredEtc = item.slice(3).trim();
+        return "기타(직접입력)";
+      }
+      return item;
+    });
 
     // boolean → YES/NO 문자열 (UI 형식)
     const yn = (v: boolean | null | undefined): string =>
@@ -603,6 +605,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
       mobility: mobilityMap[p.mobilityStatus || ""] || "",
       specialNotes: p.medicalNotes || "",
       diagnosis: diagnosisList,
+      diagnosisEtc: restoredEtc,
       // ── 신규 환자 상태 필드 모두 복원
       infections: Array.isArray(p.infections) ? p.infections : [],
       infectionsEtc: "",
@@ -650,7 +653,19 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
     field: keyof CareRequestFormData,
     value: string | boolean | string[]
   ) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [field]: value };
+      // careType 변경 시 locationType 자동 동기화 (hospital → hospital, home → home)
+      if (field === 'careType' && (value === 'hospital' || value === 'home')) {
+        next.locationType = value as string;
+        // 다른 유형으로 바꾸면 이전 장소명도 초기화 (사용자 혼선 방지)
+        if (prev.careType !== value) {
+          next.locationName = '';
+          next.locationAddress = '';
+        }
+      }
+      return next;
+    });
   };
 
   const toggleDiagnosis = (item: string) => {
@@ -686,14 +701,20 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
     if (!form.mobility) return "환자 거동상태를 선택해주세요.";
     if (form.hasDementia && !form.dementiaLevel) return "치매 정도를 선택해주세요.";
     if (form.hasInfection && !form.infectionDetails?.trim()) return "감염 세부사항을 입력해주세요.";
+    if (!form.hospitalizationReason) return "입원 사유를 선택해주세요.";
+    if (form.hospitalizationReason === 'ETC' && !form.hospitalizationReasonEtc?.trim()) {
+      return "입원 사유의 기타 내용을 입력해주세요.";
+    }
+    if (form.diagnosis.includes("기타(직접입력)") && !form.diagnosisEtc?.trim()) {
+      return "기타 진단명을 직접 입력해주세요.";
+    }
     // Step 2 - 간병 유형
     if (!form.careType) return "간병 유형을 선택해주세요.";
     if (!form.careSchedule) return "간병 스케줄을 선택해주세요.";
     if (form.careSchedule === "hourly" && (!form.hourlyStart || !form.hourlyEnd)) {
       return "시간제 간병의 시작/종료 시간을 입력해주세요.";
     }
-    // Step 3 - 장소·일정
-    if (!form.locationType) return "간병 장소 유형을 선택해주세요.";
+    // Step 3 - 장소·일정 (locationType은 careType에서 파생)
     if (!form.locationName?.trim()) return "장소명을 입력해주세요.";
     if (!form.regions || form.regions.length === 0) return "지역을 한 곳 이상 선택해주세요.";
     if (!form.startDate) return "시작일을 선택해주세요.";
@@ -723,13 +744,15 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
           form.patientAge &&
           form.patientGender &&
           form.consciousness &&
-          form.mobility
+          form.mobility &&
+          form.hospitalizationReason &&
+          (form.hospitalizationReason !== 'ETC' || !!form.hospitalizationReasonEtc?.trim())
         );
       case 2:
-        return form.careType && form.careSchedule;
+        return form.careType && form.careSchedule
+          && (form.careSchedule !== "hourly" || (!!form.hourlyStart && !!form.hourlyEnd));
       case 3:
         return (
-          form.locationType &&
           form.locationName &&
           form.regions.length > 0 &&
           form.startDate &&
@@ -1016,6 +1039,22 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               </div>
             )}
 
+            {/* 기타(직접입력) 선택 시 추가 입력란 */}
+            {form.diagnosis.includes("기타(직접입력)") && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  기타 진단명 직접 입력
+                </label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="예: 파킨슨 합병증, 다발성 외상 등"
+                  value={form.diagnosisEtc}
+                  onChange={(e) => update("diagnosisEtc", e.target.value)}
+                />
+              </div>
+            )}
+
             {/* Category grid */}
             <div className="border border-gray-200 rounded-xl max-h-72 overflow-y-auto">
               {DIAGNOSIS_CATEGORIES.map((cat) => {
@@ -1179,7 +1218,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             <YesNoToggle label="장루 관리 필요" value={form.hasStoma} onChange={(v) => update('hasStoma', v)} />
 
             {/* 입원 사유 */}
-            <RadioWithEtc label="입원 사유" options={PATIENT_STATE_OPTIONS.HOSP_REASON} value={form.hospitalizationReason} etcValue={form.hospitalizationReasonEtc} onChange={(v) => update('hospitalizationReason', v)} onEtcChange={(v) => update('hospitalizationReasonEtc', v)} />
+            <RadioWithEtc required label="입원 사유" options={PATIENT_STATE_OPTIONS.HOSP_REASON} value={form.hospitalizationReason} etcValue={form.hospitalizationReasonEtc} onChange={(v) => update('hospitalizationReason', v)} onEtcChange={(v) => update('hospitalizationReasonEtc', v)} />
 
             {/* 코로나 / 백신 */}
             <RadioRow label="코로나 검사 여부" options={PATIENT_STATE_OPTIONS.COVID} value={form.covidTestRequirement} onChange={(v) => update('covidTestRequirement', v)} />
@@ -1339,50 +1378,6 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
           <h3 className="text-xl font-bold text-gray-900">위치 및 일정</h3>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              간병 장소 <span className="text-red-500">*</span>
-            </label>
-            <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              <label
-                className={`flex flex-col items-center p-4 sm:p-5 rounded-2xl border-2 cursor-pointer transition-all ${
-                  form.locationType === "hospital"
-                    ? "border-primary-500 bg-primary-50 shadow-md shadow-primary-500/10"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="locationType"
-                  value="hospital"
-                  checked={form.locationType === "hospital"}
-                  onChange={(e) => update("locationType", e.target.value)}
-                  className="sr-only"
-                />
-                <span className="text-3xl mb-2">&#127973;</span>
-                <span className="font-semibold text-gray-900">병원</span>
-              </label>
-              <label
-                className={`flex flex-col items-center p-4 sm:p-5 rounded-2xl border-2 cursor-pointer transition-all ${
-                  form.locationType === "home"
-                    ? "border-primary-500 bg-primary-50 shadow-md shadow-primary-500/10"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="locationType"
-                  value="home"
-                  checked={form.locationType === "home"}
-                  onChange={(e) => update("locationType", e.target.value)}
-                  className="sr-only"
-                />
-                <span className="text-3xl mb-2">&#127968;</span>
-                <span className="font-semibold text-gray-900">자택</span>
-              </label>
-            </div>
-          </div>
-
-          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               {form.locationType === "hospital" ? "병원명" : "주소"}{" "}
               <span className="text-red-500">*</span>
@@ -1426,7 +1421,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             <input
               type="text"
               className="input-field"
-              placeholder="병동, 호실 등 상세 주소 입력"
+              placeholder={form.locationType === "home" ? "동, 호수 상세주소 입력" : "병동, 호실 등 상세 주소 입력"}
               value={form.locationAddress}
               onChange={(e) => update("locationAddress", e.target.value)}
             />

@@ -123,22 +123,24 @@ export const registerPatient = async (req: AuthRequest, res: Response, next: Nex
       });
     }
 
-    const patient = await prisma.patient.create({
-      data: {
-        guardianId: guardian.id,
-        name,
-        birthDate: new Date(birthDate),
-        gender: resolvedGender,
-        consciousness: consciousness || null,
-        mobilityStatus: resolvedMobility as any,
-        hasDementia: hasDementia ?? false,
-        dementiaLevel: hasDementia ? (dementiaLevel || null) : null,
-        hasInfection: hasInfection ?? false,
-        infectionDetail: hasInfection ? (infectionDetail || null) : null,
-        medicalNotes: medicalNotes || null,
-        weight: weight ? parseFloat(weight) : null,
-        height: height ? parseFloat(height) : null,
-        diagnosis: diagnosis || null,
+    let patient;
+    try {
+      patient = await prisma.patient.create({
+        data: {
+          guardianId: guardian.id,
+          name,
+          birthDate: new Date(birthDate),
+          gender: resolvedGender,
+          consciousness: consciousness || null,
+          mobilityStatus: resolvedMobility as any,
+          hasDementia: hasDementia ?? false,
+          dementiaLevel: hasDementia ? (dementiaLevel || null) : null,
+          hasInfection: hasInfection ?? false,
+          infectionDetail: hasInfection ? (infectionDetail || null) : null,
+          medicalNotes: medicalNotes || null,
+          weight: weight ? parseFloat(weight) : null,
+          height: height ? parseFloat(height) : null,
+          diagnosis: diagnosis || null,
         // ── 신규 필드 (전부 nullable / 기본 빈배열)
         diagnoses: Array.isArray(diagnoses) ? diagnoses : [],
         infections: Array.isArray(infections) ? infections : [],
@@ -165,8 +167,21 @@ export const registerPatient = async (req: AuthRequest, res: Response, next: Nex
         hospitalizationReasonEtc: hospitalizationReasonEtc || null,
         covidTestRequirement: covidTestRequirement || null,
         vaccineCheckRequirement: vaccineCheckRequirement || null,
-      },
-    });
+        },
+      });
+    } catch (e: any) {
+      // 동시 등록 race — 부분 유니크 위반 시 기존 환자 반환
+      if (e?.code === 'P2002') {
+        const existing = await prisma.patient.findFirst({
+          where: { guardianId: guardian.id, name, birthDate: new Date(birthDate) },
+        });
+        if (existing) {
+          return res.status(200).json({ success: true, data: existing, duplicate: true });
+        }
+        throw new AppError('환자 등록 중 충돌이 발생했습니다. 다시 시도해주세요.', 409);
+      }
+      throw e;
+    }
 
     res.status(201).json({
       success: true,

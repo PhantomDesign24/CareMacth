@@ -72,16 +72,10 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
 
     const taxRate = platformConfig?.taxRate ?? 3.3;
 
-    // 금액 계산
-    const dailyRate = careRequest.dailyRate || 150000;
+    // 기간 계산 (금액은 트랜잭션 안에서 application.proposedRate 반영하여 결정)
     const startDate = careRequest.startDate;
     const endDate = careRequest.endDate || new Date(startDate.getTime() + (careRequest.durationDays || 7) * 86400000);
     const durationDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000));
-    const totalAmount = dailyRate * durationDays;
-
-    if (totalAmount <= 0) {
-      throw new AppError('계약 금액은 0보다 커야 합니다.', 400);
-    }
 
     // 트랜잭션으로 계약 생성 + 상태 업데이트 (race condition 방지)
     const contract = await prisma.$transaction(async (tx) => {
@@ -108,12 +102,29 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
       }
 
       // ── 선택된 간병인이 실제로 PENDING 지원 상태인지 검증 (지원도 안 한 간병인 차단)
+      // 역제안(proposedRate) 반영을 위해 row 를 먼저 읽고 atomic claim
+      const application = await tx.careApplication.findUnique({
+        where: { careRequestId_caregiverId: { careRequestId, caregiverId } },
+        select: { id: true, status: true, proposedRate: true, isAccepted: true },
+      });
+      if (!application || application.status !== 'PENDING') {
+        throw new AppError('선택한 간병인의 지원 정보를 찾을 수 없습니다.', 400);
+      }
       const acceptResult = await tx.careApplication.updateMany({
-        where: { careRequestId, caregiverId, status: 'PENDING' },
+        where: { id: application.id, status: 'PENDING' },
         data: { status: 'ACCEPTED' },
       });
       if (acceptResult.count !== 1) {
         throw new AppError('선택한 간병인의 지원 정보를 찾을 수 없습니다.', 400);
+      }
+
+      // 계약 일당: 간병인이 역제안(proposedRate) 했고 그대로 수락이 아닌 경우 그 값을, 아니면 보호자 제시 일당
+      const dailyRate = (!application.isAccepted && application.proposedRate && application.proposedRate > 0)
+        ? application.proposedRate
+        : (careRequest.dailyRate || 150000);
+      const totalAmount = dailyRate * durationDays;
+      if (totalAmount <= 0) {
+        throw new AppError('계약 금액은 0보다 커야 합니다.', 400);
       }
 
       // 실제 진행 중 계약 확인 (workStatus 캐시 의존하지 않음)

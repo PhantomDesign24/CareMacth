@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { applicantAPI, careRequestAPI } from "@/lib/api";
 import { showToast } from "@/components/Toast";
+import { KOREA_REGIONS, dominantSido } from "@/lib/koreaRegions";
 import {
   formatDate,
   formatMoney,
@@ -120,6 +121,7 @@ export default function ApplicantsPage() {
   const [newDailyRate, setNewDailyRate] = useState("");
   const [showExpandRegionModal, setShowExpandRegionModal] = useState(false);
   const [expandRegions, setExpandRegions] = useState<string[]>([]);
+  const [expandSido, setExpandSido] = useState<string>("");
   const [expandingRegion, setExpandingRegion] = useState(false);
   const [raisingRate, setRaisingRate] = useState(false);
 
@@ -226,11 +228,11 @@ export default function ApplicantsPage() {
       setShowRaiseModal(false);
       setNewDailyRate("");
       await fetchData();
-    } catch (err: unknown) {
+    } catch (err: any) {
       const message =
-        err instanceof Error
-          ? err.message
-          : "금액 인상 중 오류가 발생했습니다.";
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        (err instanceof Error ? err.message : "금액 인상 중 오류가 발생했습니다.");
       alert(message);
     } finally {
       setRaisingRate(false);
@@ -476,7 +478,12 @@ export default function ApplicantsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowExpandRegionModal(true)}
+                  onClick={() => {
+                    const sido = dominantSido(careRequest?.regions || []) || "서울";
+                    setExpandSido(sido);
+                    setExpandRegions([]);
+                    setShowExpandRegionModal(true);
+                  }}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors"
                 >
                   🌏 지역 확대
@@ -845,28 +852,44 @@ export default function ApplicantsPage() {
           </div>
         )}
 
-        {/* 금액 인상 모달 */}
-        {/* 지역 확대 모달 */}
+        {/* 지역 확대 모달 — 시·군·구 단위 */}
         {showExpandRegionModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-2">지역 확대 재검색</h3>
-              <p className="text-sm text-gray-500 mb-4">
-                현재 지역 외에 추가로 알림을 받을 지역을 선택하세요. 해당 지역 간병인에게 공고가 재발송됩니다.
+              <p className="text-sm text-gray-500 mb-3">
+                현재 지역과 같은 시·도 내에서 추가로 알림을 보낼 시·군·구를 선택하세요. 해당 지역 간병인에게 공고가 재발송됩니다.
               </p>
-              <p className="text-xs text-gray-400 mb-2">파란색은 현재 지역(고정), 추가할 지역을 선택하세요.</p>
-              <div className="flex flex-wrap gap-2 mb-5 max-h-48 overflow-y-auto py-2 px-1">
-                {["서울","경기","인천","부산","대구","광주","대전","울산","세종","강원","충북","충남","전북","전남","경북","경남","제주"].map((region) => {
-                  const already = (careRequest?.regions || []).includes(region);
-                  const picked = expandRegions.includes(region);
+
+              {/* 시·도 셀렉터 */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-600 mb-1">시·도</label>
+                <select
+                  value={expandSido}
+                  onChange={(e) => { setExpandSido(e.target.value); setExpandRegions([]); }}
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2"
+                >
+                  {Object.keys(KOREA_REGIONS).map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              <p className="text-xs text-gray-400 mb-2">✓ 표시는 이미 추가된 지역(고정), 다른 지역을 선택해 추가하세요.</p>
+              <div className="flex flex-wrap gap-2 mb-5 max-h-56 overflow-y-auto py-2 px-1">
+                {(KOREA_REGIONS[expandSido] || []).map((sigungu) => {
+                  const full = `${expandSido} ${sigungu}`;
+                  const already = (careRequest?.regions || []).includes(full)
+                    || (careRequest?.regions || []).includes(expandSido); // 시·도만 등록된 경우도 포함으로 간주
+                  const picked = expandRegions.includes(full);
                   return (
                     <button
-                      key={region}
+                      key={sigungu}
                       type="button"
                       disabled={already}
                       onClick={() => {
                         setExpandRegions((prev) =>
-                          prev.includes(region) ? prev.filter((r) => r !== region) : [...prev, region]
+                          prev.includes(full) ? prev.filter((r) => r !== full) : [...prev, full]
                         );
                       }}
                       className={`px-3 py-1.5 rounded-full text-sm ${
@@ -877,7 +900,7 @@ export default function ApplicantsPage() {
                           : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                       }`}
                     >
-                      {already ? `✓ ${region}` : region}
+                      {already ? `✓ ${sigungu}` : sigungu}
                     </button>
                   );
                 })}
@@ -897,8 +920,8 @@ export default function ApplicantsPage() {
                   onClick={async () => {
                     setExpandingRegion(true);
                     try {
-                      const merged = [...(careRequest?.regions || []), ...expandRegions];
-                      await careRequestAPI.expandRegions(careRequestId, merged);
+                      // 추가할 신규 지역만 전송 — 백엔드에서 트랜잭션으로 atomic 병합
+                      await careRequestAPI.expandRegions(careRequestId, expandRegions);
                       showToast("지역이 확대되었습니다. 해당 지역 간병인에게 알림이 발송됩니다.", "success");
                       setShowExpandRegionModal(false);
                       setExpandRegions([]);

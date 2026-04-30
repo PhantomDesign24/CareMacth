@@ -82,8 +82,23 @@ export default function CareRequestPage() {
         dementiaLevel: data.hasDementia ? (data.dementiaLevel || undefined) : undefined,
         hasInfection: data.hasInfection || false,
         infectionDetail: data.infectionDetails || undefined,
-        diagnosis: Array.isArray(data.diagnosis) ? data.diagnosis.join(', ') : data.diagnosis || undefined,
-        diagnoses: Array.isArray(data.diagnosis) ? data.diagnosis : undefined,
+        diagnosis: (() => {
+          const list = Array.isArray(data.diagnosis) ? [...data.diagnosis] : [];
+          // "기타(직접입력)" 선택 + 기타 입력값 있으면 치환
+          if (list.includes("기타(직접입력)") && data.diagnosisEtc?.trim()) {
+            const idx = list.indexOf("기타(직접입력)");
+            list[idx] = `기타: ${data.diagnosisEtc.trim()}`;
+          }
+          return list.length ? list.join(', ') : undefined;
+        })(),
+        diagnoses: (() => {
+          const list = Array.isArray(data.diagnosis) ? [...data.diagnosis] : [];
+          if (list.includes("기타(직접입력)") && data.diagnosisEtc?.trim()) {
+            const idx = list.indexOf("기타(직접입력)");
+            list[idx] = `기타: ${data.diagnosisEtc.trim()}`;
+          }
+          return list.length ? list : undefined;
+        })(),
         medicalNotes: data.specialNotes || undefined,
         // ── 신규 환자 상태
         infections: Array.isArray(data.infections) ? data.infections : undefined,
@@ -151,11 +166,9 @@ export default function CareRequestPage() {
         dailyRate: data.dailyRate ? parseInt(data.dailyRate) : undefined,
         preferredGender: data.preferredGender ? (preferredGenderMap[data.preferredGender.toLowerCase()] || undefined) : undefined,
         specialRequirements: data.specialNotes || undefined,
-        // ── 신규: 신청인-환자 관계 / 희망 서비스 / 희망 급여
+        // ── 신규: 신청인-환자 관계 / 희망 서비스
         relationToPatient: data.relationToPatient || undefined,
         preferredServices: Array.isArray(data.preferredServices) ? data.preferredServices : undefined,
-        preferredWageType: data.preferredWageType || undefined,
-        preferredWageAmount: data.preferredWageAmount ? parseInt(data.preferredWageAmount) : undefined,
       };
 
       await careRequestAPI.create(requestPayload);

@@ -72,12 +72,13 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
       throw new AppError('필수 항목을 입력해주세요.', 400);
     }
 
-    // 중복 방지: 같은 환자로 OPEN 상태인 간병 요청이 이미 있으면 차단
+    // 중복 방지: 같은 환자로 활성 상태인 간병 요청이 이미 있으면 차단
+    // (OPEN/MATCHING/MATCHED — DB 부분 유니크 인덱스와 동일 집합)
     const existingOpenRequest = await prisma.careRequest.findFirst({
       where: {
         guardianId: guardian.id,
         patientId,
-        status: { in: ['OPEN', 'MATCHED'] },
+        status: { in: ['OPEN', 'MATCHING', 'MATCHED'] },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -204,7 +205,7 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
       if (e?.code === 'P2002') {
         // DB 부분 유니크 인덱스 위반 — 동시 요청 중 패자. 기존 활성 요청 재조회 후 10초 이내면 duplicate, 아니면 409.
         const existing = await prisma.careRequest.findFirst({
-          where: { guardianId: guardian.id, patientId, status: { in: ['OPEN', 'MATCHED'] } },
+          where: { guardianId: guardian.id, patientId, status: { in: ['OPEN', 'MATCHING', 'MATCHED'] } },
           orderBy: { createdAt: 'desc' },
         });
         if (existing) {
@@ -433,8 +434,13 @@ export const getCareRequestById = async (req: AuthRequest, res: Response, next: 
       throw new AppError('간병 요청을 찾을 수 없습니다.', 404);
     }
 
-    // 보호자인 경우 본인 요청인지 확인
-    if (req.user!.role === 'GUARDIAN') {
+    // 역할별 접근 제어 — GUARDIAN/CAREGIVER/ADMIN 외에는 차단
+    // (HOSPITAL 도 guardian 레코드를 함께 갖고 있으므로 GUARDIAN 분기로 통합)
+    const role = req.user!.role;
+    if (role !== 'GUARDIAN' && role !== 'CAREGIVER' && role !== 'ADMIN' && role !== 'HOSPITAL') {
+      throw new AppError('접근 권한이 없습니다.', 403);
+    }
+    if (role === 'GUARDIAN' || role === 'HOSPITAL') {
       const guardian = await prisma.guardian.findUnique({
         where: { userId: req.user!.id },
       });
@@ -646,6 +652,10 @@ export const updateCareRequest = async (req: AuthRequest, res: Response, next: N
       specialRequirements,
       dailyRate,
       hourlyRate,
+      relationToPatient,
+      preferredServices,
+      preferredWageType,
+      preferredWageAmount,
     } = req.body;
 
     // 날짜 검증
@@ -707,6 +717,17 @@ export const updateCareRequest = async (req: AuthRequest, res: Response, next: N
         ...(specialRequirements !== undefined && { specialRequirements }),
         ...(dailyRate !== undefined && { dailyRate: parseInt(dailyRate) }),
         ...(hourlyRate !== undefined && { hourlyRate: parseInt(hourlyRate) }),
+        ...(relationToPatient !== undefined && { relationToPatient: relationToPatient || null }),
+        ...(preferredServices !== undefined && {
+          preferredServices: Array.isArray(preferredServices) ? preferredServices : [],
+        }),
+        ...(preferredWageType !== undefined && { preferredWageType: preferredWageType || null }),
+        ...(preferredWageAmount !== undefined && {
+          preferredWageAmount: preferredWageAmount === null || preferredWageAmount === ''
+            ? null
+            : parseInt(String(preferredWageAmount)),
+        }),
+        ...(Array.isArray(req.body.regions) && { regions: req.body.regions }),
       },
       include: {
         patient: true,
@@ -941,11 +962,14 @@ export const raiseRate = async (req: AuthRequest, res: Response, next: NextFunct
       throw new AppError(`새 일당은 현재 일당(${currentRate.toLocaleString()}원)보다 높아야 합니다.`, 400);
     }
 
-    // 금액 인상
-    await prisma.careRequest.update({
-      where: { id },
+    // 금액 인상 — CAS 패턴: 같은 currentRate 일 때만 update 적용 (동시 인상 race 방지)
+    const cas = await prisma.careRequest.updateMany({
+      where: { id, dailyRate: currentRate },
       data: { dailyRate: newDailyRate },
     });
+    if (cas.count !== 1) {
+      throw new AppError('금액이 이미 다른 요청으로 변경되었습니다. 새로고침 후 다시 시도해주세요.', 409);
+    }
 
     // 매칭 점수가 있는 간병인들에게 푸시+알림 발송 (템플릿 기반)
     const matchedCaregiverIds = careRequest.matchScores.map((ms) => ms.caregiverId);
@@ -1004,30 +1028,44 @@ export const expandRegions = async (req: AuthRequest, res: Response, next: NextF
     });
     if (!guardian) throw new AppError('보호자 정보를 찾을 수 없습니다.', 404);
 
-    const careRequest = await prisma.careRequest.findFirst({
-      where: { id, guardianId: guardian.id },
+    // 트랜잭션 안에서 SELECT FOR UPDATE → 병합 → UPDATE 로 동시 확장 race 차단
+    const result = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string; status: string; regions: string[] }>>`
+        SELECT id, status, regions FROM "CareRequest" WHERE id = ${id} AND "guardianId" = ${guardian.id} FOR UPDATE
+      `;
+      if (locked.length === 0) throw new AppError('간병 요청을 찾을 수 없습니다.', 404);
+      const cur = locked[0];
+      if (!['OPEN', 'MATCHING'].includes(cur.status)) {
+        throw new AppError('현재 상태에서는 지역을 확장할 수 없습니다.', 400);
+      }
+      const existingRegions = Array.isArray(cur.regions) ? cur.regions : [];
+      const merged = Array.from(new Set([...existingRegions, ...regions]));
+      const updated = await tx.careRequest.update({
+        where: { id },
+        data: { regions: merged },
+      });
+      return { updated, existingRegions };
     });
-    if (!careRequest) throw new AppError('간병 요청을 찾을 수 없습니다.', 404);
-
-    if (!['OPEN', 'MATCHING'].includes(careRequest.status)) {
-      throw new AppError('현재 상태에서는 지역을 확장할 수 없습니다.', 400);
-    }
-
-    // 기존 regions + 새 regions 병합 (중복 제거)
-    const merged = Array.from(new Set([...(careRequest.regions || []), ...regions]));
-
-    const updated = await prisma.careRequest.update({
-      where: { id },
-      data: { regions: merged },
-    });
+    const careRequest = { regions: result.existingRegions };
+    const updated = result.updated;
 
     // 추가된 지역의 간병인에게 알림
+    // — caregiver의 preferredRegions가 "서울"(시·도)만 등록됐어도, 새 지역이 "서울 강남구"면 매칭되도록
+    //   시·도 prefix까지 확장한 매칭 키 집합을 사용
     const addedRegions = regions.filter((r: string) => !(careRequest.regions || []).includes(r));
     if (addedRegions.length > 0) {
+      const matchKeys = new Set<string>();
+      for (const r of addedRegions) {
+        const trimmed = String(r).trim();
+        if (!trimmed) continue;
+        matchKeys.add(trimmed);
+        const sido = trimmed.split(/\s+/)[0];
+        if (sido && sido !== trimmed) matchKeys.add(sido);
+      }
       const caregivers = await prisma.caregiver.findMany({
         where: {
           status: 'APPROVED',
-          preferredRegions: { hasSome: addedRegions },
+          preferredRegions: { hasSome: Array.from(matchKeys) },
         },
         select: { userId: true },
       });
@@ -1047,7 +1085,7 @@ export const expandRegions = async (req: AuthRequest, res: Response, next: NextF
     res.json({
       success: true,
       data: updated,
-      message: `지역이 확장되었습니다 (${merged.join(', ')})`,
+      message: `지역이 확장되었습니다 (${((updated as any).regions || []).join(', ')})`,
       addedRegions,
     });
   } catch (error) {
