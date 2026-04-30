@@ -662,6 +662,7 @@ export interface DashboardData {
   monthlyRevenueDelta?: number;
   todayGuardianSignups?: number;
   todayCaregiverSignups?: number;
+  todayHospitalSignups?: number;
   pendingCaregivers?: Caregiver[];
   recentDisputes?: Dispute[];
   [key: string]: unknown;

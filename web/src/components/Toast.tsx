@@ -10,6 +10,7 @@ interface ToastItem {
 
 let toastId = 0;
 let addToastFn: ((msg: string, type: "success" | "error" | "info") => void) | null = null;
+const toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
 // 어디서든 호출 가능한 글로벌 함수
 export function showToast(message: string, type: "success" | "error" | "info" = "info") {
@@ -21,17 +22,27 @@ export default function ToastContainer() {
 
   const addToast = useCallback((message: string, type: "success" | "error" | "info") => {
     setToasts((prev) => {
-      // 1) 같은 메시지가 이미 떠있으면 중복 추가 안 함 (dedup)
+      // 같은 메시지+type 이 이미 있으면 → 기존 타이머만 리셋해서 4초 더 노출
       const existing = prev.find((t) => t.message === message && t.type === type);
-      if (existing) return prev;
-      // 2) 화면에 5개 초과 누적 방지 — 가장 오래된 것 제거
+      if (existing) {
+        const oldTimer = toastTimers.get(existing.id);
+        if (oldTimer) clearTimeout(oldTimer);
+        const newTimer = setTimeout(() => {
+          setToasts((cur) => cur.filter((t) => t.id !== existing.id));
+          toastTimers.delete(existing.id);
+        }, 4000);
+        toastTimers.set(existing.id, newTimer);
+        return prev;
+      }
+      // 화면에 5개 초과 누적 방지 — 가장 오래된 것 제거
       const id = ++toastId;
       const next = [...prev, { id, message, type }];
       const trimmed = next.length > 5 ? next.slice(next.length - 5) : next;
-      // auto-dismiss
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setToasts((cur) => cur.filter((t) => t.id !== id));
+        toastTimers.delete(id);
       }, 4000);
+      toastTimers.set(id, timer);
       return trimmed;
     });
   }, []);

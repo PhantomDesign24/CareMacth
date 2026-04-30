@@ -6,6 +6,7 @@ import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { logAdminAction } from '../services/auditLog';
 import { sendFromTemplate, renderTemplate } from '../services/notificationService';
+import { calculateEarning } from '../utils/earning';
 
 // GET /dashboard - 대시보드 통계
 export const getDashboard = async (_req: AuthRequest, res: Response, next: NextFunction) => {
@@ -44,7 +45,7 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
         where: { paidAt: { gte: monthStart }, status: { in: ['ESCROW', 'COMPLETED'] } },
         _sum: { totalAmount: true },
       }),
-      // 오늘 가입한 보호자 수 (병원 역할은 별도)
+      // 오늘 가입자 — 역할별 (HOSPITAL 은 GUARDIAN 과 별개로 카운트)
       prisma.user.count({
         where: { createdAt: { gte: today, lt: tomorrow }, role: 'GUARDIAN' },
       }),
@@ -52,6 +53,9 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
         where: { createdAt: { gte: today, lt: tomorrow }, role: 'CAREGIVER' },
       }),
     ]);
+    const todayHospitalSignups = await prisma.user.count({
+      where: { createdAt: { gte: today, lt: tomorrow }, role: 'HOSPITAL' },
+    });
 
     // 승인 대기 간병인 목록
     const pendingList = await prisma.caregiver.findMany({
@@ -100,6 +104,7 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
         monthlyRevenue: monthlyPayments._sum.totalAmount || 0,
         todayGuardianSignups,
         todayCaregiverSignups,
+        todayHospitalSignups,
         pendingList: pendingList.map(cg => ({
           id: cg.id,
           name: cg.user.name,
@@ -1301,10 +1306,12 @@ export const getPatients = async (req: AuthRequest, res: Response, next: NextFun
           },
         },
         select: {
-          careRequest: { select: { patientId: true } },
+          careRequest: { select: { patientId: true, durationDays: true } },
           platformFee: true,
           platformFeeFixed: true,
           totalAmount: true,
+          startDate: true,
+          endDate: true,
           payments: {
             where: { status: { in: ['ESCROW', 'COMPLETED'] } },
             select: { totalAmount: true },
@@ -1320,8 +1327,10 @@ export const getPatients = async (req: AuthRequest, res: Response, next: NextFun
         const paymentSum = contract.payments.reduce((s: number, p: any) => s + p.totalAmount, 0);
         patientPaymentData[pid].totalSpent += paymentSum;
         // fee = % * amount + (fixed × durationDays)
-        const days = (contract as any).durationDays
-          || Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000));
+        const days = contract.careRequest?.durationDays
+          || (contract.endDate && contract.startDate
+            ? Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000))
+            : 1);
         patientPaymentData[pid].totalFees += Math.round(paymentSum * (contract.platformFee / 100)) + (contract.platformFeeFixed || 0) * days;
       }
     }
@@ -1845,10 +1854,15 @@ export const getPayments = async (req: AuthRequest, res: Response, next: NextFun
             select: {
               id: true,
               platformFee: true,
+              platformFeeFixed: true,
+              taxRate: true,
+              startDate: true,
+              endDate: true,
               status: true,
               cancelledAt: true,
               careRequest: {
                 select: {
+                  durationDays: true,
                   patient: {
                     select: { name: true },
                   },
@@ -1961,12 +1975,27 @@ export const getPayments = async (req: AuthRequest, res: Response, next: NextFun
       const additionalFeesTotal = (p.contract?.additionalFees || [])
         .filter((f: any) => !f.rejected)
         .reduce((s: number, f: any) => s + (f.approvedByGuardian ? f.amount : 0), 0);
-      // 간병인 실수령 계산 (Payment 결제 금액 기준, 계약 수수료·세율 반영)
+      // 간병인 실수령 계산 (calculateEarning 으로 통일 — 정액 수수료 × 일수, 세금은 수수료 차감 후 잔액 기준)
       const platformFeePercent = p.contract?.platformFee ?? 10;
       const platformFeeFixed = (p.contract as any)?.platformFeeFixed ?? 0;
       const taxRate = p.contract?.taxRate ?? 3.3;
-      const platformFeeAmt = p.contract ? Math.round(p.totalAmount * (platformFeePercent / 100)) + platformFeeFixed : 0;
-      const taxAmt = p.contract ? Math.round((p.totalAmount - platformFeeAmt) * (taxRate / 100)) : 0;
+      const cStart = p.contract?.startDate;
+      const cEnd = p.contract?.endDate;
+      const cDurationDays = (p.contract?.careRequest as any)?.durationDays
+        ?? (cStart && cEnd
+          ? Math.max(1, Math.ceil((new Date(cEnd).getTime() - new Date(cStart).getTime()) / 86400000))
+          : 1);
+      const calc = p.contract
+        ? calculateEarning({
+            amount: p.totalAmount,
+            platformFeePercent,
+            platformFeeFixed,
+            durationDays: cDurationDays,
+            taxRate,
+          })
+        : { platformFee: 0, taxAmount: 0, netAmount: 0 };
+      const platformFeeAmt = calc.platformFee;
+      const taxAmt = calc.taxAmount;
       return {
         id: p.id,
         contractId: p.contractId,
@@ -2131,9 +2160,17 @@ export const createMidSettlement = async (req: AuthRequest, res: Response, next:
     const billDays = days && days > 0 ? Math.min(days, availableDays) : availableDays;
 
     const amount = contract.dailyRate * billDays;
-    const platformFee = Math.round(amount * (contract.platformFee / 100)) + (contract.platformFeeFixed || 0);
-    const taxAmount = Math.round(amount * (contract.taxRate / 100));
-    const netAmount = amount - platformFee - taxAmount;
+    // calculateEarning 으로 통일 — 정액 수수료 × billDays, 세금은 수수료 차감 후 잔액 기준
+    const calc = calculateEarning({
+      amount,
+      platformFeePercent: contract.platformFee,
+      platformFeeFixed: (contract as any).platformFeeFixed || 0,
+      durationDays: billDays,
+      taxRate: contract.taxRate,
+    });
+    const platformFee = calc.platformFee;
+    const taxAmount = calc.taxAmount;
+    const netAmount = calc.netAmount;
 
     const earning = await prisma.earning.create({
       data: {
@@ -3239,7 +3276,15 @@ export const getAdminEducations = async (_req: AuthRequest, res: Response, next:
 export const getEducationRecords = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const status = (req.query.status as string) || 'all'; // all | completed | inProgress
+    const ALLOWED_STATUS = ['all', 'completed', 'inProgress'] as const;
+    const rawStatus = (req.query.status as string) || 'all';
+    if (!ALLOWED_STATUS.includes(rawStatus as any)) {
+      throw new AppError('status 값이 올바르지 않습니다. (all|completed|inProgress)', 400);
+    }
+    const status = rawStatus as 'all' | 'completed' | 'inProgress';
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+    const skip = (page - 1) * limit;
 
     const education = await prisma.education.findUnique({ where: { id } });
     if (!education) {
@@ -3250,19 +3295,26 @@ export const getEducationRecords = async (req: AuthRequest, res: Response, next:
     if (status === 'completed') where.completed = true;
     else if (status === 'inProgress') where.completed = false;
 
-    const records = await prisma.educationRecord.findMany({
-      where,
-      include: {
-        caregiver: {
-          select: {
-            id: true,
-            user: { select: { name: true, email: true, phone: true } },
-            status: true,
+    const [total, completedCount, inProgressCount, records] = await Promise.all([
+      prisma.educationRecord.count({ where: { educationId: id } }),
+      prisma.educationRecord.count({ where: { educationId: id, completed: true } }),
+      prisma.educationRecord.count({ where: { educationId: id, completed: false } }),
+      prisma.educationRecord.findMany({
+        where,
+        include: {
+          caregiver: {
+            select: {
+              id: true,
+              user: { select: { name: true, email: true, phone: true } },
+              status: true,
+            },
           },
         },
-      },
-      orderBy: [{ completed: 'desc' }, { completedAt: 'desc' }, { updatedAt: 'desc' }],
-    });
+        orderBy: [{ completed: 'desc' }, { completedAt: 'desc' }, { updatedAt: 'desc' }],
+        skip,
+        take: limit,
+      }),
+    ]);
 
     const items = records.map((r) => ({
       recordId: r.id,
@@ -3287,11 +3339,8 @@ export const getEducationRecords = async (req: AuthRequest, res: Response, next:
           duration: education.duration,
         },
         items,
-        summary: {
-          total: items.length,
-          completed: items.filter((i) => i.completed).length,
-          inProgress: items.filter((i) => !i.completed).length,
-        },
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+        summary: { total, completed: completedCount, inProgress: inProgressCount },
       },
     });
   } catch (error) {

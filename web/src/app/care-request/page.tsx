@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import CareRequestForm from "@/components/CareRequestForm";
 import { FiInfo, FiSearch } from "react-icons/fi";
@@ -15,6 +15,8 @@ export default function CareRequestPage() {
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [authorized, setAuthorized] = useState(false);
+  // 동일 프레임 더블 탭 차단용 즉시 락 (setSubmitting 비동기 갭 메움)
+  const submitInFlightRef = useRef(false);
 
   // 역할 가드: GUARDIAN / HOSPITAL / ADMIN 만 접근 가능
   useEffect(() => {
@@ -47,6 +49,9 @@ export default function CareRequestPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSubmit = async (data: any) => {
+    // 즉시 락: 두 번째 클릭은 ref 가 true 면 곧장 무시
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     setSubmitting(true);
     setSubmitError("");
     setSubmitSuccess(false);
@@ -190,7 +195,8 @@ export default function CareRequestPage() {
         setSubmitError(msg);
         showToast(msg, "error");
       }
-      // 실패 시에만 다시 입력 가능하게 풀어줌
+      // 실패 시에만 다시 입력 가능하게 풀어줌 (성공은 리다이렉트까지 락 유지)
+      submitInFlightRef.current = false;
       setSubmitting(false);
     }
   };

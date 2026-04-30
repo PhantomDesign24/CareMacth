@@ -31,8 +31,10 @@ export default function EducationScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await caregiverApi.getCourses();
-      const list = res?.data?.data?.educations || [];
+      // apiClient.get 은 Axios response 자체를 반환하므로 res.data 가 백엔드 응답 본문
+      const res: any = await caregiverApi.getCourses();
+      const body = res?.data ?? res; // axios 응답이든 바로 반환이든 모두 대응
+      const list = body?.data?.educations ?? body?.educations ?? [];
       const mapped: EducationItem[] = list.map((e: any) => ({
         id: e.id,
         title: e.title,
@@ -68,12 +70,12 @@ export default function EducationScreen() {
       Alert.alert('영상 없음', '영상 URL이 등록되지 않은 과정입니다.');
       return;
     }
+    // 보안: https/http 만 허용 (intent:, tel:, javascript: 등 차단)
+    if (!/^https?:\/\//i.test(course.videoUrl)) {
+      Alert.alert('지원하지 않는 링크', '영상 URL 형식이 올바르지 않습니다. 관리자에게 문의해주세요.');
+      return;
+    }
     try {
-      const ok = await Linking.canOpenURL(course.videoUrl);
-      if (!ok) {
-        Alert.alert('열기 실패', '영상을 열 수 없습니다.');
-        return;
-      }
       await Linking.openURL(course.videoUrl);
     } catch {
       Alert.alert('열기 실패', '영상을 여는 중 오류가 발생했습니다.');
@@ -105,8 +107,9 @@ export default function EducationScreen() {
     }
     try {
       const res: any = await caregiverApi.requestCertificate(courseId);
-      const certUrl = res?.data?.data?.certificateUrl || res?.data?.certificateUrl;
-      if (certUrl) {
+      const body = res?.data ?? res;
+      const certUrl = body?.data?.certificateUrl || body?.certificateUrl;
+      if (certUrl && /^https?:\/\//i.test(certUrl)) {
         await Linking.openURL(certUrl);
       } else {
         Alert.alert('수료증 발급', `"${course.title}" 수료증이 발급되었습니다. 마이페이지에서 확인해주세요.`);

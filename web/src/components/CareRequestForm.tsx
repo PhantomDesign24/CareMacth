@@ -681,14 +681,20 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
   };
 
   // 다중 선택 토글 (infections, treatments, preferredServices 등)
+  // — NONE(없음) 과 다른 옵션은 상호 배제: NONE 선택 시 다른 값 제거, 다른 값 선택 시 NONE 제거
   const toggleMulti = (field: keyof CareRequestFormData, value: string) => {
     setForm((prev) => {
       const current = prev[field] as string[];
       const has = current.includes(value);
-      return {
-        ...prev,
-        [field]: has ? current.filter((x) => x !== value) : [...current, value],
-      } as CareRequestFormData;
+      let nextArr: string[];
+      if (has) {
+        nextArr = current.filter((x) => x !== value);
+      } else if (value === 'NONE') {
+        nextArr = ['NONE'];
+      } else {
+        nextArr = [...current.filter((x) => x !== 'NONE'), value];
+      }
+      return { ...prev, [field]: nextArr } as CareRequestFormData;
     });
   };
 

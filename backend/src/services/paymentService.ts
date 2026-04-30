@@ -56,8 +56,9 @@ export async function settleEarning(contractId: string) {
     return null;
   }
 
-  // 정산 일수 — 계약 전체 기간 기준
-  const settleDays = (contract as any).durationDays
+  // 정산 일수 — careRequest.durationDays 우선, 없으면 계약 기간으로 산출
+  const crDurationDays = (contract.careRequest as any)?.durationDays;
+  const settleDays = crDurationDays
     ?? Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000));
   const calc = calculateEarning({
     amount: remainingAmount,

@@ -67,6 +67,7 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
         guardianId: guardian.id,
         status: { in: ['ACTIVE', 'EXTENDED'] },
       },
+      include: { careRequest: { select: { durationDays: true } } },
     });
 
     if (!contract) {
@@ -267,9 +268,9 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       if (isImmediateComplete) {
         // 정산 base = amount (포인트 차감 후 실제 결제 base). 0원이면 Earning 미생성.
         if (amount > 0) {
-          // 정액 수수료 곱할 일수 — 연장이면 additionalDays, 아니면 contract.durationDays 또는 전체 기간
+          // 정액 수수료 곱할 일수 — 연장이면 additionalDays, 아니면 careRequest.durationDays 또는 전체 기간
           const settleDays = extension?.additionalDays
-            ?? (contract as any).durationDays
+            ?? (contract.careRequest as any)?.durationDays
             ?? Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000));
           const calc = calculateEarning({
             amount,
@@ -917,8 +918,12 @@ async function executeRefund(
         where: { contractId: payment.contract.id, isPaid: false },
       });
       if (unpaidEarnings.length > 0) {
-        // 환불액 만큼 Earning에서 차감
-        let remaining = refundAmount;
+        // 환불액(VAT 포함 totalAmount 기준)을 간병인 정산 base(VAT 제외)로 환산하여 차감
+        // payment.amount = 공급가, payment.totalAmount = amount + vat, refundAmount 도 totalAmount 기준
+        const refundEarningBase = payment.totalAmount > 0
+          ? Math.round((refundAmount * payment.amount) / payment.totalAmount)
+          : refundAmount;
+        let remaining = refundEarningBase;
         for (const e of unpaidEarnings) {
           if (remaining <= 0) break;
           if (e.amount <= remaining) {
@@ -1274,13 +1279,16 @@ export const confirmOfflineRefund = async (req: AuthRequest, res: Response, next
         }
       }
 
-      // 미정산 Earning 차감
+      // 미정산 Earning 차감 — finalAmount 는 totalAmount(VAT 포함) 기준이므로 정산 base 로 환산
       if (payment.contract) {
         const unpaidEarnings = await tx.earning.findMany({
           where: { contractId: payment.contract.id, isPaid: false },
         });
         if (unpaidEarnings.length > 0) {
-          let remaining = finalAmount;
+          const refundEarningBase = payment.totalAmount > 0
+            ? Math.round((finalAmount * payment.amount) / payment.totalAmount)
+            : finalAmount;
+          let remaining = refundEarningBase;
           for (const e of unpaidEarnings) {
             if (remaining <= 0) break;
             if (e.amount <= remaining) {

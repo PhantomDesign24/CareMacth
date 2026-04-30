@@ -299,8 +299,8 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Today Signups Row — 오늘 가입자 (보호자/간병인) */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+      {/* Today Signups Row — 오늘 가입자 (보호자/간병인/병원) */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <StatsCard
           title="오늘 가입한 보호자"
           value={`${(data?.todayGuardianSignups ?? 0).toLocaleString()}명`}
@@ -312,6 +312,12 @@ export default function DashboardPage() {
           value={`${(data?.todayCaregiverSignups ?? 0).toLocaleString()}명`}
           subtitle="오늘 00:00 ~ 현재"
           color="purple"
+        />
+        <StatsCard
+          title="오늘 가입한 병원/기관"
+          value={`${(data?.todayHospitalSignups ?? 0).toLocaleString()}곳`}
+          subtitle="오늘 00:00 ~ 현재"
+          color="indigo"
         />
       </div>
 
