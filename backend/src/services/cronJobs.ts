@@ -99,12 +99,11 @@ export function setupCronJobs() {
       });
 
       for (const contract of completedContracts) {
-        const existingEarning = await prisma.earning.findFirst({
-          where: { contractId: contract.id },
+        // 중간정산이 있어도 잔여금이 남아있으면 settleEarning 호출 (settleEarning 내부에서 잔여금 계산하여 0이면 skip)
+        // — 기존 "Earning 1건이라도 있으면 skip" 로직은 중간정산 후 잔여 영구 미정산 버그
+        await settleEarning(contract.id).catch((e) => {
+          console.error(`[CRON] settleEarning 실패 (contract=${contract.id}):`, e?.message || e);
         });
-        if (!existingEarning) {
-          await settleEarning(contract.id);
-        }
       }
 
       console.log(`[CRON] 정산 처리: ${completedContracts.length}건`);
@@ -428,6 +427,7 @@ export function setupCronJobs() {
         where: {
           status: 'PENDING_PAYMENT',
           createdAt: { lt: cutoff },
+          paymentId: null,  // 결제 진행 중(paymentId 연결됨)인 건은 만료 대상 제외
         },
         include: {
           contract: {
@@ -443,10 +443,10 @@ export function setupCronJobs() {
 
       let expired = 0;
       for (const ext of stale) {
-        // 트랜지션 락: PENDING_PAYMENT 인 경우에만 1회 EXPIRED 로 전이.
-        // (보호자 confirm/reject 와 race 시 한쪽만 통과 — count===1 일 때만 알림)
+        // 트랜지션 락: PENDING_PAYMENT + paymentId 미연결 인 경우에만 1회 EXPIRED 로 전이.
+        // (보호자 confirm/reject 또는 결제 흐름과 race 시 한쪽만 통과)
         const lock = await prisma.contractExtension.updateMany({
-          where: { id: ext.id, status: 'PENDING_PAYMENT' },
+          where: { id: ext.id, status: 'PENDING_PAYMENT', paymentId: null },
           data: { status: 'EXPIRED', expiredAt: new Date() },
         });
         if (lock.count !== 1) continue;

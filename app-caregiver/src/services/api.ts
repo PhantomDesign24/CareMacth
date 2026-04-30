@@ -109,29 +109,31 @@ export const caregiverApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
-  // Jobs
+  // Jobs — 백엔드 /api/care-requests 라우트와 정합
   getMatchedJobs: () =>
-    apiClient.get('/caregiver/jobs/matched'),
+    apiClient.get('/care-requests'),
   getJobDetail: (jobId: string) =>
-    apiClient.get(`/caregiver/jobs/${jobId}`),
-  applyForJob: (jobId: string) =>
-    apiClient.post(`/caregiver/jobs/${jobId}/apply`),
+    apiClient.get(`/care-requests/${jobId}`),
+  applyForJob: (jobId: string, message?: string, proposedRate?: number) =>
+    apiClient.post(`/care-requests/${jobId}/apply`, { message, proposedRate }),
   acceptJob: (jobId: string) =>
-    apiClient.post(`/caregiver/jobs/${jobId}/accept`),
+    apiClient.post(`/care-requests/${jobId}/apply`, { isAccepted: true }),
   rejectJob: (jobId: string) =>
-    apiClient.post(`/caregiver/jobs/${jobId}/reject`),
+    apiClient.delete(`/care-requests/${jobId}/apply`),
 
-  // Work
-  checkIn: (careId: string, location?: { lat: number; lng: number }) =>
-    apiClient.post(`/care/${careId}/check-in`, { location }),
-  checkOut: (careId: string, location?: { lat: number; lng: number }) =>
-    apiClient.post(`/care/${careId}/check-out`, { location }),
-  submitCareLog: (careId: string, data: Record<string, unknown>) =>
-    apiClient.post(`/care/${careId}/logs`, data),
-  uploadPhoto: (careId: string, formData: FormData) =>
-    apiClient.post(`/care/${careId}/photos`, formData, {
+  // Work — 백엔드 라우트(/api/care-records/...) 와 정합
+  checkIn: (contractId: string, location?: { latitude: number; longitude: number }) =>
+    apiClient.post(`/care-records/check-in`, { contractId, ...(location || {}) }),
+  checkOut: (contractId: string) =>
+    apiClient.post(`/care-records/check-out`, { contractId }),
+  submitCareLog: (contractId: string, data: Record<string, unknown>) =>
+    apiClient.post(`/care-records/daily-log`, { contractId, ...data }),
+  uploadPhoto: (formData: FormData) =>
+    apiClient.post(`/care-records/photos`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  getCareRecords: (contractId: string) =>
+    apiClient.get(`/care-records/${contractId}`),
 
   // Earnings
   getEarnings: () =>

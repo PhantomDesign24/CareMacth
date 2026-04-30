@@ -120,17 +120,18 @@ export function emailExtensionReminder(patientName: string, daysLeft: number) {
   );
 }
 
-// 비밀번호 재설정 — 임시 비밀번호 안내
-export function emailPasswordReset(name: string, tempPassword: string) {
+// 비밀번호 재설정 — 일회성 재설정 링크 안내 (15분 만료)
+export function emailPasswordReset(name: string, resetUrl: string) {
   return baseTemplate(
-    '임시 비밀번호 발급 안내',
+    '비밀번호 재설정 링크 안내',
     `
-    <p><b>${escapeHtml(name)}</b>님, 임시 비밀번호가 발급되었습니다.</p>
-    <p style="font-size:18px;background:#F1F5F9;padding:12px 16px;border-radius:6px;letter-spacing:1px;font-family:monospace;text-align:center;">
-      <b>${escapeHtml(tempPassword)}</b>
+    <p><b>${escapeHtml(name)}</b>님, 비밀번호 재설정 요청을 확인했습니다.</p>
+    <p>아래 버튼을 눌러 새 비밀번호를 설정해주세요. <b>본 링크는 15분 후 만료됩니다.</b></p>
+    <p style="text-align:center;margin:24px 0;">
+      <a href="${escapeHtml(resetUrl)}" style="background:#0D9488;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;">비밀번호 재설정하기</a>
     </p>
-    <p>이 비밀번호로 로그인하신 뒤 <b>마이페이지 → 비밀번호 변경</b>에서 새로운 비밀번호로 즉시 변경해 주세요.</p>
-    <p style="color:#B91C1C;font-size:13px;">본인이 요청하지 않으셨다면 즉시 고객센터로 연락주시기 바랍니다.</p>
+    <p style="font-size:12px;color:#64748B;">버튼이 동작하지 않으면 다음 주소를 브라우저에 복사해 붙여넣으세요:<br/>${escapeHtml(resetUrl)}</p>
+    <p style="color:#B91C1C;font-size:13px;">본인이 요청하지 않으셨다면 무시하시면 되며, 비밀번호는 변경되지 않습니다.</p>
     `,
   );
 }

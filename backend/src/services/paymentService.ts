@@ -79,9 +79,11 @@ export async function settleEarning(contractId: string) {
     },
   });
 
-  // 에스크로 결제 완료 처리
+  // 에스크로 결제 완료 처리 — Toss release 성공 시에만 COMPLETED 로 전이.
+  // 실패 건은 ESCROW 상태 유지하여 관리자 reconcile/재시도 큐로 둠 (장부-실자금 불일치 방지).
   for (const payment of contract.payments) {
     if (payment.status === 'ESCROW' && payment.tossPaymentKey) {
+      let releaseOk = false;
       try {
         await axios.post(
           `${TOSS_API_URL}/payments/${payment.tossPaymentKey}/release`,
@@ -93,15 +95,27 @@ export async function settleEarning(contractId: string) {
             },
           },
         );
-      } catch (error) {
-        console.error('에스크로 해제 실패:', error);
+        releaseOk = true;
+      } catch (error: any) {
+        console.error(`[settleEarning] Toss release 실패 (payment=${payment.id}):`, error?.response?.data || error?.message);
       }
+      if (releaseOk) {
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: 'COMPLETED', paidAt: new Date() },
+        });
+      }
+      // releaseOk === false → ESCROW 유지, COMPLETED 전이 차단
+      continue;
     }
 
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: { status: 'COMPLETED' },
-    });
+    // ESCROW 가 아닌(이미 COMPLETED 또는 다른 상태) 결제는 그대로 둠 — 정산 base 만 새 Earning 으로 반영
+    if (payment.status !== 'COMPLETED') {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: 'COMPLETED' },
+      });
+    }
   }
 
   return earning;

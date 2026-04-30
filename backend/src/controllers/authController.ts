@@ -672,46 +672,83 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
       throw new AppError('소셜 로그인 계정은 비밀번호 재설정이 불가합니다. 소셜 로그인을 이용해주세요.', 400);
     }
 
-    // 8자리 임시 비밀번호 생성 (영문+숫자 조합)
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    let tempPassword = '';
-    for (let i = 0; i < 8; i++) {
-      tempPassword += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    // 일회성 재설정 토큰 발급 (15분 만료) — 임시 비밀번호로 강제 교체하던 DoS 패턴 폐기
+    // 토큰에 tokenVersion 을 포함해, 다른 곳에서 비밀번호 바뀌면 자동 무효화
+    const resetToken = jwt.sign(
+      { type: 'password_reset', userId: user.id, v: user.tokenVersion ?? 0 },
+      config.jwt.secret,
+      { expiresIn: '15m' },
+    );
 
-    const hashedPassword = await bcrypt.hash(tempPassword, 12);
+    const resetUrl = `${process.env.WEB_BASE_URL || 'https://cm.phantomdesign.kr'}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
 
-    // 이메일 발송을 먼저 시도 — 성공해야 비밀번호 변경 (실패 시 사용자 잠김 방지)
     let emailSent = false;
     try {
       emailSent = await sendEmail(
         user.email,
-        '[케어매치] 임시 비밀번호 안내',
-        emailPasswordReset(user.name, tempPassword),
+        '[케어매치] 비밀번호 재설정 링크',
+        emailPasswordReset(user.name, resetUrl),
       );
     } catch (emailErr: any) {
       console.error('[resetPassword] 이메일 발송 예외:', emailErr?.message || emailErr);
     }
     if (!emailSent) {
-      // SMTP 미설정 / 발송 실패 — 비밀번호 변경하지 않음 (사용자 잠김 방지)
       throw new AppError(
         '이메일 발송에 실패했습니다. 잠시 후 다시 시도하거나 고객센터로 문의해주세요.',
         503,
       );
     }
 
-    // 이메일 발송 성공 후에 비밀번호 변경 + 기존 토큰 무효화
+    res.json({
+      success: true,
+      message: '비밀번호 재설정 링크를 등록된 이메일로 발송했습니다. 메일함을 확인해주세요.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /reset-password/confirm - 일회성 토큰으로 새 비밀번호 설정
+export const confirmResetPassword = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      throw new AppError('토큰과 새 비밀번호를 모두 입력해주세요.', 400);
+    }
+
+    let payload: any;
+    try {
+      payload = jwt.verify(token, config.jwt.secret);
+    } catch {
+      throw new AppError('재설정 링크가 만료되었거나 유효하지 않습니다. 다시 신청해주세요.', 401);
+    }
+    if (payload?.type !== 'password_reset' || !payload.userId) {
+      throw new AppError('유효하지 않은 재설정 토큰입니다.', 400);
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+    if (!user) {
+      throw new AppError('사용자를 찾을 수 없습니다.', 404);
+    }
+    // 토큰 발급 이후 비밀번호가 바뀌었거나 다른 곳에서 로그아웃되었으면 token version 으로 무효화
+    if ((payload.v ?? 0) !== (user.tokenVersion ?? 0)) {
+      throw new AppError('재설정 링크가 만료되었습니다. 다시 신청해주세요.', 401);
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({
       where: { id: user.id },
-      data: {
-        password: hashedPassword,
-        tokenVersion: { increment: 1 },
-      },
+      data: { password: hashed, tokenVersion: { increment: 1 } },
     });
 
     res.json({
       success: true,
-      message: '임시 비밀번호를 등록된 이메일로 발송했습니다. 메일함을 확인해주세요.',
+      message: '비밀번호가 변경되었습니다. 새 비밀번호로 다시 로그인해주세요.',
     });
   } catch (error) {
     next(error);

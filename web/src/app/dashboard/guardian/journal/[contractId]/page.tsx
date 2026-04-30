@@ -58,8 +58,9 @@ function GuardianJournalPage() {
         contractAPI.get(contractId),
         careRecordAPI.list(contractId, { limit: 60 }),
       ]);
-      setContract(cRes.data?.data || cRes.data);
-      setRecords(rRes.data?.data?.records || rRes.data?.data || []);
+      // web axios interceptor 가 { success, data } 자동 언래핑 → res.data 가 곧 payload
+      setContract(cRes.data);
+      setRecords(rRes.data?.records || []);
     } catch (e) {
       console.error(e);
     } finally {

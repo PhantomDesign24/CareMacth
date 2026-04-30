@@ -353,9 +353,11 @@ export default function App() {
         if (PUSH_ENABLED) {
           try {
             const tokenData = await Notifications.getDevicePushTokenAsync();
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
             await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers,
               body: JSON.stringify({ token: tokenData.data, platform: Platform.OS, userId: data.userId }),
             });
             console.log('Push: 유저 FCM 토큰 연결 완료', data.userId);
@@ -369,9 +371,11 @@ export default function App() {
         if (PUSH_ENABLED) {
           try {
             const tokenData = await Notifications.getDevicePushTokenAsync();
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
             await fetch(`https://${DOMAIN}/api/notifications/device-token`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers,
               body: JSON.stringify({ token: tokenData.data, platform: Platform.OS, userId: null }),
             });
             console.log('Push: 유저 FCM 토큰 연결 해제 완료');

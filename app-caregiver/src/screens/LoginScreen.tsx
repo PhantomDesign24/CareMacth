@@ -39,8 +39,14 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     setIsLoading(true);
     try {
       const response: any = await caregiverApi.login(email, password);
-      await authService.setTokens(response.accessToken, response.refreshToken);
-      await authService.setUserData(response.user);
+      // axios 응답 본문은 response.data, 백엔드 래퍼는 { success, data: { user, access_token, refresh_token, token } }
+      const body = response?.data ?? response;
+      const payload = body?.data ?? body;
+      const access = payload.access_token || payload.accessToken || payload.token;
+      const refresh = payload.refresh_token || payload.refreshToken || '';
+      if (!access) throw new Error('로그인 응답에 토큰이 없습니다.');
+      await authService.setTokens(access, refresh);
+      await authService.setUserData(payload.user);
     } catch (error: any) {
       const message = error.response?.data?.message || '로그인에 실패했습니다. 다시 시도해주세요.';
       Alert.alert('로그인 실패', message);

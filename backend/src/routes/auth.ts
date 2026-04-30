@@ -75,10 +75,20 @@ router.delete('/me', authenticate, [
 // 토큰 갱신 (refresh_token body 필요, 액세스 토큰 만료 여부 무관)
 router.post('/refresh', authController.refreshToken);
 
-// 비밀번호 재설정 (임시 비밀번호 발급)
+// 비밀번호 재설정 — 1단계: 이메일로 일회성 재설정 링크 발송
 router.post('/reset-password', [
   authLimiter,
   body('email').isEmail().normalizeEmail().withMessage('유효한 이메일을 입력해주세요.'),
 ], authController.resetPassword);
+
+// 비밀번호 재설정 — 2단계: 토큰 + 새 비밀번호로 변경
+router.post('/reset-password/confirm', [
+  authLimiter,
+  body('token').notEmpty().withMessage('재설정 토큰이 필요합니다.'),
+  body('newPassword')
+    .isLength({ min: 8 }).withMessage('비밀번호는 8자 이상이어야 합니다.')
+    .matches(/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9])/)
+    .withMessage('비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.'),
+], authController.confirmResetPassword);
 
 export default router;

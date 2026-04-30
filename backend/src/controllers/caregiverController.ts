@@ -590,11 +590,11 @@ export const uploadCriminalCheck = async (req: AuthRequest, res: Response, next:
       throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
     }
     const url = `/uploads/${req.file.filename}`;
+    // 업로드만으로는 검증 완료가 아님 — criminalCheckDone 은 ADMIN 승인 시에만 true 로 전환
     const updated = await prisma.caregiver.update({
       where: { id: caregiver.id },
       data: {
         criminalCheckDoc: url,
-        criminalCheckDone: true,
         criminalCheckDate: new Date(),
       },
     });
@@ -624,11 +624,11 @@ export const uploadIdCard = async (req: AuthRequest, res: Response, next: NextFu
       throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
     }
     const url = `/uploads/${req.file.filename}`;
+    // 업로드만으로는 신원 검증 완료가 아님 — identityVerified 는 ADMIN 승인 시에만 true 로 전환
     const updated = await prisma.caregiver.update({
       where: { id: caregiver.id },
       data: {
         idCardImage: url,
-        identityVerified: true,
       },
     });
     // 관리자에게 본인 인증 알림

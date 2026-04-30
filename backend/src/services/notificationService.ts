@@ -372,6 +372,7 @@ export async function sendFromTemplate(params: {
   // 채널 라우팅 — template.channels 가 비어있거나 PUSH 포함 시 푸시 발송
   const channels: string[] = template?.channels || [];
   const useAlimtalk = channels.includes('ALIMTALK');
+  const useEmail = channels.includes('EMAIL');
   const usePush = channels.length === 0 || channels.includes('PUSH'); // 채널 미설정시 PUSH (기존 호환)
 
   // 알림톡 발송 (백그라운드)
@@ -379,10 +380,35 @@ export async function sendFromTemplate(params: {
     void sendAlimtalkForTemplate(userId, template, body, title).catch(() => {});
   }
 
+  // 이메일 발송 (백그라운드) — 사용자 이메일이 있으면 단순 텍스트 본문으로 발송
+  if (useEmail) {
+    void sendEmailForTemplate(userId, title, body).catch(() => {});
+  }
+
   if (!usePush) {
-    // 푸시 비활성: DB 알림 레코드 + FCM 발송 모두 skip. 알림톡만 보냄.
+    // 푸시 비활성: DB 알림 레코드 + FCM 발송 모두 skip. 알림톡/이메일만 보냄.
     return null;
   }
 
   return sendNotification({ userId, type, title, body, data });
+}
+
+// 이메일 헬퍼 — 알림 템플릿 본문을 사용자 이메일로 발송
+async function sendEmailForTemplate(userId: string, title: string, body: string) {
+  const { sendEmail } = await import('./emailService');
+  const user: any = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  }).catch(() => null);
+  if (!user?.email) return;
+  const escapedBody = body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>');
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:560px;margin:0 auto;padding:20px;">
+      <h2 style="color:#0F172A;margin:0 0 16px;">${title}</h2>
+      <p style="color:#334155;line-height:1.6;">${escapedBody}</p>
+      <hr style="margin:24px 0;border:0;border-top:1px solid #E2E8F0;"/>
+      <p style="color:#94A3B8;font-size:12px;">케어매치 알림 메일입니다.</p>
+    </div>
+  `;
+  await sendEmail(user.email, `[케어매치] ${title}`, html).catch(() => {});
 }
