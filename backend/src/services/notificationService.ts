@@ -2,6 +2,7 @@ import { NotificationType } from '@prisma/client';
 import { USER_PUBLIC_SELECT } from '../utils/userSelect';
 import admin from '../config/firebase';
 import { prisma } from '../app';
+import { sendAlimtalk, type AligoButton } from './aligoService';
 
 interface SendNotificationParams {
   userId: string;
@@ -308,6 +309,38 @@ export async function sendToAdmins(params: {
   );
 }
 
+// 알림톡 발송 헬퍼 — 템플릿의 alimtalkTemplateCode 기준으로 발송
+async function sendAlimtalkForTemplate(
+  userId: string,
+  template: { alimtalkTemplateCode: string | null; alimtalkButtonsJson: string | null },
+  message: string,
+  subject?: string,
+) {
+  if (!template.alimtalkTemplateCode) return;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { phone: true, pushEnabled: true, isActive: true },
+  });
+  if (!user || !user.isActive || user.pushEnabled === false) return;
+  if (!user.phone) return;
+
+  let buttons: AligoButton[] | undefined;
+  if (template.alimtalkButtonsJson) {
+    try {
+      const parsed = JSON.parse(template.alimtalkButtonsJson);
+      buttons = Array.isArray(parsed) ? parsed : parsed?.buttons;
+    } catch {}
+  }
+
+  await sendAlimtalk({
+    receiver: user.phone,
+    tplCode: template.alimtalkTemplateCode,
+    message,
+    subject,
+    buttons,
+  });
+}
+
 export async function sendFromTemplate(params: {
   userId: string;
   key: string;
@@ -335,6 +368,21 @@ export async function sendFromTemplate(params: {
   const title = template ? renderVars(template.title) : (fallbackTitle || key);
   const body = template ? renderVars(template.body) : (fallbackBody || '');
   const type = (template?.type as NotificationType) || fallbackType || 'SYSTEM';
+
+  // 채널 라우팅 — template.channels 가 비어있거나 PUSH 포함 시 푸시 발송
+  const channels: string[] = template?.channels || [];
+  const useAlimtalk = channels.includes('ALIMTALK');
+  const usePush = channels.length === 0 || channels.includes('PUSH'); // 채널 미설정시 PUSH (기존 호환)
+
+  // 알림톡 발송 (백그라운드)
+  if (useAlimtalk && template?.alimtalkTemplateCode) {
+    void sendAlimtalkForTemplate(userId, template, body, title).catch(() => {});
+  }
+
+  if (!usePush) {
+    // 푸시 비활성: DB 알림 레코드 + FCM 발송 모두 skip. 알림톡만 보냄.
+    return null;
+  }
 
   return sendNotification({ userId, type, title, body, data });
 }

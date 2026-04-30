@@ -21,13 +21,10 @@ export default function ForgotPasswordPage() {
       // res.success === true 면 발송 큐 등록 성공으로 간주
       await authAPI.resetPassword(email);
       setSubmitted(true);
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'response' in err) {
-        const axiosErr = err as { response?: { data?: { message?: string } } };
-        setError(axiosErr.response?.data?.message || '비밀번호 재설정 중 오류가 발생했습니다.');
-      } else {
-        setError('비밀번호 재설정 중 오류가 발생했습니다.');
-      }
+    } catch {
+      // 계정 열거 차단 — 존재 여부 노출 금지. 항상 동일하게 "발송 완료"로 응답.
+      // (서버 로그에는 실제 실패 사유가 남음)
+      setSubmitted(true);
     } finally {
       setLoading(false);
     }

@@ -218,6 +218,20 @@ export const updateWorkStatus = async (req: AuthRequest, res: Response, next: Ne
       throw new AppError('승인된 간병인만 근무 상태를 변경할 수 있습니다.', 403);
     }
 
+    // 활성 계약이 있으면 AVAILABLE/IMMEDIATE 로의 직접 변경 차단
+    // (계약 종료/취소 흐름에서만 WORKING 해제됨)
+    if (workStatus === 'AVAILABLE' || workStatus === 'IMMEDIATE') {
+      const ongoing = await prisma.contract.count({
+        where: {
+          caregiverId: caregiver.id,
+          status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
+        },
+      });
+      if (ongoing > 0) {
+        throw new AppError('진행 중인 계약이 있어 근무 상태를 변경할 수 없습니다.', 409);
+      }
+    }
+
     const updated = await prisma.caregiver.update({
       where: { id: caregiver.id },
       data: { workStatus },
@@ -487,16 +501,75 @@ export const getMyApplications = async (req: AuthRequest, res: Response, next: N
       include: {
         careRequest: {
           include: {
-            patient: true,
+            // 환자 민감정보(이름/생년월일/진단)는 결제 전 노출 금지 — birthDate 만 받아 ageBucket 계산
+            patient: {
+              select: { id: true, gender: true, birthDate: true },
+            },
           },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
+    // ACCEPTED + 활성 계약이 있는 경우(결제 후)는 환자 이름 공개
+    const acceptedRequestIds = applications
+      .filter((a) => a.status === 'ACCEPTED')
+      .map((a) => a.careRequestId);
+    const activeContracts = acceptedRequestIds.length
+      ? await prisma.contract.findMany({
+          where: {
+            careRequestId: { in: acceptedRequestIds },
+            caregiverId: caregiver.id,
+            status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE', 'COMPLETED'] },
+          },
+          include: { careRequest: { include: { patient: { select: { name: true } } } } },
+        })
+      : [];
+    const exposedNameByRequest = new Map<string, string>();
+    for (const c of activeContracts) {
+      if (c.careRequest?.patient?.name) {
+        exposedNameByRequest.set(c.careRequestId, c.careRequest.patient.name);
+      }
+    }
+
+    const ageBucketOf = (birth: Date | null): string => {
+      if (!birth) return '연령 미정';
+      const age = Math.floor((Date.now() - new Date(birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      if (age < 30) return '30대 이하';
+      if (age < 40) return '30대';
+      if (age < 50) return '40대';
+      if (age < 60) return '50대';
+      if (age < 70) return '60대';
+      if (age < 80) return '70대';
+      if (age < 90) return '80대';
+      return '90대 이상';
+    };
+
+    const masked = applications.map((a) => {
+      const exposedName = exposedNameByRequest.get(a.careRequestId);
+      const cr: any = a.careRequest;
+      const patient = cr?.patient
+        ? {
+            id: cr.patient.id,
+            gender: cr.patient.gender,
+            ageBucket: ageBucketOf(cr.patient.birthDate),
+            ...(exposedName ? { name: exposedName } : {}),
+          }
+        : null;
+      // 위치 정보도 결제 전엔 좌표 미노출
+      const careRequest = cr
+        ? {
+            ...cr,
+            patient,
+            ...(exposedName ? {} : { latitude: null, longitude: null, address: null }),
+          }
+        : null;
+      return { ...a, careRequest };
+    });
+
     res.json({
       success: true,
-      data: applications,
+      data: masked,
     });
   } catch (error) {
     next(error);

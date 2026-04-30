@@ -415,7 +415,7 @@ function AttachmentField({ attachments, onChange }: { attachments: NoticeAttachm
             <li key={`${f.url}-${i}`} className="flex items-center gap-3 px-3 py-2.5">
               <span className="text-xl">{f.mimeType.startsWith('image/') ? '🖼' : '📎'}</span>
               <div className="flex-1 min-w-0">
-                <a href={f.url} target="_blank" rel="noopener" className="text-sm text-gray-900 hover:text-blue-600 truncate block">
+                <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-sm text-gray-900 hover:text-blue-600 truncate block">
                   {f.filename}
                 </a>
                 <div className="text-xs text-gray-400">{fmtSize(f.size)} · {f.mimeType}</div>

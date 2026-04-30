@@ -113,6 +113,223 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
   }
 };
 
+// GET /guardians - 보호자 목록
+export const getGuardians = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const rawPage = parseInt(req.query.page as string);
+    const rawLimit = parseInt(req.query.limit as string);
+    const page = Number.isFinite(rawPage) && rawPage >= 1 ? rawPage : 1;
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 20;
+    const skip = (page - 1) * limit;
+    const search = req.query.search as string | undefined;
+    const authProvider = req.query.authProvider as string | undefined;
+
+    const userWhere: any = { role: { in: ['GUARDIAN', 'HOSPITAL'] } };
+    if (search && search.length <= 100) {
+      userWhere.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (authProvider) {
+      if (!['LOCAL', 'KAKAO', 'NAVER'].includes(authProvider)) {
+        throw new AppError('지원하지 않는 가입 방식입니다.', 400);
+      }
+      userWhere.authProvider = authProvider;
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where: userWhere,
+        include: {
+          guardian: {
+            include: {
+              patients: { select: { id: true } },
+              careRequests: { select: { id: true, status: true } },
+              payments: {
+                where: { status: { in: ['COMPLETED', 'ESCROW', 'PARTIAL_REFUND'] } },
+                select: { totalAmount: true, refundAmount: true },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.user.count({ where: userWhere }),
+    ]);
+
+    const guardians = users.map((u) => {
+      const g = u.guardian;
+      const patientCount = g?.patients?.length || 0;
+      const careRequestCount = g?.careRequests?.length || 0;
+      const activeRequestCount = (g?.careRequests || []).filter(
+        (r: any) => r.status === 'OPEN' || r.status === 'MATCHING' || r.status === 'IN_PROGRESS',
+      ).length;
+      const totalSpent = (g?.payments || []).reduce(
+        (s: number, p: any) => s + (p.totalAmount - (p.refundAmount || 0)),
+        0,
+      );
+      return {
+        id: u.id,
+        guardianId: g?.id || null,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role,
+        authProvider: u.authProvider,
+        registeredAt: u.createdAt,
+        patientCount,
+        careRequestCount,
+        activeRequestCount,
+        totalSpent,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        guardians,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /guardians/:id - 보호자 상세
+export const getGuardianDetail = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        ...USER_PUBLIC_SELECT,
+        guardian: {
+          select: {
+            id: true,
+            patients: {
+              orderBy: { createdAt: 'desc' },
+              select: { id: true, name: true, gender: true, birthDate: true },
+            },
+            careRequests: {
+              orderBy: { createdAt: 'desc' },
+              take: 20,
+              select: {
+                id: true,
+                status: true,
+                createdAt: true,
+                patient: { select: { name: true } },
+              },
+            },
+            payments: {
+              orderBy: { createdAt: 'desc' },
+              take: 20,
+              select: {
+                id: true,
+                totalAmount: true,
+                refundAmount: true,
+                status: true,
+                method: true,
+                paidAt: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!user || (user.role !== 'GUARDIAN' && user.role !== 'HOSPITAL')) {
+      throw new AppError('보호자를 찾을 수 없습니다.', 404);
+    }
+    res.json({ success: true, data: user });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /guardians/:id - 보호자 기본 정보 수정 (이름/이메일/전화)
+export const updateGuardian = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const { name, email, phone } = req.body || {};
+    const target = await prisma.user.findUnique({ where: { id } });
+    if (!target || (target.role !== 'GUARDIAN' && target.role !== 'HOSPITAL')) {
+      throw new AppError('보호자를 찾을 수 없습니다.', 404);
+    }
+
+    const data: any = {};
+    const before: any = {};
+    if (typeof name === 'string') {
+      const trimmed = name.trim();
+      if (trimmed && trimmed.length <= 50) {
+        data.name = trimmed;
+        before.name = target.name;
+      }
+    }
+    if (typeof email === 'string') {
+      const trimmed = email.trim().toLowerCase();
+      // 이메일 길이 가드 (이미 validator 통과했지만 방어)
+      if (trimmed && trimmed.length <= 254) {
+        data.email = trimmed;
+        before.email = target.email;
+      }
+    }
+    if (typeof phone === 'string') {
+      const trimmed = phone.trim();
+      if (trimmed && trimmed.length <= 20) {
+        data.phone = trimmed;
+        before.phone = target.phone;
+      }
+    }
+    if (Object.keys(data).length === 0) {
+      throw new AppError('변경할 정보가 없습니다.', 400);
+    }
+
+    // 트랜잭션: role 재확인 + unique 충돌 시 409 매핑
+    let updated;
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        const claim = await tx.user.updateMany({
+          where: { id, role: { in: ['GUARDIAN', 'HOSPITAL'] } },
+          data,
+        });
+        if (claim.count === 0) {
+          throw new AppError('보호자 정보를 갱신할 수 없습니다.', 404);
+        }
+        return tx.user.findUnique({ where: { id }, select: USER_PUBLIC_SELECT });
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        throw new AppError('이미 사용 중인 이메일 또는 전화번호입니다.', 409);
+      }
+      throw e;
+    }
+
+    await logAdminAction(req, 'GUARDIAN_UPDATE', {
+      targetType: 'User', targetId: id,
+      payload: { before, after: data },
+    });
+
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // GET /caregivers - 간병인 목록
 export const getCaregivers = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -527,6 +744,20 @@ export const approveCaregiver = async (req: AuthRequest, res: Response, next: Ne
       throw new AppError('이미 승인된 간병인입니다.', 400);
     }
 
+    // 자격 검증 — 신분증, 범죄이력, 검증된 자격증 1개 이상 필요
+    const fresh = await prisma.caregiver.findUnique({
+      where: { id },
+      include: { certificates: { where: { verified: true }, select: { id: true } } },
+    });
+    if (!fresh) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    const missing: string[] = [];
+    if (!fresh.identityVerified || !fresh.idCardImage) missing.push('신분증 인증');
+    if (!fresh.criminalCheckDone || !fresh.criminalCheckDoc) missing.push('범죄이력 조회서');
+    if (fresh.certificates.length === 0) missing.push('검증된 자격증 1개 이상');
+    if (missing.length > 0) {
+      throw new AppError(`승인 전제 조건 미충족: ${missing.join(', ')}`, 400);
+    }
+
     await prisma.caregiver.update({
       where: { id },
       data: { status: 'APPROVED' },
@@ -622,7 +853,7 @@ export const blacklistCaregiver = async (req: AuthRequest, res: Response, next: 
     const isBlacklisted = caregiver.status === 'BLACKLISTED';
 
     if (isBlacklisted) {
-      // 블랙리스트 해제
+      // 블랙리스트 해제 — 차단 전 토큰이 부활하지 않도록 tokenVersion 증가
       await prisma.$transaction([
         prisma.caregiver.update({
           where: { id },
@@ -630,7 +861,7 @@ export const blacklistCaregiver = async (req: AuthRequest, res: Response, next: 
         }),
         prisma.user.update({
           where: { id: caregiver.userId },
-          data: { isActive: true },
+          data: { isActive: true, tokenVersion: { increment: 1 } },
         }),
         prisma.consultMemo.create({
           data: {
@@ -665,27 +896,102 @@ export const blacklistCaregiver = async (req: AuthRequest, res: Response, next: 
         fallbackType: 'PENALTY',
       }).catch(() => {});
 
-      await prisma.$transaction([
-        prisma.caregiver.update({
+      // 활성 계약 자동 강제 취소 + 환불 요청 큐잉 (보호자 화면/정산 정합성 유지)
+      const activeContracts = await prisma.contract.findMany({
+        where: {
+          caregiverId: id,
+          status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
+        },
+        include: {
+          guardian: { select: { userId: true } },
+          payments: {
+            select: { id: true, status: true, totalAmount: true, refundAmount: true, refundRequestStatus: true },
+          },
+        },
+      });
+
+      await prisma.$transaction(async (tx) => {
+        await tx.caregiver.update({
           where: { id },
           data: { status: 'BLACKLISTED', workStatus: 'AVAILABLE', hasBadge: false },
-        }),
-        prisma.user.update({
+        });
+        await tx.user.update({
           where: { id: caregiver.userId },
-          data: { isActive: false },
-        }),
-        prisma.consultMemo.create({
+          data: { isActive: false, tokenVersion: { increment: 1 } },
+        });
+        await tx.consultMemo.create({
           data: {
             caregiverId: id,
             adminId: req.user!.id,
             content: `[블랙리스트 등록] ${reason || '사유 미기재'}`,
           },
-        }),
-      ]);
+        });
+
+        // 활성 계약 일괄 강제 취소 + 결제 환불 큐잉
+        const now = new Date();
+        for (const c of activeContracts) {
+          await tx.contract.update({
+            where: { id: c.id },
+            data: {
+              status: 'CANCELLED',
+              cancelledAt: now,
+              cancelledBy: req.user!.id,
+              cancellationReason: `간병인 블랙리스트 처리: ${reason || '사유 미기재'}`,
+            },
+          });
+          await tx.careRequest.update({
+            where: { id: c.careRequestId },
+            data: { status: 'CANCELLED' },
+          });
+          await tx.careApplication.updateMany({
+            where: { careRequestId: c.careRequestId, status: { in: ['PENDING', 'ACCEPTED'] } },
+            data: { status: 'CANCELLED' },
+          });
+
+          // 비례 환불액 계산 후 환불 요청 큐 등록
+          const totalDays = Math.max(1, Math.ceil((new Date(c.endDate).getTime() - new Date(c.startDate).getTime()) / 86400000));
+          const usedDays = Math.min(totalDays, Math.max(0, Math.ceil((now.getTime() - new Date(c.startDate).getTime()) / 86400000)));
+          const remainingDays = Math.max(0, totalDays - usedDays);
+          const proportionRemaining = totalDays > 0 ? remainingDays / totalDays : 0;
+          const refundables = c.payments.filter(
+            (p) =>
+              ['ESCROW', 'COMPLETED', 'PARTIAL_REFUND'].includes(p.status) &&
+              p.refundRequestStatus !== 'PENDING' &&
+              p.refundRequestStatus !== 'PROCESSING',
+          );
+          for (const p of refundables) {
+            const remainingPayable = Math.max(0, p.totalAmount - (p.refundAmount || 0));
+            const cashRefund = Math.min(Math.round(p.totalAmount * proportionRemaining), remainingPayable);
+            if (cashRefund > 0) {
+              await tx.payment.update({
+                where: { id: p.id },
+                data: {
+                  refundRequestStatus: 'PENDING',
+                  refundRequestedAt: now,
+                  refundRequestedBy: req.user!.id,
+                  refundRequestReason: `간병인 블랙리스트 처리: ${reason || '사유 미기재'}`,
+                  refundRequestAmount: cashRefund,
+                },
+              });
+            }
+          }
+
+          // 보호자 알림
+          await tx.notification.create({
+            data: {
+              userId: c.guardian.userId,
+              type: 'CONTRACT',
+              title: '간병 계약이 취소되었습니다',
+              body: '간병인 측 사유로 계약이 강제 취소되었습니다. 환불은 관리자가 처리합니다.',
+              data: { contractId: c.id, blacklisted: true } as any,
+            },
+          });
+        }
+      });
 
       res.json({
         success: true,
-        message: `${caregiver.user.name} 간병인이 블랙리스트에 등록되었습니다.`,
+        message: `${caregiver.user.name} 간병인이 블랙리스트에 등록됐습니다. 활성 계약 ${activeContracts.length}건 자동 취소.`,
       });
     }
 
@@ -1066,8 +1372,19 @@ export const getPatients = async (req: AuthRequest, res: Response, next: NextFun
 // GET /stats - 월별 통계
 export const getStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const year = parseInt(req.query.year as string) || new Date().getFullYear();
-    const month = req.query.month ? parseInt(req.query.month as string) : undefined;
+    const currentYear = new Date().getFullYear();
+    const rawYear = parseInt(req.query.year as string);
+    const year = Number.isFinite(rawYear) && rawYear >= 2020 && rawYear <= currentYear + 1
+      ? rawYear
+      : currentYear;
+    let month: number | undefined;
+    if (req.query.month) {
+      const m = parseInt(req.query.month as string);
+      if (!Number.isFinite(m) || m < 1 || m > 12) {
+        throw new AppError('월은 1~12 범위의 정수여야 합니다.', 400);
+      }
+      month = m;
+    }
 
     // 월별 통계를 실시간 집계 (MonthlyStats 테이블 대신 실 DB 기반)
     const stats: any[] = [];
@@ -1934,16 +2251,31 @@ export const forceCancelContract = async (req: AuthRequest, res: Response, next:
       include: {
         caregiver: { select: { userId: true } },
         guardian: { select: { userId: true } },
-        payments: { select: { id: true, status: true, totalAmount: true } },
+        payments: {
+          select: { id: true, status: true, totalAmount: true, refundAmount: true, pointsUsed: true, refundRequestStatus: true, method: true, tossPaymentKey: true },
+        },
       },
     });
     if (!contract) throw new AppError('계약을 찾을 수 없습니다.', 404);
     if (contract.status === 'CANCELLED') throw new AppError('이미 취소된 계약입니다.', 400);
 
-    // 환불 처리 필요 여부 (별도 안내용 — 정책 A: 환불·정산은 자동 처리하지 않음)
-    const hasPaidPayment = contract.payments.some(
-      (p) => p.status === 'COMPLETED' || p.status === 'ESCROW',
+    // 환불 대상 결제 — ESCROW/COMPLETED/PARTIAL_REFUND 중 환불 요청 PENDING/PROCESSING 아닌 것
+    const refundablePayments = contract.payments.filter(
+      (p) =>
+        ['ESCROW', 'COMPLETED', 'PARTIAL_REFUND'].includes(p.status) &&
+        p.refundRequestStatus !== 'PENDING' &&
+        p.refundRequestStatus !== 'PROCESSING',
     );
+    const hasPaidPayment = refundablePayments.length > 0;
+
+    // 일할 비례 환불액 산정 (cancelContract 와 동일 — usedDays/totalDays 기반)
+    const now = new Date();
+    const startDate = new Date(contract.startDate);
+    const endDate = new Date(contract.endDate);
+    const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000));
+    const usedDays = Math.min(totalDays, Math.max(0, Math.ceil((now.getTime() - startDate.getTime()) / 86400000)));
+    const remainingDays = Math.max(0, totalDays - usedDays);
+    const proportionRemaining = totalDays > 0 ? remainingDays / totalDays : 0;
 
     await prisma.$transaction(async (tx) => {
       // 트랜지션 락: 활성 계약(ACTIVE/EXTENDED/PENDING_SIGNATURE)에서만 1회 CANCELLED 전이
@@ -1980,6 +2312,53 @@ export const forceCancelContract = async (req: AuthRequest, res: Response, next:
         where: { id: contract.caregiverId },
         data: { workStatus: 'AVAILABLE' },
       });
+
+      // ── 환불 자동 큐잉: 활성 결제별 비례 환불액 산정 후 refundRequestStatus=PENDING 등록
+      // (실제 Toss cancel 은 관리자 환불 승인 시 executeRefund 가 처리)
+      for (const p of refundablePayments) {
+        const remainingPayable = Math.max(0, p.totalAmount - (p.refundAmount || 0));
+        const grossRefund = Math.round(p.totalAmount * proportionRemaining);
+        const cashRefund = Math.min(grossRefund, remainingPayable);
+        if (cashRefund > 0) {
+          await tx.payment.update({
+            where: { id: p.id },
+            data: {
+              refundRequestStatus: 'PENDING',
+              refundRequestedAt: new Date(),
+              refundRequestedBy: req.user!.id,
+              refundRequestReason: `관리자 강제 취소: ${reason || '사유 미기재'}`,
+              refundRequestAmount: cashRefund,
+            },
+          });
+        }
+      }
+
+      // ── 미정산 Earning 차감 (사용일수 기준)
+      if (usedDays > 0) {
+        const usedAmount = contract.dailyRate * usedDays;
+        const platformFeeAmount = Math.round(usedAmount * (contract.platformFee / 100)) + ((contract as any).platformFeeFixed || 0);
+        const taxAmount = Math.round((Math.max(0, usedAmount - platformFeeAmount)) * (contract.taxRate / 100));
+        const netEarning = Math.max(0, usedAmount - platformFeeAmount - taxAmount);
+        const existingEarnings = await tx.earning.findMany({
+          where: { contractId, isPaid: false },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (existingEarnings.length > 0) {
+          await tx.earning.update({
+            where: { id: existingEarnings[0].id },
+            data: { amount: usedAmount, platformFee: platformFeeAmount, taxAmount, netAmount: netEarning },
+          });
+          if (existingEarnings.length > 1) {
+            await tx.earning.deleteMany({
+              where: { contractId, isPaid: false, id: { notIn: [existingEarnings[0].id] } },
+            });
+          }
+        }
+      } else {
+        // 사용일 0 → 미정산 Earning 전부 제거
+        await tx.earning.deleteMany({ where: { contractId, isPaid: false } });
+      }
+
       // 양쪽 알림 (템플릿)
       const tpl = await renderTemplate('CONTRACT_FORCE_CANCELLED', {
         reasonText: reason ? '사유: ' + reason : '',
@@ -1996,7 +2375,14 @@ export const forceCancelContract = async (req: AuthRequest, res: Response, next:
 
     await logAdminAction(req, 'CONTRACT_FORCE_CANCEL', {
       targetType: 'Contract', targetId: contractId,
-      payload: { reason, prevStatus: contract.status, hasPaidPayment },
+      payload: {
+        before: { status: contract.status },
+        after: { status: 'CANCELLED' },
+        reason,
+        usedDays,
+        totalDays,
+        refundQueueCount: refundablePayments.length,
+      },
     });
 
     res.json({
@@ -2005,13 +2391,15 @@ export const forceCancelContract = async (req: AuthRequest, res: Response, next:
       data: {
         cancelled: true,
         hasPaidPayment,
-        // 정책 A: 환불·정산은 자동 처리되지 않음. 관리자가 별도 메뉴에서 수동 처리 필요.
-        nextActions: hasPaidPayment
+        usedDays,
+        totalDays,
+        refundQueueCount: refundablePayments.length,
+        nextActions: refundablePayments.length > 0
           ? [
-              '결제 완료된 건은 환불 메뉴(/admin/refund-requests 또는 결제 상세)에서 별도 처리해주세요.',
-              '간병인 정산은 정산 메뉴에서 일할 계산 후 별도 지급 처리해주세요.',
+              `${refundablePayments.length}건 결제가 환불 요청 큐에 등록됐습니다. /admin/refund-requests 에서 승인하면 Toss 환불이 실행됩니다.`,
+              '간병인 정산은 사용일수 기준으로 자동 차감되었습니다.',
             ]
-          : [],
+          : ['결제 이력이 없거나 이미 환불된 계약입니다.'],
       },
     });
   } catch (error) {
@@ -2049,12 +2437,32 @@ export const forceCompleteContract = async (req: AuthRequest, res: Response, nex
       });
     });
 
+    // 정산 + Toss escrow release (cron 정산 로직과 동일). best-effort.
+    let settled = false;
+    try {
+      const { settleEarning } = await import('../services/paymentService');
+      await settleEarning(contractId);
+      settled = true;
+    } catch (e: any) {
+      console.error('[forceCompleteContract] settleEarning 실패. contractId=', contractId, e);
+    }
+
     await logAdminAction(req, 'CONTRACT_FORCE_COMPLETE', {
       targetType: 'Contract', targetId: contractId,
-      payload: { prevStatus: contract.status },
+      payload: {
+        before: { status: contract.status },
+        after: { status: 'COMPLETED' },
+        settled,
+      },
     });
 
-    res.json({ success: true, message: '계약이 완료 처리되었습니다.' });
+    res.json({
+      success: true,
+      message: settled
+        ? '계약이 완료 처리되었고 정산이 진행되었습니다.'
+        : '계약은 완료 처리되었으나 정산은 실패했습니다. 관리자가 수동 처리 필요합니다.',
+      data: { settled },
+    });
   } catch (error) {
     next(error);
   }
@@ -2966,6 +3374,14 @@ export const updateAssociationFee = async (req: AuthRequest, res: Response, next
     const cg = await prisma.caregiver.findUnique({ where: { id: caregiverId } });
     if (!cg) throw new AppError('간병인을 찾을 수 없습니다.', 404);
 
+    // 이미 납부 확정된 건은 되돌릴 수 없음 (paid=true → false 차단)
+    const existing = await prisma.associationFeePayment.findUnique({
+      where: { caregiverId_year_month: { caregiverId, year, month } },
+    });
+    if (existing?.paid && paid === false) {
+      throw new AppError('이미 납부 확정된 협회비는 되돌릴 수 없습니다.', 409);
+    }
+
     const record = await prisma.associationFeePayment.upsert({
       where: {
         caregiverId_year_month: { caregiverId, year, month },
@@ -2981,8 +3397,8 @@ export const updateAssociationFee = async (req: AuthRequest, res: Response, next
       },
       update: {
         amount: amount !== undefined ? amount : undefined,
-        paid,
-        paidAt: paid ? new Date() : null,
+        // paid=true 로의 전이만 허용 (위 가드로 false 진입 차단)
+        ...(paid === true && { paid: true, paidAt: new Date() }),
         note: note !== undefined ? note : undefined,
       },
     });
@@ -3125,10 +3541,35 @@ export const getNotificationTemplates = async (req: AuthRequest, res: Response, 
 export const updateNotificationTemplate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const { title, body, enabled, description } = req.body;
+    const {
+      title, body, enabled, description,
+      channels, targetRoles, alimtalkTemplateCode, alimtalkButtonsJson,
+    } = req.body;
 
     const existing = await prisma.notificationTemplate.findUnique({ where: { id } });
     if (!existing) throw new AppError('템플릿을 찾을 수 없습니다.', 404);
+
+    // channels / targetRoles whitelist
+    const VALID_CHANNELS = ['PUSH', 'ALIMTALK', 'EMAIL'];
+    const VALID_ROLES = ['GUARDIAN', 'CAREGIVER', 'ADMIN', 'HOSPITAL'];
+    if (channels !== undefined) {
+      if (!Array.isArray(channels) || channels.some((c) => !VALID_CHANNELS.includes(c))) {
+        throw new AppError('유효한 채널이 아닙니다. (PUSH/ALIMTALK/EMAIL)', 400);
+      }
+    }
+    if (targetRoles !== undefined) {
+      if (!Array.isArray(targetRoles) || targetRoles.some((r) => !VALID_ROLES.includes(r))) {
+        throw new AppError('유효한 역할이 아닙니다.', 400);
+      }
+    }
+    // 알림톡 버튼 JSON 파싱 검증
+    if (alimtalkButtonsJson !== undefined && alimtalkButtonsJson !== null && alimtalkButtonsJson !== '') {
+      try {
+        JSON.parse(alimtalkButtonsJson);
+      } catch {
+        throw new AppError('알림톡 버튼 JSON 형식이 올바르지 않습니다.', 400);
+      }
+    }
 
     const updated = await prisma.notificationTemplate.update({
       where: { id },
@@ -3137,6 +3578,10 @@ export const updateNotificationTemplate = async (req: AuthRequest, res: Response
         ...(body !== undefined && { body }),
         ...(enabled !== undefined && { enabled }),
         ...(description !== undefined && { description }),
+        ...(channels !== undefined && { channels }),
+        ...(targetRoles !== undefined && { targetRoles }),
+        ...(alimtalkTemplateCode !== undefined && { alimtalkTemplateCode: alimtalkTemplateCode || null }),
+        ...(alimtalkButtonsJson !== undefined && { alimtalkButtonsJson: alimtalkButtonsJson || null }),
       },
     });
     res.json({ success: true, data: updated });

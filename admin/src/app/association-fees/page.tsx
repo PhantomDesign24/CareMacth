@@ -84,23 +84,35 @@ export default function AssociationFeesPage() {
   }, [rows]);
 
   const togglePaid = async (row: AssociationFeeRow) => {
+    // 이미 납부 확정된 건은 변경 불가
+    if (row.feePaid) {
+      alert(`${row.name} 간병사는 이미 납부 확정되었습니다. 변경하려면 관리자에게 문의해주세요.`);
+      return;
+    }
     if (defaultAmount == null) {
       alert("기본 협회비 금액을 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.");
+      return;
+    }
+    // 납부 확정 — 한 번 확정하면 되돌릴 수 없음을 명시
+    if (!confirm(
+      `${row.name} 간병사 ${year}년 ${month}월 협회비를 납부 처리합니다.\n` +
+      `금액: ${(row.feeAmount || defaultAmount).toLocaleString()}원\n\n` +
+      `한 번 확정하면 되돌릴 수 없습니다. 진행하시겠습니까?`
+    )) {
       return;
     }
     try {
       await updateAssociationFee(row.caregiverId, {
         year, month,
-        paid: !row.feePaid,
+        paid: true,
         amount: row.feeAmount || defaultAmount,
       });
-      // 로컬 업데이트 (즉시 반영)
       setRows(prev => prev.map(r =>
         r.caregiverId === row.caregiverId
-          ? { ...r, feePaid: !r.feePaid, feeAmount: r.feeAmount || defaultAmount }
+          ? { ...r, feePaid: true, feeAmount: r.feeAmount || defaultAmount }
           : r
       ));
-      setToast(`${row.name} ${!row.feePaid ? "납부 처리" : "미납으로 변경"}`);
+      setToast(`${row.name} 납부 확정`);
     } catch {
       alert("업데이트 실패");
     }
@@ -395,13 +407,14 @@ export default function AssociationFeesPage() {
                 <td className="px-3 py-2.5 text-center">
                   <button
                     onClick={() => togglePaid(r)}
+                    title={r.feePaid ? '납부 확정됨 (변경 불가)' : '납부 처리'}
                     className={`w-14 py-1 rounded-full text-xs font-bold transition-all ${
                       r.feePaid
-                        ? "bg-green-500 text-white hover:bg-green-600 shadow-sm"
+                        ? "bg-green-500 text-white shadow-sm cursor-not-allowed opacity-90"
                         : "bg-red-50 text-red-500 border border-red-200 hover:bg-red-100"
                     }`}
                   >
-                    {r.feePaid ? "납부" : "미납"}
+                    {r.feePaid ? "납부✓" : "미납"}
                   </button>
                 </td>
                 <td className="px-3 py-2.5 text-center text-gray-700 hidden md:table-cell">

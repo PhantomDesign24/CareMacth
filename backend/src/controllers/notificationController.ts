@@ -5,46 +5,44 @@ import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 
 // POST /device-token - 디바이스 토큰 등록 (비회원 포함, 로그인 시 유저 연결)
-export const registerDeviceToken = async (req: Request, res: Response, next: NextFunction) => {
+// userId 는 body 에서 받지 않음 — 항상 인증된 req.user.id 만 사용 (피해자 토큰 탈취 차단)
+export const registerDeviceToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { token, platform = 'android', userId } = req.body;
+    const { token, platform = 'android', logout } = req.body;
+    const authenticatedUserId = req.user?.id || null; // 인증 미들웨어 통과 시에만 set
+    const targetUserId = logout === true ? null : authenticatedUserId;
 
-    // 디바이스 토큰 저장/갱신
-    await prisma.deviceToken.upsert({
-      where: { token },
-      update: { platform, userId: userId === null ? null : (userId || undefined), updatedAt: new Date() },
-      create: { token, platform, userId: userId === null ? null : (userId || undefined) },
-    });
+    // 트랜잭션으로 원자화 — 동시 등록/로그아웃 race 방지
+    await prisma.$transaction(async (tx) => {
+      await tx.deviceToken.upsert({
+        where: { token },
+        update: { platform, userId: targetUserId, updatedAt: new Date() },
+        create: { token, platform, userId: targetUserId },
+      });
 
-    // userId가 명시적으로 null이면 연결 해제 (로그아웃)
-    if (userId === null) {
-      // 해당 토큰에 연결된 유저의 fcmToken 클리어
-      const deviceToken = await prisma.deviceToken.findUnique({ where: { token } });
-      if (deviceToken) {
-        await prisma.user.updateMany({
+      if (logout === true) {
+        // 로그아웃: 해당 토큰을 사용 중인 사용자의 fcmToken 클리어
+        await tx.user.updateMany({
           where: { fcmToken: token },
           data: { fcmToken: null },
         });
+      } else if (authenticatedUserId) {
+        // 로그인 사용자: 다른 사용자에게 할당된 같은 토큰 회수 + 본인에게 연결
+        await tx.user.updateMany({
+          where: { fcmToken: token, id: { not: authenticatedUserId } },
+          data: { fcmToken: null },
+        });
+        await tx.user.update({
+          where: { id: authenticatedUserId },
+          data: { fcmToken: token },
+        }).catch(() => {});
       }
-    }
-
-    // userId가 있으면 User.fcmToken에도 저장 (기존 푸시 로직 호환)
-    if (userId) {
-      // 다른 유저에게 할당된 같은 토큰 제거
-      await prisma.user.updateMany({
-        where: { fcmToken: token, id: { not: userId } },
-        data: { fcmToken: null },
-      });
-      await prisma.user.update({
-        where: { id: userId },
-        data: { fcmToken: token },
-      }).catch(() => {}); // 유저 없으면 무시
-    }
+    });
 
     res.json({ success: true, message: '디바이스 토큰이 등록되었습니다.' });
   } catch (error) {
@@ -124,32 +122,30 @@ export const markAsRead = async (req: AuthRequest, res: Response, next: NextFunc
       return;
     }
 
-    const notification = await prisma.notification.findFirst({
+    // 원자적 읽음 처리 — 동시 요청에서 readAt 덮어쓰기 방지
+    const lock = await prisma.notification.updateMany({
       where: {
         id,
         userId: req.user!.id,
+        isRead: false,
       },
-    });
-
-    if (!notification) {
-      throw new AppError('알림을 찾을 수 없습니다.', 404);
-    }
-
-    if (notification.isRead) {
-      res.json({
-        success: true,
-        message: '이미 읽은 알림입니다.',
-      });
-      return;
-    }
-
-    await prisma.notification.update({
-      where: { id },
       data: {
         isRead: true,
         readAt: new Date(),
       },
     });
+
+    if (lock.count === 0) {
+      // 이미 읽었거나 권한 없음 — 본인 알림 존재 여부 확인
+      const exists = await prisma.notification.count({
+        where: { id, userId: req.user!.id },
+      });
+      if (exists === 0) {
+        throw new AppError('알림을 찾을 수 없습니다.', 404);
+      }
+      res.json({ success: true, message: '이미 읽은 알림입니다.' });
+      return;
+    }
 
     res.json({
       success: true,

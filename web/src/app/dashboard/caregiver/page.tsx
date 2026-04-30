@@ -226,11 +226,12 @@ function CaregiverDashboard() {
     setError("");
     try {
       const [summaryRes, earningsRes, penaltiesRes, requestsRes, activityRes, applicationsRes] = await Promise.all([
-        dashboardAPI.caregiverSummary(),
-        caregiverAPI.getEarnings(),
-        caregiverAPI.getPenalties(),
-        careRequestAPI.list({ status: "open" }),
-        caregiverAPI.getActivity(),
+        dashboardAPI.caregiverSummary().catch(() => ({ data: { data: {} } })),
+        caregiverAPI.getEarnings().catch(() => ({ data: { data: [] } })),
+        caregiverAPI.getPenalties().catch(() => ({ data: { data: [] } })),
+        // 미승인 간병인은 일감 조회 불가 (403) — 빈 배열로 graceful 처리
+        careRequestAPI.list({ status: "open" }).catch(() => ({ data: { data: { careRequests: [] } } })),
+        caregiverAPI.getActivity().catch(() => ({ data: { data: {} } })),
         caregiverAPI.getMyApplications().catch(() => ({ data: { data: [] } })),
       ]);
       // 내가 이미 지원한 요청 ID 목록 (PENDING/ACCEPTED 상태만)

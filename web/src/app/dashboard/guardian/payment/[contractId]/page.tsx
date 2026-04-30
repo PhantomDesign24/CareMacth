@@ -6,7 +6,9 @@ import Link from "next/link";
 import { loadTossPayments } from "@tosspayments/payment-sdk";
 import { contractAPI, guardianAPI, paymentAPI } from "@/lib/api";
 
-const TOSS_CLIENT_KEY = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq";
+// 운영에서는 NEXT_PUBLIC_TOSS_CLIENT_KEY 가 반드시 설정돼야 함. 미설정 시 테스트키 fallback 은 개발 환경에서만 사용.
+const TOSS_CLIENT_KEY = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY
+  || (process.env.NODE_ENV !== 'production' ? "test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq" : "");
 import {
   formatDate,
   formatMoney,

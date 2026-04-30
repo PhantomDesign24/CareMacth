@@ -28,9 +28,9 @@ export default function CareRequestPage() {
       const userStr = localStorage.getItem("user");
       const user = userStr ? JSON.parse(userStr) : null;
       const role = user?.role;
+      // 간병인은 일감 찾기 페이지로 자동 우회 (alert 없이 즉시 라우팅)
       if (role === "CAREGIVER") {
-        alert("간병 신청은 보호자 또는 병원 회원만 가능합니다.");
-        router.replace("/dashboard/caregiver");
+        router.replace("/find-work");
         return;
       }
       if (role && !["GUARDIAN", "HOSPITAL", "ADMIN"].includes(role)) {
@@ -68,6 +68,8 @@ export default function CareRequestPage() {
       };
       const resolvedMobility = mobilityMap[data.mobility?.toLowerCase()] || 'INDEPENDENT';
 
+      const ynToBool = (v: string): boolean | undefined => v === 'YES' ? true : v === 'NO' ? false : undefined;
+
       const patientPayload: Record<string, unknown> = {
         name: data.patientName,
         birthDate: data.patientAge ? `${new Date().getFullYear() - parseInt(data.patientAge)}-01-01` : undefined,
@@ -81,7 +83,33 @@ export default function CareRequestPage() {
         hasInfection: data.hasInfection || false,
         infectionDetail: data.infectionDetails || undefined,
         diagnosis: Array.isArray(data.diagnosis) ? data.diagnosis.join(', ') : data.diagnosis || undefined,
+        diagnoses: Array.isArray(data.diagnosis) ? data.diagnosis : undefined,
         medicalNotes: data.specialNotes || undefined,
+        // ── 신규 환자 상태
+        infections: Array.isArray(data.infections) ? data.infections : undefined,
+        roomType: data.roomType || undefined,
+        roomTypeEtc: data.roomTypeEtc || undefined,
+        longTermCareGrade: data.longTermCareGrade || undefined,
+        hasSurgery: ynToBool(data.hasSurgery),
+        treatments: Array.isArray(data.treatments) ? data.treatments : undefined,
+        treatmentsEtc: data.treatmentsEtc || undefined,
+        paralysisStatus: data.paralysisStatus || undefined,
+        hygieneStatus: data.hygieneStatus || undefined,
+        hygieneStatusEtc: data.hygieneStatusEtc || undefined,
+        mealStatus: data.mealStatus || undefined,
+        mealStatusEtc: data.mealStatusEtc || undefined,
+        toiletStatus: data.toiletStatus || undefined,
+        toiletStatusEtc: data.toiletStatusEtc || undefined,
+        exerciseStatus: data.exerciseStatus || undefined,
+        exerciseStatusEtc: data.exerciseStatusEtc || undefined,
+        hasDelirium: ynToBool(data.hasDelirium),
+        hasBedsore: ynToBool(data.hasBedsore),
+        needsSuction: ynToBool(data.needsSuction),
+        hasStoma: ynToBool(data.hasStoma),
+        hospitalizationReason: data.hospitalizationReason || undefined,
+        hospitalizationReasonEtc: data.hospitalizationReasonEtc || undefined,
+        covidTestRequirement: data.covidTestRequirement || undefined,
+        vaccineCheckRequirement: data.vaccineCheckRequirement || undefined,
       };
 
       const patientRes = await guardianAPI.createPatient(patientPayload);
@@ -123,6 +151,11 @@ export default function CareRequestPage() {
         dailyRate: data.dailyRate ? parseInt(data.dailyRate) : undefined,
         preferredGender: data.preferredGender ? (preferredGenderMap[data.preferredGender.toLowerCase()] || undefined) : undefined,
         specialRequirements: data.specialNotes || undefined,
+        // ── 신규: 신청인-환자 관계 / 희망 서비스 / 희망 급여
+        relationToPatient: data.relationToPatient || undefined,
+        preferredServices: Array.isArray(data.preferredServices) ? data.preferredServices : undefined,
+        preferredWageType: data.preferredWageType || undefined,
+        preferredWageAmount: data.preferredWageAmount ? parseInt(data.preferredWageAmount) : undefined,
       };
 
       await careRequestAPI.create(requestPayload);
@@ -161,6 +194,25 @@ export default function CareRequestPage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gray-50">
+      {/* 제출 중 전체화면 로딩 오버레이 — 모든 클릭/입력 차단 */}
+      {submitting && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4"
+          aria-busy="true"
+          aria-live="polite"
+          onClick={(e) => e.preventDefault()}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl px-8 py-7 max-w-sm w-full text-center">
+            <svg className="animate-spin h-12 w-12 mx-auto text-primary-500" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <h3 className="mt-4 text-base font-bold text-gray-900">간병 요청을 접수 중입니다</h3>
+            <p className="mt-1 text-xs text-gray-500">잠시만 기다려주세요. 페이지를 닫지 마세요.</p>
+          </div>
+        </div>
+      )}
+
       {/* Hero Banner - Clean, action-oriented */}
       <div className="relative overflow-hidden"
         style={{ background: "linear-gradient(135deg, #1A1A2E 0%, #16213E 40%, #0F3460 100%)" }}>

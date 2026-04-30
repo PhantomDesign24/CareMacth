@@ -24,9 +24,9 @@ function NaverCallbackInner() {
         return;
       }
 
-      // state 검증
+      // state strict 검증 — 저장값/콜백값 둘 다 필수
       const savedState = typeof window !== "undefined" ? sessionStorage.getItem("naver_oauth_state") : null;
-      if (savedState && state && savedState !== state) {
+      if (!savedState || !state || savedState !== state) {
         setError("보안 검증(state)에 실패했습니다. 다시 시도해주세요.");
         return;
       }
@@ -51,6 +51,7 @@ function NaverCallbackInner() {
             localStorage.setItem("cm_refresh_token", data.data.refresh_token);
           }
           localStorage.setItem("user", JSON.stringify(data.data.user));
+          localStorage.setItem("cm_user", JSON.stringify(data.data.user));
           const role = data.data.user.role;
           if (role === "GUARDIAN" || role === "ADMIN") {
             router.replace("/dashboard/guardian");
@@ -63,14 +64,18 @@ function NaverCallbackInner() {
         }
 
         if (data.data.isNew) {
-          const qs = new URLSearchParams({
-            social: "naver",
-            socialId: data.data.socialId || "",
-            email: data.data.email || "",
-            name: data.data.name || "",
-            phone: data.data.phone || "",
-          });
-          router.replace(`/auth/register?${qs.toString()}`);
+          // signupToken 은 URL 노출 방지를 위해 sessionStorage 로만 전달
+          try {
+            sessionStorage.setItem('cm_signup_payload', JSON.stringify({
+              provider: 'naver',
+              signupToken: data.data.signupToken || '',
+              email: data.data.email || '',
+              name: data.data.name || '',
+              phone: data.data.phone || '',
+              ts: Date.now(),
+            }));
+          } catch {}
+          router.replace('/auth/register?social=naver');
           return;
         }
 

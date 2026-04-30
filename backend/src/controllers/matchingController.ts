@@ -35,6 +35,14 @@ export const autoMatch = async (req: AuthRequest, res: Response, next: NextFunct
       throw new AppError('간병 요청을 찾을 수 없습니다.', 404);
     }
 
+    // 보호자는 본인 요청만 자동매칭 가능 (다른 보호자가 careRequestId 추정 → 후보 알림 트리거 차단)
+    if (req.user!.role === 'GUARDIAN') {
+      const myGuardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
+      if (!myGuardian || careRequest.guardianId !== myGuardian.id) {
+        throw new AppError('본인 요청만 매칭할 수 있습니다.', 403);
+      }
+    }
+
     if (!['OPEN', 'MATCHING'].includes(careRequest.status)) {
       throw new AppError('매칭이 가능한 상태가 아닙니다. (OPEN 또는 MATCHING 상태만 가능)', 400);
     }
@@ -147,6 +155,10 @@ export const autoMatch = async (req: AuthRequest, res: Response, next: NextFunct
       : '일당 미정';
 
     const candidateMap = new Map(candidates.map((c) => [c.id, c]));
+    // 환자명/주소 정확값은 결제 전 미노출. region 또는 시/구까지.
+    const regionLabel = (careRequest as any).region
+      || (Array.isArray((careRequest as any).regions) && (careRequest as any).regions[0])
+      || (careRequest.address ? careRequest.address.split(/\s+/).slice(0, 2).join(' ') : '인근');
     const notificationData = matchScores
       .filter((candidate) => candidateMap.has(candidate.caregiverId))
       .map((candidate) => {
@@ -155,7 +167,7 @@ export const autoMatch = async (req: AuthRequest, res: Response, next: NextFunct
           userId: caregiver.userId,
           type: 'MATCHING' as const,
           title: '새로운 간병 요청 매칭',
-          body: `${careRequest.patient.name} 환자의 간병 요청이 도착했습니다. ${dailyRateText} | 매칭 점수: ${candidate.score.toFixed(1)}점`,
+          body: `${regionLabel} 지역 새 간병 요청이 도착했습니다. ${dailyRateText} | 매칭 점수: ${candidate.score.toFixed(1)}점`,
           data: { careRequestId, score: candidate.score, dailyRate: careRequest.dailyRate } as any,
         };
       });

@@ -1,10 +1,82 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { documentAPI } from "@/lib/api";
 import { compressImage } from "@/lib/imageCompress";
 import { formatDate } from "@/lib/format";
+
+// 생년월일 셀렉트 — value 는 'YYYY-MM-DD' 문자열
+function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [y, m, d] = (value || '').split('-');
+  const year = y || '';
+  const month = m || '';
+  const day = d || '';
+
+  const currentYear = new Date().getFullYear();
+  const years = useMemo(() => {
+    const arr: string[] = [];
+    for (let yy = currentYear; yy >= currentYear - 100; yy--) arr.push(String(yy));
+    return arr;
+  }, [currentYear]);
+  const months = useMemo(() => Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')), []);
+
+  // 선택된 년/월에 맞는 일수 계산
+  const daysInMonth = useMemo(() => {
+    if (!year || !month) return 31;
+    return new Date(Number(year), Number(month), 0).getDate();
+  }, [year, month]);
+  const days = useMemo(
+    () => Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, '0')),
+    [daysInMonth],
+  );
+
+  const update = (ny: string, nm: string, nd: string) => {
+    if (!ny || !nm || !nd) {
+      onChange('');
+      return;
+    }
+    // 일이 새 월의 최대를 초과하면 마지막 날로 보정
+    const maxDay = new Date(Number(ny), Number(nm), 0).getDate();
+    const safeDay = Math.min(Number(nd), maxDay);
+    onChange(`${ny}-${nm}-${String(safeDay).padStart(2, '0')}`);
+  };
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <select
+        className="input-field"
+        value={year}
+        onChange={(e) => update(e.target.value, month, day)}
+      >
+        <option value="">년</option>
+        {years.map((yy) => (
+          <option key={yy} value={yy}>{yy}</option>
+        ))}
+      </select>
+      <select
+        className="input-field"
+        value={month}
+        onChange={(e) => update(year, e.target.value, day)}
+      >
+        <option value="">월</option>
+        {months.map((mm) => (
+          <option key={mm} value={mm}>{Number(mm)}</option>
+        ))}
+      </select>
+      <select
+        className="input-field"
+        value={day}
+        onChange={(e) => update(year, month, e.target.value)}
+      >
+        <option value="">일</option>
+        {days.map((dd) => (
+          <option key={dd} value={dd}>{Number(dd)}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 interface Certificate {
   id: string;
@@ -197,6 +269,14 @@ export default function CaregiverDocumentsPage() {
       return;
     }
 
+    // 매직넘버 클라이언트 검증 (서버에서도 검증되지만 즉시 피드백)
+    const { validateFileMagic } = await import('@/lib/fileMagic');
+    const check = await validateFileMagic(certFile, 'document', { maxSizeMB: 10 });
+    if (!check.ok) {
+      setError(check.reason || '파일 형식이 올바르지 않습니다.');
+      return;
+    }
+
     setUploading(true);
     setError("");
     setSuccessMsg("");
@@ -205,7 +285,9 @@ export default function CaregiverDocumentsPage() {
       formData.append("name", certName);
       formData.append("issuer", certIssuer);
       formData.append("issueDate", certIssueDate);
-      const optimized = await compressImage(certFile);
+      // PDF 는 압축 안 함, 이미지만 압축
+      const isImage = check.detectedMime !== 'application/pdf';
+      const optimized = isImage ? await compressImage(certFile) : certFile;
       formData.append("image", optimized);
 
       await documentAPI.uploadCertificate(formData);
@@ -319,15 +401,10 @@ export default function CaregiverDocumentsPage() {
               </select>
             </div>
 
-            {/* Birth Date */}
+            {/* Birth Date — 년/월/일 셀렉트 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">생년월일</label>
-              <input
-                type="date"
-                className="input-field"
-                value={birthDate}
-                onChange={(e) => setBirthDate(e.target.value)}
-              />
+              <BirthDateSelect value={birthDate} onChange={setBirthDate} />
             </div>
 
             {/* Address */}

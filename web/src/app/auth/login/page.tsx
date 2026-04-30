@@ -33,7 +33,8 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!data.success) {
-        setError(data.message || "로그인에 실패했습니다.");
+        // 계정 열거 차단 — 백엔드 메시지 그대로 노출하지 않고 일반화 (서버 로그에는 상세 남아있음)
+        setError("아이디 또는 비밀번호가 올바르지 않습니다.");
         return;
       }
       const accessToken = data.data.access_token || data.data.token;
@@ -42,6 +43,7 @@ export default function LoginPage() {
         localStorage.setItem("cm_refresh_token", data.data.refresh_token);
       }
       localStorage.setItem("user", JSON.stringify(data.data.user));
+      localStorage.setItem("cm_user", JSON.stringify(data.data.user));
       const role = data.data.user.role;
       if (role === "ADMIN") {
         // 어드민 패널이 별도 'token' key 를 쓰므로 동기화만 해두고, 리디렉션은 보호자 대시보드
@@ -186,7 +188,12 @@ export default function LoginPage() {
                   setError("NEXT_PUBLIC_KAKAO_CLIENT_ID 환경변수가 설정되지 않았습니다.");
                   return;
                 }
-                const url = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=account_email,profile_nickname,phone_number`;
+                // OAuth state CSRF 방어 — crypto 기반 랜덤
+                const arr = new Uint8Array(16);
+                crypto.getRandomValues(arr);
+                const state = Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
+                sessionStorage.setItem('kakao_oauth_state', state);
+                const url = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=account_email,profile_nickname&state=${state}`;
                 window.location.href = url;
               }}
               className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl font-medium transition-colors text-sm hover:opacity-90"
@@ -207,7 +214,10 @@ export default function LoginPage() {
                   setError("NEXT_PUBLIC_NAVER_CLIENT_ID 환경변수가 설정되지 않았습니다.");
                   return;
                 }
-                const state = Math.random().toString(36).slice(2);
+                // OAuth state CSRF 방어 — crypto 기반 랜덤 (Math.random 은 예측 가능)
+                const arr = new Uint8Array(16);
+                crypto.getRandomValues(arr);
+                const state = Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
                 sessionStorage.setItem("naver_oauth_state", state);
                 const url = `https://nid.naver.com/oauth2.0/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
                 window.location.href = url;

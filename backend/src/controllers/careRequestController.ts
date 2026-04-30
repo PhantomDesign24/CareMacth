@@ -52,6 +52,11 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
       medicalActAgreed,
       dailyRate,
       hourlyRate,
+      // 신규
+      relationToPatient,
+      preferredServices,
+      preferredWageType,
+      preferredWageAmount,
     } = req.body;
 
     // 환자가 본인 소유인지 확인
@@ -136,38 +141,83 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
       throw new AppError('시급은 0 이상이어야 합니다.', 400);
     }
 
-    const careRequest = await prisma.careRequest.create({
-      data: {
-        guardianId: guardian.id,
-        patientId,
-        careType: resolvedCareType as any,
-        scheduleType: resolvedScheduleType as any,
-        location: resolvedLocation as any,
-        hospitalName,
-        address,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
-        region: req.body.region || (Array.isArray(req.body.regions) && req.body.regions[0]) || null,
-        regions: Array.isArray(req.body.regions) ? req.body.regions : (req.body.region ? [req.body.region] : []),
-        startDate: new Date(startDate),
-        endDate: endDate
-          ? new Date(endDate)
-          : durationDays
-            ? new Date(new Date(startDate).getTime() + parseInt(durationDays) * 24 * 60 * 60 * 1000)
-            : null,
-        durationDays: durationDays ? parseInt(durationDays) : null,
-        preferredGender: resolvedPreferredGender,
-        preferredNationality,
-        specialRequirements,
-        medicalActAgreed: true,
-        medicalActAgreedAt: new Date(),
-        dailyRate: dailyRate ? parseInt(dailyRate) : null,
-        hourlyRate: hourlyRate ? parseInt(hourlyRate) : null,
-      },
-      include: {
-        patient: true,
-      },
-    });
+    // 신규 필드 검증/정규화
+    const VALID_WAGE_TYPES = ['MONTHLY_24H', 'MONTHLY_12H', 'MONTHLY_1H'];
+    const VALID_PREFERRED_SERVICES = ['EXERCISE', 'COMPANION', 'TIDY', 'MEDICATION'];
+    let resolvedWageType: string | null = null;
+    if (preferredWageType) {
+      if (!VALID_WAGE_TYPES.includes(preferredWageType)) {
+        throw new AppError('희망 급여 형태가 올바르지 않습니다.', 400);
+      }
+      resolvedWageType = preferredWageType;
+    }
+    let resolvedWageAmount: number | null = null;
+    if (preferredWageAmount !== undefined && preferredWageAmount !== null && preferredWageAmount !== '') {
+      const n = Number(preferredWageAmount);
+      if (!Number.isFinite(n) || n < 0) {
+        throw new AppError('희망 급여 금액이 올바르지 않습니다.', 400);
+      }
+      resolvedWageAmount = Math.floor(n);
+    }
+    const resolvedPreferredServices = Array.isArray(preferredServices)
+      ? preferredServices.filter((s) => VALID_PREFERRED_SERVICES.includes(s))
+      : [];
+
+    let careRequest;
+    try {
+      careRequest = await prisma.careRequest.create({
+        data: {
+          guardianId: guardian.id,
+          patientId,
+          careType: resolvedCareType as any,
+          scheduleType: resolvedScheduleType as any,
+          location: resolvedLocation as any,
+          hospitalName,
+          address,
+          latitude: latitude ? parseFloat(latitude) : null,
+          longitude: longitude ? parseFloat(longitude) : null,
+          region: req.body.region || (Array.isArray(req.body.regions) && req.body.regions[0]) || null,
+          regions: Array.isArray(req.body.regions) ? req.body.regions : (req.body.region ? [req.body.region] : []),
+          startDate: new Date(startDate),
+          endDate: endDate
+            ? new Date(endDate)
+            : durationDays
+              ? new Date(new Date(startDate).getTime() + parseInt(durationDays) * 24 * 60 * 60 * 1000)
+              : null,
+          durationDays: durationDays ? parseInt(durationDays) : null,
+          preferredGender: resolvedPreferredGender,
+          preferredNationality,
+          specialRequirements,
+          medicalActAgreed: true,
+          medicalActAgreedAt: new Date(),
+          dailyRate: dailyRate ? parseInt(dailyRate) : null,
+          hourlyRate: hourlyRate ? parseInt(hourlyRate) : null,
+          // 신규
+          relationToPatient: relationToPatient || null,
+          preferredServices: resolvedPreferredServices,
+          preferredWageType: resolvedWageType,
+          preferredWageAmount: resolvedWageAmount,
+        },
+        include: { patient: true },
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        // DB 부분 유니크 인덱스 위반 — 동시 요청 중 패자. 기존 활성 요청 재조회 후 10초 이내면 duplicate, 아니면 409.
+        const existing = await prisma.careRequest.findFirst({
+          where: { guardianId: guardian.id, patientId, status: { in: ['OPEN', 'MATCHED'] } },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (existing) {
+          const diff = Date.now() - new Date(existing.createdAt).getTime();
+          if (diff < 10 * 1000) {
+            return res.status(200).json({ success: true, data: existing, duplicate: true });
+          }
+          throw new AppError('해당 환자의 간병 요청이 이미 진행 중입니다.', 409);
+        }
+        throw new AppError('간병 요청 생성 중 충돌이 발생했습니다. 다시 시도해주세요.', 409);
+      }
+      throw e;
+    }
 
     res.status(201).json({
       success: true,
@@ -716,6 +766,17 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
       });
       if (ongoingContracts > 0) {
         throw new AppError('현재 진행 중인 계약이 있어 새로운 지원을 할 수 없습니다.', 400);
+      }
+      // 다른 요청에 PENDING/ACCEPTED 지원이 있으면 동시 지원 차단
+      const activeApplications = await prisma.careApplication.count({
+        where: {
+          caregiverId: caregiver.id,
+          status: { in: ['PENDING', 'ACCEPTED'] },
+          careRequestId: { not: careRequestId },
+        },
+      });
+      if (activeApplications > 0) {
+        throw new AppError('이미 다른 간병 요청에 지원 중입니다. 먼저 해당 지원을 정리해주세요.', 409);
       }
     }
 

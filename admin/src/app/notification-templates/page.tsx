@@ -13,7 +13,23 @@ export default function NotificationTemplatesPage() {
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<NotificationTemplate | null>(null);
-  const [editForm, setEditForm] = useState({ title: "", body: "", enabled: true });
+  const [editForm, setEditForm] = useState<{
+    title: string;
+    body: string;
+    enabled: boolean;
+    channels: string[];
+    targetRoles: string[];
+    alimtalkTemplateCode: string;
+    alimtalkButtonsJson: string;
+  }>({
+    title: "",
+    body: "",
+    enabled: true,
+    channels: [],
+    targetRoles: [],
+    alimtalkTemplateCode: "",
+    alimtalkButtonsJson: "",
+  });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
   const [filterType, setFilterType] = useState("");
@@ -40,8 +56,36 @@ export default function NotificationTemplatesPage() {
 
   const openEdit = (t: NotificationTemplate) => {
     setEditing(t);
-    setEditForm({ title: t.title, body: t.body, enabled: t.enabled });
+    setEditForm({
+      title: t.title,
+      body: t.body,
+      enabled: t.enabled,
+      channels: t.channels || [],
+      targetRoles: t.targetRoles || [],
+      alimtalkTemplateCode: t.alimtalkTemplateCode || "",
+      alimtalkButtonsJson: t.alimtalkButtonsJson || "",
+    });
   };
+
+  const toggleChannel = (channel: string) => {
+    setEditForm((prev) => ({
+      ...prev,
+      channels: prev.channels.includes(channel)
+        ? prev.channels.filter((c) => c !== channel)
+        : [...prev.channels, channel],
+    }));
+  };
+  const toggleRole = (role: string) => {
+    setEditForm((prev) => ({
+      ...prev,
+      targetRoles: prev.targetRoles.includes(role)
+        ? prev.targetRoles.filter((r) => r !== role)
+        : [...prev.targetRoles, role],
+    }));
+  };
+
+  const ROLE_LABELS: Record<string, string> = { GUARDIAN: '보호자', CAREGIVER: '간병인', ADMIN: '관리자', HOSPITAL: '병원' };
+  const CHANNEL_LABELS: Record<string, string> = { PUSH: '푸시', ALIMTALK: '알림톡', EMAIL: '이메일' };
 
   const saveEdit = async () => {
     if (!editing) return;
@@ -138,6 +182,35 @@ export default function NotificationTemplatesPage() {
                     <span className="inline-block px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-xs">{typeLabel(t.type)}</span>
                     {t.isSystem && (
                       <span className="inline-block px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-xs">시스템</span>
+                    )}
+                    {/* 채널 뱃지 */}
+                    {(t.channels || []).map((c) => (
+                      <span key={c} className={`inline-block px-2 py-0.5 rounded-full text-xs ${
+                        c === 'PUSH' ? 'bg-orange-50 text-orange-700' :
+                        c === 'ALIMTALK' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-purple-50 text-purple-700'
+                      }`}>
+                        {c === 'PUSH' ? '🔔 푸시' : c === 'ALIMTALK' ? '💬 알림톡' : '📧 이메일'}
+                      </span>
+                    ))}
+                    {(!t.channels || t.channels.length === 0) && (
+                      <span className="inline-block px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 text-xs">채널 없음</span>
+                    )}
+                    {/* 대상 역할 뱃지 + 양측발송 표시 */}
+                    {(t.targetRoles || []).map((r) => (
+                      <span key={r} className="inline-block px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs">
+                        👤 {ROLE_LABELS[r] || r}
+                      </span>
+                    ))}
+                    {(t.targetRoles?.length || 0) >= 2 && (
+                      <span className="inline-block px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">
+                        ⚠ 양측발송
+                      </span>
+                    )}
+                    {t.alimtalkTemplateCode && (
+                      <span className="inline-block px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700 text-xs font-mono">
+                        TPL: {t.alimtalkTemplateCode}
+                      </span>
                     )}
                     <code className="text-xs text-gray-400">{t.key}</code>
                   </div>
@@ -326,6 +399,84 @@ export default function NotificationTemplatesPage() {
                 />
                 <span className="text-sm text-gray-700">활성화</span>
               </label>
+
+              {/* 발송 채널 */}
+              <div className="border-t border-gray-200 pt-3">
+                <label className="block text-sm font-medium mb-2 text-gray-700">발송 채널</label>
+                <div className="flex flex-wrap gap-2">
+                  {(['PUSH', 'ALIMTALK', 'EMAIL'] as const).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => toggleChannel(c)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        editForm.channels.includes(c)
+                          ? 'bg-orange-500 text-white border-orange-500'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300'
+                      }`}
+                    >
+                      {c === 'PUSH' ? '🔔 푸시' : c === 'ALIMTALK' ? '💬 알림톡' : '📧 이메일'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">선택된 모든 채널로 발송. 비워두면 발송 안 됨.</p>
+              </div>
+
+              {/* 대상 역할 */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">
+                  발송 대상
+                  {editForm.targetRoles.length >= 2 && (
+                    <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">⚠ 양측발송</span>
+                  )}
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {(['GUARDIAN', 'CAREGIVER', 'ADMIN', 'HOSPITAL'] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => toggleRole(r)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        editForm.targetRoles.includes(r)
+                          ? 'bg-blue-500 text-white border-blue-500'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300'
+                      }`}
+                    >
+                      👤 {ROLE_LABELS[r]}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">2개 이상 선택 시 동일 알림이 양측에 발송됨.</p>
+              </div>
+
+              {/* 알림톡 전용 */}
+              {editForm.channels.includes('ALIMTALK') && (
+                <div className="border-t border-gray-200 pt-3 space-y-3 bg-yellow-50/30 -mx-1 px-3 pb-3 rounded-lg">
+                  <div className="text-xs font-semibold text-yellow-800">💬 알림톡 설정</div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1 text-gray-700">템플릿 코드 (TPL_CODE)</label>
+                    <input
+                      type="text"
+                      value={editForm.alimtalkTemplateCode}
+                      onChange={(e) => setEditForm({ ...editForm, alimtalkTemplateCode: e.target.value })}
+                      placeholder="예: TT_xxxxx (카카오 검수 통과 후 발급)"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">알리고에서 카카오 승인 후 발급된 템플릿 코드. 비어 있으면 알림톡 미발송.</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1 text-gray-700">버튼 JSON (선택)</label>
+                    <textarea
+                      value={editForm.alimtalkButtonsJson}
+                      onChange={(e) => setEditForm({ ...editForm, alimtalkButtonsJson: e.target.value })}
+                      rows={4}
+                      placeholder={`예:\n[\n  {"name":"전화 상담","linkType":"WL","linkMo":"tel:1588-0000","linkPc":"tel:1588-0000"},\n  {"name":"매칭 취소","linkType":"WL","linkMo":"https://cm.phantomdesign.kr/...","linkPc":"https://..."}\n]`}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono resize-none"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">최대 5개. linkType: WL(웹링크)/AL(앱링크)/AC(채널추가)/BC(상담톡전환). tel: 도 WL 로.</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2">

@@ -139,6 +139,7 @@ export default function ApplicantsPage() {
         dailyRate: data.dailyRate || 0,
         previousDailyRate: data.previousDailyRate || null,
         status: data.status || "",
+        regions: Array.isArray(data.regions) ? data.regions : [],
         applications: (data.applications || []).map((app: any) => ({
           id: app.id,
           status: app.status || "PENDING",
@@ -853,7 +854,8 @@ export default function ApplicantsPage() {
               <p className="text-sm text-gray-500 mb-4">
                 현재 지역 외에 추가로 알림을 받을 지역을 선택하세요. 해당 지역 간병인에게 공고가 재발송됩니다.
               </p>
-              <div className="flex flex-wrap gap-2 mb-5 max-h-48 overflow-y-auto">
+              <p className="text-xs text-gray-400 mb-2">파란색은 현재 지역(고정), 추가할 지역을 선택하세요.</p>
+              <div className="flex flex-wrap gap-2 mb-5 max-h-48 overflow-y-auto py-2 px-1">
                 {["서울","경기","인천","부산","대구","광주","대전","울산","세종","강원","충북","충남","전북","전남","경북","경남","제주"].map((region) => {
                   const already = (careRequest?.regions || []).includes(region);
                   const picked = expandRegions.includes(region);
@@ -869,13 +871,13 @@ export default function ApplicantsPage() {
                       }}
                       className={`px-3 py-1.5 rounded-full text-sm ${
                         already
-                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          ? "bg-blue-500 text-white opacity-70 cursor-not-allowed ring-2 ring-blue-300"
                           : picked
                           ? "bg-blue-500 text-white"
                           : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                       }`}
                     >
-                      {region}{already ? " (이미 선택됨)" : ""}
+                      {already ? `✓ ${region}` : region}
                     </button>
                   );
                 })}

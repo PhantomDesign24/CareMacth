@@ -143,6 +143,33 @@ export async function getDashboard() {
   return apiRequest<DashboardData>("/admin/dashboard");
 }
 
+// ─── Guardians ────────────────────────────────────────
+export interface Guardian {
+  id: string;
+  guardianId: string | null;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  authProvider: string;
+  registeredAt: string;
+  patientCount: number;
+  careRequestCount: number;
+  activeRequestCount: number;
+  totalSpent: number;
+}
+
+export async function getGuardians(params?: { search?: string; authProvider?: string; page?: number; limit?: number }) {
+  const res = await apiRequest<any>("/admin/guardians", {
+    params: params as Record<string, string | number>,
+  });
+  return res as PaginatedResponse<Guardian> & { guardians?: Guardian[] };
+}
+
+export async function getGuardianDetail(id: string) {
+  return apiRequest<any>(`/admin/guardians/${id}`);
+}
+
 // ─── Caregivers ───────────────────────────────────────
 export async function getCaregivers(params?: { status?: string; search?: string; page?: number; limit?: number; region?: string; minExp?: number; maxExp?: number; workStatus?: string }) {
   const res = await apiRequest<any>("/admin/caregivers", {
@@ -323,13 +350,21 @@ export interface NotificationTemplate {
   description?: string;
   enabled: boolean;
   isSystem: boolean;
+  // 채널/대상/알림톡 메타
+  channels: string[];      // PUSH | ALIMTALK | EMAIL
+  targetRoles: string[];   // GUARDIAN | CAREGIVER | ADMIN | HOSPITAL
+  alimtalkTemplateCode?: string | null;
+  alimtalkButtonsJson?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 export async function getNotificationTemplates() {
   return apiRequest<NotificationTemplate[]>("/admin/notification-templates");
 }
-export async function updateNotificationTemplate(id: string, data: Partial<Pick<NotificationTemplate, "title" | "body" | "enabled" | "description">>) {
+export async function updateNotificationTemplate(
+  id: string,
+  data: Partial<Pick<NotificationTemplate, "title" | "body" | "enabled" | "description" | "channels" | "targetRoles" | "alimtalkTemplateCode" | "alimtalkButtonsJson">>,
+) {
   return apiRequest<NotificationTemplate>(`/admin/notification-templates/${id}`, { method: "PUT", body: data });
 }
 export async function createNotificationTemplate(data: Omit<NotificationTemplate, "id" | "isSystem" | "enabled" | "createdAt" | "updatedAt">) {

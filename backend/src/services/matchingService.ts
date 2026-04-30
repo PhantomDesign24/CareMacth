@@ -149,13 +149,16 @@ export async function notifyCandidates(
 
     if (!caregiver) continue;
 
-    // 알림 생성
+    // 알림 생성 — 결제 전이라 주소 정확값 노출 금지. region 또는 시/구까지만 사용.
+    const region = (candidate.careRequest as any).region
+      || (Array.isArray((candidate.careRequest as any).regions) && (candidate.careRequest as any).regions[0])
+      || (candidate.careRequest.address ? candidate.careRequest.address.split(/\s+/).slice(0, 2).join(' ') : '인근');
     await prisma.notification.create({
       data: {
         userId: caregiver.userId,
         type: 'MATCHING',
         title: '새로운 간병 요청',
-        body: `${candidate.careRequest.address}에서 ${candidate.careRequest.scheduleType === 'FULL_TIME' ? '24시간' : '시간제'} 간병인을 찾고 있습니다.`,
+        body: `${region}에서 ${candidate.careRequest.scheduleType === 'FULL_TIME' ? '24시간' : '시간제'} 간병인을 찾고 있습니다.`,
         data: {
           careRequestId,
           matchScore: candidate.score,

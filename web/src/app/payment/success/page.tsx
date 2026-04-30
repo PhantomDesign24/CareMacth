@@ -25,11 +25,15 @@ function PaymentSuccessContent() {
 
     setAmount(Number(amt));
 
-    // 백엔드에 결제 승인 요청
+    // 백엔드에 결제 승인 요청 (서버가 orderId 기준 ledger 금액 재검증)
     paymentAPI
       .confirm({ paymentKey, orderId, amount: Number(amt) })
       .then(() => {
         setStatus("success");
+        // URL 정리 — paymentKey/amount 가 history/Referer/log 에 남지 않도록
+        try {
+          window.history.replaceState({}, '', '/payment/success');
+        } catch {}
       })
       .catch((err: any) => {
         const message = err?.response?.data?.message || "결제 승인 중 오류가 발생했습니다.";

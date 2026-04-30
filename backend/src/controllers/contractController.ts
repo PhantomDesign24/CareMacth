@@ -1,10 +1,13 @@
 import { Response, NextFunction } from 'express';
+import axios from 'axios';
 import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { logAdminAction } from '../services/auditLog';
-import { renderTemplate, sendFromTemplate } from '../services/notificationService';
+import { config } from '../config';
+import { calculateEarning } from '../utils/earning';
+import { renderTemplate, sendFromTemplate, sendToAdmins } from '../services/notificationService';
 
 // POST / - 계약 생성 (보호자가 간병인 선택 후)
 export const createContract = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -82,12 +85,35 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
 
     // 트랜잭션으로 계약 생성 + 상태 업데이트 (race condition 방지)
     const contract = await prisma.$transaction(async (tx) => {
+      // ── careRequest atomic claim — OPEN/MATCHING 상태에서만 MATCHED 로 1회 전이.
+      // (자동 만료 cron 또는 다른 선택 요청과 race 시 한쪽만 통과)
+      const reqClaim = await tx.careRequest.updateMany({
+        where: {
+          id: careRequestId,
+          guardianId: guardian.id,
+          status: { in: ['OPEN', 'MATCHING'] },
+        },
+        data: { status: 'MATCHED' },
+      });
+      if (reqClaim.count !== 1) {
+        throw new AppError('이미 매칭/취소된 간병 요청입니다.', 409);
+      }
+
       // 트랜잭션 내에서 중복 계약 확인 (취소된 계약은 허용 — 재매칭 가능)
       const existingContract = await tx.contract.findFirst({
         where: { careRequestId, status: { not: 'CANCELLED' } },
       });
       if (existingContract) {
         throw new AppError('이미 계약이 생성된 간병 요청입니다.', 400);
+      }
+
+      // ── 선택된 간병인이 실제로 PENDING 지원 상태인지 검증 (지원도 안 한 간병인 차단)
+      const acceptResult = await tx.careApplication.updateMany({
+        where: { careRequestId, caregiverId, status: 'PENDING' },
+        data: { status: 'ACCEPTED' },
+      });
+      if (acceptResult.count !== 1) {
+        throw new AppError('선택한 간병인의 지원 정보를 찾을 수 없습니다.', 400);
       }
 
       // 실제 진행 중 계약 확인 (workStatus 캐시 의존하지 않음)
@@ -135,14 +161,7 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
         },
       });
 
-      // 간병 요청 상태 업데이트
-      await tx.careRequest.update({
-        where: { id: careRequestId },
-        data: { status: 'MATCHED' },
-      });
-      // 간병인 workStatus 는 위에서 트랜지션 락으로 이미 WORKING 으로 전이 + totalMatches 증가됨
-
-      // 다른 지원 거절 처리
+      // 다른 지원 거절 처리 (선택된 간병인은 위에서 ACCEPTED 처리됨)
       await tx.careApplication.updateMany({
         where: {
           careRequestId,
@@ -150,12 +169,6 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
           status: 'PENDING',
         },
         data: { status: 'REJECTED' },
-      });
-
-      // 선택된 간병인 지원 수락
-      await tx.careApplication.updateMany({
-        where: { careRequestId, caregiverId },
-        data: { status: 'ACCEPTED' },
       });
 
       // Cancel all other pending applications for this caregiver
@@ -303,8 +316,8 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
       throw new AppError('계약을 찾을 수 없습니다.', 404);
     }
 
-    if (contract.status !== 'ACTIVE') {
-      throw new AppError('활성 상태의 계약만 취소할 수 있습니다.', 400);
+    if (contract.status !== 'ACTIVE' && contract.status !== 'EXTENDED') {
+      throw new AppError('활성/연장 상태의 계약만 취소할 수 있습니다.', 400);
     }
 
     // 접근 권한 확인 (보호자, 간병인, 관리자 모두 취소 가능)
@@ -337,35 +350,119 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
     const usedDays = Math.min(totalDays, Math.max(0, Math.ceil((now.getTime() - startDate.getTime()) / 86400000)));
     const remainingDays = Math.max(0, totalDays - usedDays);
 
-    // 사용한 일수에 대한 금액
+    // 간병인 귀속 금액 (간병인 정산 base, VAT 별도)
     const usedAmount = contract.dailyRate * usedDays;
-    // 환불 금액
-    const refundAmount = contract.dailyRate * remainingDays;
+    const proportionRemaining = totalDays > 0 ? remainingDays / totalDays : 0;
 
-    // 간병인 정산 금액 계산 (% 수수료 + 고정 수수료)
-    const platformFeeAmount = Math.round(usedAmount * (contract.platformFee / 100)) + (contract.platformFeeFixed || 0);
-    const taxAmount = Math.round(usedAmount * (contract.taxRate / 100));
-    const netEarning = usedAmount - platformFeeAmount - taxAmount;
+    // 간병인 정산: 단일 calculateEarning 으로 통일
+    const earningCalc = calculateEarning({
+      amount: usedAmount,
+      platformFeePercent: contract.platformFee,
+      platformFeeFixed: (contract as any).platformFeeFixed || 0,
+      taxRate: contract.taxRate,
+    });
+    const platformFeeAmount = earningCalc.platformFee;
+    const taxAmount = earningCalc.taxAmount;
+    const netEarning = earningCalc.netAmount;
 
-    let penaltyWarning: string | null = null;
+    // ── ATOMIC CLAIM ── (Toss API 호출 전에 contract 상태를 먼저 락으로 선점)
+    // 동시 두 취소 요청이 들어와도 한쪽만 통과 → 다른 쪽은 409. Toss cancel 중복 호출 차단.
+    const cancelledByLabel = isCaregiverCancel ? '간병인' : '보호자';
+    const claim = await prisma.contract.updateMany({
+      where: { id, status: { in: ['ACTIVE', 'EXTENDED'] } },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: now,
+        cancelledBy: req.user!.id,
+        cancellationReason: reason || `${cancelledByLabel} 요청에 의한 취소`,
+        cancellationPolicy: `총 ${totalDays}일 중 ${usedDays}일 사용`,
+      },
+    });
+    if (claim.count === 0) {
+      throw new AppError('이미 취소된 계약입니다.', 409);
+    }
+    // 여기서부터는 단일 winner 만 도달.
 
-    await prisma.$transaction(async (tx) => {
-      // 트랜지션 락: ACTIVE 인 경우에만 1회 CANCELLED 전이 (동시 취소 race 차단)
-      const cancelledByLabel = isCaregiverCancel ? '간병인' : '보호자';
-      const lock = await tx.contract.updateMany({
-        where: { id, status: 'ACTIVE' },
-        data: {
-          status: 'CANCELLED',
-          cancelledAt: now,
-          cancelledBy: req.user!.id,
-          cancellationReason: reason || `${cancelledByLabel} 요청에 의한 취소`,
-          cancellationPolicy: `총 ${totalDays}일 중 ${usedDays}일 사용. 사용금액: ${usedAmount}원, 환불금액: ${refundAmount}원`,
-        },
-      });
-      if (lock.count === 0) {
-        throw new AppError('이미 취소된 계약입니다.', 409);
+    // ── 활성 결제 전부 조회 (다중 결제: 일반/주차/연장 모두 포함)
+    const activePayments = await prisma.payment.findMany({
+      where: {
+        contractId: contract.id,
+        status: { in: ['ESCROW', 'COMPLETED', 'PARTIAL_REFUND'] },
+        // 이미 사용자 환불 요청 PENDING 또는 관리자 직접 환불 PROCESSING 락 잡힌 결제는 제외
+        // (PROCESSING 락 상태는 Toss cancel 진행 중일 수 있어 중복 환불 방지)
+        OR: [
+          { refundRequestStatus: null },
+          { refundRequestStatus: { notIn: ['PENDING', 'PROCESSING'] } },
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // 결제별 환불 계획 + Toss cancel 시도 (외부 API)
+    type RefundPlan = {
+      paymentId: string;
+      cashRefund: number;
+      pointsRefund: number;
+      method: string;
+      tossSuccess: boolean;
+      manualNeeded: boolean;
+      tossError?: string;
+    };
+    const plans: RefundPlan[] = [];
+    for (const p of activePayments) {
+      const remainingPayable = Math.max(0, p.totalAmount - (p.refundAmount || 0));
+      const grossRefund = Math.round(p.totalAmount * proportionRemaining);
+      const cashRefund = Math.min(grossRefund, remainingPayable);
+      const pointsRefund = Math.round((p.pointsUsed || 0) * proportionRemaining);
+
+      const plan: RefundPlan = {
+        paymentId: p.id,
+        cashRefund,
+        pointsRefund,
+        method: p.method,
+        tossSuccess: false,
+        manualNeeded: false,
+      };
+
+      if (cashRefund > 0) {
+        if (p.method === 'CARD' && p.tossPaymentKey) {
+          try {
+            const secretKey = config.toss.secretKey;
+            const encodedKey = Buffer.from(`${secretKey}:`).toString('base64');
+            await axios.post(
+              `https://api.tosspayments.com/v1/payments/${p.tossPaymentKey}/cancel`,
+              { cancelReason: reason || '계약 취소에 의한 일할 환불', cancelAmount: cashRefund },
+              {
+                headers: {
+                  Authorization: `Basic ${encodedKey}`,
+                  'Content-Type': 'application/json',
+                },
+              },
+            );
+            plan.tossSuccess = true;
+          } catch (tossErr: any) {
+            plan.tossError = tossErr?.response?.data?.message || '토스 환불 실패';
+            plan.manualNeeded = true;
+          }
+        } else {
+          // BANK_TRANSFER (가상계좌 환불은 통장정보 필요), DIRECT, tossPaymentKey 없음
+          // → 자동 환불 불가, 관리자 수동 처리 큐로 등록
+          plan.manualNeeded = true;
+        }
       }
+      plans.push(plan);
+    }
 
+    // ── DB finalize 트랜잭션 (Toss 결과 반영 + 부수 효과)
+    // contract.status 는 이미 CANCELLED 로 claim 됐고 Toss 환불 일부 성공한 상태 — DB 동기화 실패시 관리자 reconcile.
+    let penaltyWarning: string | null = null;
+    let totalCashRefundedNow = 0;
+    let totalPointsRefundedNow = 0;
+    let manualPendingCount = 0;
+    let finalizeFailed = false;
+
+    try {
+    await prisma.$transaction(async (tx) => {
       // 간병 요청 상태 업데이트
       await tx.careRequest.update({
         where: { id: contract.careRequestId },
@@ -373,13 +470,12 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
       });
 
       // 해당 careRequest의 모든 CareApplication 상태 CANCELLED로 동기화
-      // (간병인이 "수락됨" 상태로 계속 보이던 문제 해결)
       await tx.careApplication.updateMany({
         where: { careRequestId: contract.careRequestId, status: { in: ['PENDING', 'ACCEPTED'] } },
         data: { status: 'CANCELLED' },
       });
 
-      // 해당 계약 관련 분쟁 자동 처리 (취소로 인한 분쟁 해결)
+      // 해당 계약 관련 분쟁 자동 처리
       await tx.dispute.updateMany({
         where: { contractId: id, status: { in: ['PENDING', 'PROCESSING'] } },
         data: { status: 'RESOLVED', resolution: '계약 취소로 처리됨', handledAt: new Date() },
@@ -411,7 +507,6 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
           },
         });
 
-        // 패널티 횟수 증가
         await tx.caregiver.update({
           where: { id: contract.caregiverId },
           data: {
@@ -423,7 +518,6 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
           where: { id: contract.caregiverId },
         });
 
-        // 3회 이상 취소 시 활동 정지
         if (updatedCaregiver && updatedCaregiver.penaltyCount >= 3) {
           await tx.caregiver.update({
             where: { id: contract.caregiverId },
@@ -431,18 +525,15 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
           });
           penaltyWarning = '취소 3회 이상으로 활동이 정지되었습니다.';
         }
-
-        // 알림은 트랜잭션 밖에서 sendFromTemplate 호출 (푸시까지 발송)
       }
 
-      // ── 부분 정산: 기존 미정산 Earning 재조정 (DIRECT 결제는 생성 시 full amount로 기록됨)
+      // ── 부분 정산: 기존 미정산 Earning 재조정
       const existingEarnings = await tx.earning.findMany({
         where: { contractId: contract.id, isPaid: false },
         orderBy: { createdAt: 'asc' },
       });
       if (existingEarnings.length > 0) {
         if (usedDays > 0) {
-          // 첫 Earning을 usedAmount로 재조정, 나머지는 정리
           await tx.earning.update({
             where: { id: existingEarnings[0].id },
             data: {
@@ -462,7 +553,6 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
             });
           }
         } else {
-          // 사용일 0 → 미정산 Earning 전부 제거
           await tx.earning.deleteMany({
             where: { contractId: contract.id, isPaid: false },
           });
@@ -480,37 +570,151 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
         });
       }
 
-      // ── 자동 환불 규칙: Payment 상태를 정확히 반영 (DIRECT 포함 모든 방법)
-      const originalPayment = await tx.payment.findFirst({
-        where: {
-          contractId: contract.id,
-          status: { in: ['COMPLETED', 'ESCROW'] },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (originalPayment) {
-        let newStatus: 'COMPLETED' | 'PARTIAL_REFUND' | 'REFUNDED' = originalPayment.status as any;
-        if (refundAmount <= 0) {
-          // 사용일수로 전액 소진 → 상태 유지 (COMPLETED)
-          newStatus = originalPayment.status === 'ESCROW' ? 'COMPLETED' : (originalPayment.status as any);
-        } else if (refundAmount >= originalPayment.totalAmount) {
-          newStatus = 'REFUNDED';
-        } else {
-          newStatus = 'PARTIAL_REFUND';
-        }
-        await tx.payment.update({
-          where: { id: originalPayment.id },
-          data: {
-            status: newStatus,
-            ...(refundAmount > 0 && {
+      // ── 결제별 환불 처리
+      for (const plan of plans) {
+        const original = activePayments.find((p) => p.id === plan.paymentId);
+        if (!original) continue;
+
+        if (plan.tossSuccess && plan.cashRefund > 0) {
+          // Toss 환불 성공 → DB 반영 (누적 환불액)
+          const existingRefunded = original.refundAmount || 0;
+          const totalRefundedAfter = existingRefunded + plan.cashRefund;
+          const newStatus = totalRefundedAfter >= original.totalAmount ? 'REFUNDED' : 'PARTIAL_REFUND';
+          await tx.payment.update({
+            where: { id: original.id },
+            data: {
+              status: newStatus,
               refundedAt: now,
-              refundAmount,
+              refundAmount: totalRefundedAfter,
               refundReason: reason || '계약 취소에 의한 일할 환불',
-            }),
-          },
-        });
+            },
+          });
+          // 포인트 delta 복구 (목표 누적 - 이미 복구된 추정치)
+          if ((original.pointsUsed || 0) > 0) {
+            const totalAmt = Math.max(1, original.totalAmount);
+            const targetCumulativePoints = Math.round(((original.pointsUsed || 0) * totalRefundedAfter) / totalAmt);
+            const alreadyRestoredEstimate = Math.round(((original.pointsUsed || 0) * existingRefunded) / totalAmt);
+            const pointsDelta = Math.max(0, targetCumulativePoints - alreadyRestoredEstimate);
+            if (pointsDelta > 0) {
+              await tx.user.update({
+                where: { id: contract.guardian.userId },
+                data: { points: { increment: pointsDelta } },
+              });
+              totalPointsRefundedNow += pointsDelta;
+            }
+          }
+          totalCashRefundedNow += plan.cashRefund;
+        } else if (plan.manualNeeded && plan.cashRefund > 0) {
+          // 자동 환불 불가 → 관리자 환불 요청 큐로 등록 (Payment.status 미변경)
+          await tx.payment.update({
+            where: { id: original.id },
+            data: {
+              refundRequestStatus: 'PENDING',
+              refundRequestedAt: now,
+              refundRequestedBy: req.user!.id,
+              refundRequestReason: `계약 취소(자동 환불 불가${plan.tossError ? `: ${plan.tossError}` : ''}): ${reason}`,
+              refundRequestAmount: plan.cashRefund,
+            },
+          });
+          manualPendingCount += 1;
+        } else if (plan.cashRefund <= 0 && plan.pointsRefund > 0) {
+          // 전액 포인트 결제(totalAmount=0) 등의 케이스: 현금 환불은 없지만 포인트는 비례 복구해야 함.
+          const existingRefunded = original.refundAmount || 0;
+          const totalAmt = Math.max(1, original.totalAmount || (original.pointsUsed || 0));
+          const targetCumulativePoints = Math.round(((original.pointsUsed || 0) * (existingRefunded + plan.cashRefund)) / totalAmt);
+          // totalAmount=0 이면 위 식이 0 — 비례식으로 못 잡으므로 proportionRemaining 직접 적용
+          const fallbackPoints = original.totalAmount === 0
+            ? Math.round((original.pointsUsed || 0) * proportionRemaining)
+            : 0;
+          const targetPoints = Math.max(targetCumulativePoints, fallbackPoints);
+          const alreadyRestoredEstimate = original.totalAmount > 0
+            ? Math.round(((original.pointsUsed || 0) * existingRefunded) / totalAmt)
+            : 0;
+          const pointsDelta = Math.max(0, targetPoints - alreadyRestoredEstimate);
+          if (pointsDelta > 0) {
+            await tx.user.update({
+              where: { id: contract.guardian.userId },
+              data: { points: { increment: pointsDelta } },
+            });
+            totalPointsRefundedNow += pointsDelta;
+          }
+          // ESCROW 정리 (필요 시)
+          if (original.status === 'ESCROW') {
+            await tx.payment.update({
+              where: { id: original.id },
+              data: { status: 'COMPLETED' },
+            });
+          }
+        } else if (plan.cashRefund <= 0 && original.status === 'ESCROW') {
+          // 사용일수로 전액 소진 → ESCROW → COMPLETED 정리
+          await tx.payment.update({
+            where: { id: original.id },
+            data: { status: 'COMPLETED' },
+          });
+        }
       }
     });
+
+    } catch (finalizeErr: any) {
+      // ATOMIC CLAIM 으로 contract 는 이미 CANCELLED, Toss 환불도 일부 성공했을 수 있음.
+      // DB finalize 실패 → 관리자 즉시 알림 + cancellationPolicy 에 sync 실패 표시 (best-effort).
+      finalizeFailed = true;
+      console.error('[CRITICAL] cancelContract finalize 실패. contractId=', id, finalizeErr);
+      try {
+        await prisma.contract.update({
+          where: { id },
+          data: {
+            cancellationPolicy: `[FINALIZE_FAILED] 총 ${totalDays}일 중 ${usedDays}일 사용 — DB 동기화 실패. 수동 처리 필요.`,
+          },
+        });
+      } catch {}
+      // plans 전체를 구조화해서 reconcile 지시로 통합 (manualNeeded 알림은 별도 발송 X)
+      await sendToAdmins({
+        key: 'CONTRACT_CANCEL_FINALIZE_FAILED_ADMIN',
+        vars: {
+          contractId: id,
+          message: finalizeErr?.message || 'unknown',
+          tossSucceededCount: String(plans.filter((p) => p.tossSuccess).length),
+          manualNeededCount: String(plans.filter((p) => p.manualNeeded).length),
+        },
+        data: {
+          contractId: id,
+          manualReconcile: true,
+          plans: plans.map((p) => ({
+            paymentId: p.paymentId,
+            method: p.method,
+            cashRefund: p.cashRefund,
+            pointsRefund: p.pointsRefund,
+            tossSuccess: p.tossSuccess,
+            manualNeeded: p.manualNeeded,
+            tossError: p.tossError,
+          })),
+        } as any,
+      }).catch(() => {});
+    }
+
+    // ── 트랜잭션 외부: 수동 환불 필요 결제는 관리자에게 알림 (finalize 실패 시 skip)
+    if (!finalizeFailed) {
+      for (const plan of plans) {
+        if (plan.manualNeeded && plan.cashRefund > 0) {
+          await sendToAdmins({
+            key: 'CONTRACT_CANCEL_MANUAL_REFUND_ADMIN',
+            vars: {
+              contractId: id,
+              paymentId: plan.paymentId,
+              amount: plan.cashRefund.toLocaleString(),
+              method: plan.method,
+              reason: plan.tossError || `${plan.method} 자동 환불 미지원`,
+            },
+            data: { contractId: id, paymentId: plan.paymentId, manualRefund: true },
+          }).catch(() => {});
+        }
+      }
+    }
+
+    // 응답용 변수 동기화
+    const refundAmount = totalCashRefundedNow;
+    const pointsRefund = totalPointsRefundedNow;
 
     // 트랜잭션 완료 후 템플릿 기반 푸시 발송
     if (isCaregiverCancel) {
@@ -555,13 +759,18 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
         remainingDays,
         usedAmount,
         refundAmount,
+        pointsRefund,
+        manualPendingCount,
+        finalizeFailed,
         netEarning,
         cancelledBy: isCaregiverCancel ? 'CAREGIVER' : 'GUARDIAN',
         penaltyWarning,
       },
-      message: isCaregiverCancel
-        ? `계약이 취소되었습니다. 패널티가 부과되었습니다.`
-        : `계약이 취소되었습니다. ${usedDays}일 사용, ${refundAmount.toLocaleString()}원 환불 예정`,
+      message: finalizeFailed
+        ? '계약은 취소됐지만 후속 처리 중 오류가 발생했습니다. 관리자가 수동 동기화 합니다.'
+        : (isCaregiverCancel
+            ? `계약이 취소되었습니다. 패널티가 부과되었습니다.`
+            : `계약이 취소되었습니다. ${usedDays}일 사용, ${refundAmount.toLocaleString()}원 환불${pointsRefund > 0 ? ` + ${pointsRefund.toLocaleString()}P 복구` : ''}${manualPendingCount > 0 ? ` (관리자 수동 처리 ${manualPendingCount}건 대기)` : ' 예정'}`),
     });
   } catch (error) {
     next(error);

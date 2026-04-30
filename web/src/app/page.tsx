@@ -99,6 +99,7 @@ function HeroSection() {
   const router = useRouter();
 
   // 비로그인 상태면 회원가입으로, 로그인 상태면 역할 체크 후 목적 페이지
+  // 역할이 다를 때는 alert 대신 자동 라우팅 (간병 신청 ↔ 일감 찾기)
   const handleAuthRedirect = (target: string, role?: string) => {
     if (typeof window === "undefined") return;
     const token = localStorage.getItem("cm_access_token");
@@ -110,14 +111,14 @@ function HeroSection() {
       const userStr = localStorage.getItem("user");
       const user = userStr ? JSON.parse(userStr) : null;
       const userRole = user?.role;
-      // 간병 신청은 보호자/병원만
-      if (target === "/care-request" && userRole && !["GUARDIAN", "HOSPITAL", "ADMIN"].includes(userRole)) {
-        alert("간병 신청은 보호자 또는 병원 회원만 가능합니다.");
+      // 간병 신청: 보호자/병원/관리자 → /care-request, 간병인 → /find-work 로 자동 우회
+      if (target === "/care-request" && userRole === "CAREGIVER") {
+        router.push("/find-work");
         return;
       }
-      // 간병 일감 찾기는 간병인/관리자만
-      if (target === "/find-work" && userRole && !["CAREGIVER", "ADMIN"].includes(userRole)) {
-        alert("간병 일감 찾기는 간병인 회원만 가능합니다.");
+      // 간병 일감 찾기: 간병인/관리자 → /find-work, 보호자/병원 → /care-request 로 자동 우회
+      if (target === "/find-work" && (userRole === "GUARDIAN" || userRole === "HOSPITAL")) {
+        router.push("/care-request");
         return;
       }
     } catch {}

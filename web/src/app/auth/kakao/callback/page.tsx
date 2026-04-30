@@ -12,6 +12,7 @@ function KakaoCallbackInner() {
   useEffect(() => {
     const run = async () => {
       const code = params.get("code");
+      const state = params.get("state");
       const errParam = params.get("error");
       if (errParam) {
         setError(`카카오 로그인이 취소되었거나 실패했습니다. (${errParam})`);
@@ -21,6 +22,14 @@ function KakaoCallbackInner() {
         setError("인가 코드가 없습니다.");
         return;
       }
+
+      // OAuth state strict 검증 — 저장값/콜백값 둘 다 필수, 불일치 시 실패
+      const savedState = typeof window !== 'undefined' ? sessionStorage.getItem('kakao_oauth_state') : null;
+      if (!savedState || !state || savedState !== state) {
+        setError('보안 검증(state)에 실패했습니다. 다시 시도해주세요.');
+        return;
+      }
+      sessionStorage.removeItem('kakao_oauth_state');
 
       try {
         const redirectUri = `${window.location.origin}/auth/kakao/callback`;
@@ -43,6 +52,7 @@ function KakaoCallbackInner() {
             localStorage.setItem("cm_refresh_token", data.data.refresh_token);
           }
           localStorage.setItem("user", JSON.stringify(data.data.user));
+          localStorage.setItem("cm_user", JSON.stringify(data.data.user));
           const role = data.data.user.role;
           if (role === "GUARDIAN" || role === "ADMIN") {
             router.replace("/dashboard/guardian");
@@ -55,15 +65,19 @@ function KakaoCallbackInner() {
         }
 
         // 신규 사용자 → 가입 페이지로 프리필하여 이동
+        // signupToken 은 URL 노출(history/Referer/log) 방지를 위해 sessionStorage 로만 전달
         if (data.data.isNew) {
-          const qs = new URLSearchParams({
-            social: "kakao",
-            socialId: data.data.socialId || "",
-            email: data.data.email || "",
-            name: data.data.name || "",
-            phone: data.data.phone || "",
-          });
-          router.replace(`/auth/register?${qs.toString()}`);
+          try {
+            sessionStorage.setItem('cm_signup_payload', JSON.stringify({
+              provider: 'kakao',
+              signupToken: data.data.signupToken || '',
+              email: data.data.email || '',
+              name: data.data.name || '',
+              phone: data.data.phone || '',
+              ts: Date.now(),
+            }));
+          } catch {}
+          router.replace('/auth/register?social=kakao');
           return;
         }
 

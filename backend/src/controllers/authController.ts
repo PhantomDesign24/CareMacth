@@ -9,7 +9,7 @@ import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { generateReferralCode } from '../utils/generateCode';
 import { sendEmail, emailPasswordReset } from '../services/emailService';
-import { sendToAdmins } from '../services/notificationService';
+import { sendToAdmins, sendFromTemplate } from '../services/notificationService';
 
 const generateToken = (user: { id: string; email: string; role: string; tokenVersion?: number }) => {
   return jwt.sign(
@@ -33,6 +33,42 @@ const tokenPair = (user: { id: string; email: string; role: string; tokenVersion
   return { token: access_token, access_token, refresh_token };
 };
 
+// 소셜 가입 완료용 단기 JWT (5분) — 콜백 → register → /social/complete 사이 트러스트 보장
+type SocialSignupPayload = {
+  type: 'social_signup';
+  jti: string;
+  provider: 'KAKAO' | 'NAVER';
+  socialId: string;
+  email?: string;
+  name?: string;
+  phone?: string;
+};
+// 1회용 토큰 보장: 사용된 jti는 만료시간(5분) 동안 메모리 보관 후 자동 정리
+const usedSignupJtis = new Map<string, number>();
+const consumeSignupJti = (jti: string) => {
+  const now = Date.now();
+  // GC: 만료된 jti 제거
+  for (const [k, exp] of usedSignupJtis) {
+    if (exp < now) usedSignupJtis.delete(k);
+  }
+  if (usedSignupJtis.has(jti)) {
+    throw new AppError('이미 사용된 가입 토큰입니다. 다시 로그인해주세요.', 401);
+  }
+  usedSignupJtis.set(jti, now + 6 * 60 * 1000);
+};
+
+const issueSocialSignupToken = (payload: Omit<SocialSignupPayload, 'type' | 'jti'>) => {
+  const jti = require('crypto').randomBytes(16).toString('hex');
+  return jwt.sign({ type: 'social_signup', jti, ...payload }, config.jwt.secret, { expiresIn: '5m' });
+};
+const verifySocialSignupToken = (token: string): SocialSignupPayload => {
+  const decoded = jwt.verify(token, config.jwt.secret) as any;
+  if (decoded.type !== 'social_signup' || !decoded.jti) {
+    throw new AppError('유효하지 않은 가입 토큰입니다.', 400);
+  }
+  return decoded as SocialSignupPayload;
+};
+
 // 일반 회원가입
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -41,11 +77,15 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { email, password, name, phone, role: rawRole, referredBy, careType } = req.body;
+    const { email, password, name, phone, role: rawRole, referredBy, agreeTerms, agreePrivacy } = req.body;
 
     // Normalize role: frontend may send lowercase "guardian"/"caregiver"/"hospital"
     const roleMap: Record<string, string> = { guardian: 'GUARDIAN', caregiver: 'CAREGIVER', hospital: 'HOSPITAL' };
     const role = roleMap[rawRole?.toLowerCase()] || rawRole?.toUpperCase() || rawRole;
+
+    if (agreeTerms !== true || agreePrivacy !== true) {
+      throw new AppError('이용약관 및 개인정보 처리방침에 동의해야 가입할 수 있습니다.', 400);
+    }
 
     const existingUser = await prisma.user.findFirst({
       where: { OR: [{ email }, { phone }] },
@@ -61,7 +101,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     const platformConfig = await prisma.platformConfig.findFirst();
     const referralPoints = platformConfig?.referralPoints || 10000;
 
-    // 추천인 처리 — 추천인과 신규 가입자 양쪽에 포인트 지급
+    // 추천인 검증 (포인트 지급은 트랜잭션 안에서)
     let referrerUserId: string | undefined;
     let welcomePoints = 0;
     if (referredBy) {
@@ -71,64 +111,74 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       if (referrer) {
         referrerUserId = referrer.id;
         welcomePoints = referralPoints;
-        // 추천인에게 포인트 지급
-        await prisma.user.update({
-          where: { id: referrer.id },
-          data: { points: { increment: referralPoints } },
-        });
       }
     }
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-        phone,
-        role,
-        referralCode,
-        referredBy: referrerUserId,
-        points: welcomePoints,
-        ...(role === 'GUARDIAN' && {
-          guardian: {
-            create: {},
+    // 간병인 부가 정보
+    const caregiverData = role === 'CAREGIVER' ? {
+      ...(req.body.birthDate && { birthDate: new Date(req.body.birthDate) }),
+      ...(req.body.gender && { gender: String(req.body.gender).toUpperCase() === 'F' ? 'F' : 'M' }),
+      ...(req.body.nationality && { nationality: String(req.body.nationality) }),
+      ...(req.body.experienceYears !== undefined && !isNaN(parseInt(req.body.experienceYears)) && {
+        experienceYears: parseInt(req.body.experienceYears),
+      }),
+      ...(Array.isArray(req.body.specialties) && { specialties: req.body.specialties.map(String) }),
+    } : {};
+
+    let user;
+    try {
+      user = await prisma.$transaction(async (tx) => {
+        if (referrerUserId && welcomePoints > 0) {
+          await tx.user.update({
+            where: { id: referrerUserId },
+            data: { points: { increment: welcomePoints } },
+          });
+        }
+        return tx.user.create({
+          data: {
+            email,
+            password: hashedPassword,
+            name,
+            phone,
+            role,
+            referralCode,
+            referredBy: referrerUserId,
+            points: welcomePoints,
+            ...(role === 'GUARDIAN' && {
+              guardian: { create: {} },
+            }),
+            ...(role === 'CAREGIVER' && {
+              caregiver: { create: caregiverData },
+            }),
+            ...(role === 'HOSPITAL' && {
+              guardian: { create: {} },
+              hospital: {
+                create: {
+                  name: req.body.hospitalName || name,
+                  address: req.body.address || '',
+                  businessNumber: req.body.businessNumber || null,
+                },
+              },
+            }),
           },
-        }),
-        ...(role === 'CAREGIVER' && {
-          caregiver: {
-            create: {},
+          include: {
+            guardian: role === 'GUARDIAN',
+            caregiver: role === 'CAREGIVER',
+            hospital: role === 'HOSPITAL',
           },
-        }),
-        ...(role === 'HOSPITAL' && {
-          // 병원도 간병 요청을 생성할 수 있도록 guardian 레코드 함께 생성
-          guardian: {
-            create: {},
-          },
-          hospital: {
-            create: {
-              name: req.body.hospitalName || name,
-              address: req.body.address || '',
-            },
-          },
-        }),
-      },
-      include: {
-        guardian: role === 'GUARDIAN',
-        caregiver: role === 'CAREGIVER',
-        hospital: role === 'HOSPITAL',
-      },
-    });
+        });
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        throw new AppError('이미 가입된 이메일 또는 전화번호입니다.', 409);
+      }
+      throw e;
+    }
 
     const tokens = tokenPair(user);
 
-    // 간병인 가입 시 관리자 전원에게 알림
-    if (role === 'CAREGIVER') {
-      await sendToAdmins({
-        key: 'CAREGIVER_SIGNUP_PENDING_ADMIN',
-        vars: { caregiverName: user.name },
-        data: { caregiverId: (user as any).caregiver?.id, userId: user.id },
-      }).catch(() => {});
-    }
+    // 가입 환영 푸시 (본인) + 간병인이면 관리자 알림 추가
+    await sendWelcomeNotification(user).catch(() => {});
 
     res.status(201).json({
       success: true,
@@ -138,6 +188,30 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     next(error);
   }
 };
+
+// 가입 환영 + 간병인 관리자 알림 — register / socialSignupComplete / kakao·naverAuth 공통 사용
+async function sendWelcomeNotification(user: { id: string; name: string; role: string; }) {
+  const isCaregiver = user.role === 'CAREGIVER';
+  await sendFromTemplate({
+    userId: user.id,
+    key: isCaregiver ? 'WELCOME_CAREGIVER' : 'WELCOME_GUARDIAN',
+    vars: { name: user.name },
+    fallbackTitle: isCaregiver ? '케어매치 간병인 가입 환영' : '케어매치에 오신 것을 환영합니다',
+    fallbackBody: isCaregiver
+      ? `${user.name}님, 가입을 환영합니다. 신분증·자격증·범죄이력 등록 후 관리자 승인이 완료되면 활동을 시작할 수 있습니다.`
+      : `${user.name}님, 가입을 환영합니다. 환자 정보를 등록하고 간병 요청을 올려보세요.`,
+    fallbackType: 'SYSTEM',
+    data: { userId: user.id },
+  }).catch(() => {});
+
+  if (isCaregiver) {
+    await sendToAdmins({
+      key: 'CAREGIVER_SIGNUP_PENDING_ADMIN',
+      vars: { caregiverName: user.name },
+      data: { userId: user.id },
+    }).catch(() => {});
+  }
+}
 
 // 로그인
 export const login = async (req: Request, res: Response, next: NextFunction) => {
@@ -236,10 +310,22 @@ export const kakaoAuth = async (req: Request, res: Response, next: NextFunction)
 
     if (!user) {
       if (!role) {
+        const signupToken = issueSocialSignupToken({
+          provider: 'KAKAO',
+          socialId: String(id),
+          email,
+          name,
+          phone,
+        });
         return res.json({
           success: true,
-          data: { isNew: true, socialId: String(id), email, name, phone },
+          data: { isNew: true, signupToken, socialId: String(id), email, name, phone },
         });
+      }
+
+      // role 화이트리스트 — ADMIN 자체 가입 차단
+      if (!['GUARDIAN', 'CAREGIVER', 'HOSPITAL'].includes(role)) {
+        throw new AppError('가입 유형이 올바르지 않습니다.', 400);
       }
 
       const referralCode = generateReferralCode();
@@ -254,6 +340,7 @@ export const kakaoAuth = async (req: Request, res: Response, next: NextFunction)
           referralCode,
           ...(role === 'GUARDIAN' && { guardian: { create: {} } }),
           ...(role === 'CAREGIVER' && { caregiver: { create: {} } }),
+          ...(role === 'HOSPITAL' && { guardian: { create: {} } }),
         },
         include: { guardian: true, caregiver: true },
       });
@@ -317,10 +404,22 @@ export const naverAuth = async (req: Request, res: Response, next: NextFunction)
 
     if (!user) {
       if (!role) {
+        const signupToken = issueSocialSignupToken({
+          provider: 'NAVER',
+          socialId: String(id),
+          email,
+          name,
+          phone: mobile,
+        });
         return res.json({
           success: true,
-          data: { isNew: true, socialId: String(id), email, name, phone: mobile },
+          data: { isNew: true, signupToken, socialId: String(id), email, name, phone: mobile },
         });
+      }
+
+      // role 화이트리스트 — ADMIN 자체 가입 차단
+      if (!['GUARDIAN', 'CAREGIVER', 'HOSPITAL'].includes(role)) {
+        throw new AppError('가입 유형이 올바르지 않습니다.', 400);
       }
 
       const referralCode = generateReferralCode();
@@ -335,6 +434,7 @@ export const naverAuth = async (req: Request, res: Response, next: NextFunction)
           referralCode,
           ...(role === 'GUARDIAN' && { guardian: { create: {} } }),
           ...(role === 'CAREGIVER' && { caregiver: { create: {} } }),
+          ...(role === 'HOSPITAL' && { guardian: { create: {} } }),
         },
         include: { guardian: true, caregiver: true },
       });
@@ -345,6 +445,148 @@ export const naverAuth = async (req: Request, res: Response, next: NextFunction)
     res.json({
       success: true,
       data: { user: { ...user, password: undefined }, ...tokens, isNew: false },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /auth/social/complete - 소셜 가입 마무리
+// 입력: { signupToken, role, name?, phone?, [caregiver fields...], referralCode? }
+// (signupToken 안의 socialId/provider 가 신뢰 기준 — 클라이언트가 임의로 변조해도 socialId 는 못 바꿈)
+export const socialSignupComplete = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const {
+      signupToken,
+      role: rawRole,
+      name: nameOverride,
+      phone: phoneOverride,
+      birthDate,
+      gender,
+      nationality,
+      experience,
+      certifications,
+      hospitalName,
+      hospitalAddress,
+      businessNumber,
+      referralCode: refCode,
+    } = req.body || {};
+
+    if (!signupToken) {
+      throw new AppError('가입 토큰이 필요합니다.', 400);
+    }
+    let payload: SocialSignupPayload;
+    try {
+      payload = verifySocialSignupToken(signupToken);
+    } catch {
+      throw new AppError('가입 토큰이 만료되었거나 유효하지 않습니다. 다시 로그인해주세요.', 401);
+    }
+    consumeSignupJti(payload.jti);
+
+    const roleMap: Record<string, string> = { guardian: 'GUARDIAN', caregiver: 'CAREGIVER', hospital: 'HOSPITAL' };
+    const role = roleMap[String(rawRole || '').toLowerCase()] || String(rawRole || '').toUpperCase();
+    if (!['GUARDIAN', 'CAREGIVER', 'HOSPITAL'].includes(role)) {
+      throw new AppError('가입 유형이 올바르지 않습니다.', 400);
+    }
+
+    // 동일 socialId+provider 사용자가 이미 있는지 재확인 (race 방지)
+    const existing = await prisma.user.findFirst({
+      where: { socialId: payload.socialId, authProvider: payload.provider },
+    });
+    if (existing) {
+      throw new AppError('이미 가입된 소셜 계정입니다. 로그인을 시도해주세요.', 409);
+    }
+
+    // 이메일/전화번호 충돌 체크
+    const finalEmail = payload.email || `${payload.provider.toLowerCase()}_${payload.socialId}@carematch.kr`;
+    const finalName = (nameOverride || payload.name || '').trim() || `${payload.provider} 사용자`;
+    const finalPhone = (phoneOverride || payload.phone || '').trim() || `${payload.provider.toLowerCase()}_${payload.socialId}`;
+    const conflict = await prisma.user.findFirst({
+      where: { OR: [{ email: finalEmail }, { phone: finalPhone }] },
+    });
+    if (conflict) {
+      throw new AppError('이미 동일 이메일 또는 전화번호로 가입된 계정이 있습니다.', 409);
+    }
+
+    const referralCode = generateReferralCode();
+    const genderMap: Record<string, string> = { male: 'M', female: 'F', '남성': 'M', '여성': 'F' };
+    const resolvedGender = gender ? (genderMap[String(gender).toLowerCase()] || gender) : null;
+
+    // 추천인 검증 — 포인트 지급은 트랜잭션 안에서 (user.create 성공 시에만)
+    const platformConfig = await prisma.platformConfig.findFirst();
+    const referralPoints = platformConfig?.referralPoints || 10000;
+    let referrerUserId: string | undefined;
+    let welcomePoints = 0;
+    if (refCode) {
+      const referrer = await prisma.user.findUnique({ where: { referralCode: refCode } });
+      if (referrer) {
+        referrerUserId = referrer.id;
+        welcomePoints = referralPoints;
+      }
+    }
+
+    let user;
+    try {
+      user = await prisma.$transaction(async (tx) => {
+        if (referrerUserId && welcomePoints > 0) {
+          await tx.user.update({
+            where: { id: referrerUserId },
+            data: { points: { increment: welcomePoints } },
+          });
+        }
+        return tx.user.create({
+          data: {
+            email: finalEmail,
+            name: finalName,
+            phone: finalPhone,
+            role: role as any,
+            authProvider: payload.provider,
+            socialId: payload.socialId,
+            referralCode,
+            referredBy: referrerUserId,
+            points: welcomePoints,
+            ...(role === 'GUARDIAN' && { guardian: { create: {} } }),
+            ...(role === 'CAREGIVER' && {
+              caregiver: {
+                create: {
+                  gender: resolvedGender,
+                  nationality: nationality || null,
+                  birthDate: birthDate ? new Date(birthDate) : null,
+                  experienceYears: experience ? parseInt(experience) : 0,
+                  specialties: Array.isArray(certifications) ? certifications : [],
+                },
+              },
+            }),
+            ...(role === 'HOSPITAL' && {
+              guardian: { create: {} },
+              hospital: {
+                create: {
+                  name: hospitalName || finalName,
+                  address: hospitalAddress || '-',
+                  businessNumber: businessNumber || null,
+                },
+              },
+            }),
+          },
+          include: { guardian: true, caregiver: true, hospital: true },
+        });
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        throw new AppError('이미 가입된 계정이 있습니다. 로그인을 시도해주세요.', 409);
+      }
+      throw e;
+    }
+
+    const tokens = tokenPair(user);
+    res.status(201).json({
+      success: true,
+      data: { user: { ...user, password: undefined }, ...tokens, isNew: true },
     });
   } catch (error) {
     next(error);
@@ -395,8 +637,9 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     if (!user || !user.isActive) {
       throw new AppError('유효하지 않은 사용자입니다.', 401);
     }
-    // tokenVersion 일치 확인 — 탈취·탈퇴 후 무효화된 토큰 거부
-    if (typeof payload.v === 'number' && payload.v !== user.tokenVersion) {
+    // tokenVersion 일치 확인 — 탈취·탈퇴 후 무효화된 토큰 거부.
+    // v 가 없는 옛 토큰은 신뢰할 수 없으므로 즉시 401.
+    if (typeof payload.v !== 'number' || payload.v !== user.tokenVersion) {
       throw new AppError('세션이 만료되었습니다. 다시 로그인해주세요.', 401);
     }
 
@@ -439,14 +682,18 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
     // 이메일 발송을 먼저 시도 — 성공해야 비밀번호 변경 (실패 시 사용자 잠김 방지)
+    let emailSent = false;
     try {
-      await sendEmail(
+      emailSent = await sendEmail(
         user.email,
         '[케어매치] 임시 비밀번호 안내',
         emailPasswordReset(user.name, tempPassword),
       );
     } catch (emailErr: any) {
-      console.error('[resetPassword] 이메일 발송 실패:', emailErr?.message || emailErr);
+      console.error('[resetPassword] 이메일 발송 예외:', emailErr?.message || emailErr);
+    }
+    if (!emailSent) {
+      // SMTP 미설정 / 발송 실패 — 비밀번호 변경하지 않음 (사용자 잠김 방지)
       throw new AppError(
         '이메일 발송에 실패했습니다. 잠시 후 다시 시도하거나 고객센터로 문의해주세요.',
         503,

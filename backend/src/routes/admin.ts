@@ -20,6 +20,15 @@ router.get('/audit-logs', adminController.getAuditLogs);
 // 간병인 관리
 router.get('/caregivers', adminController.getCaregivers);
 router.get('/caregivers/:id', adminController.getCaregiverDetail);
+
+// 보호자 관리
+router.get('/guardians', adminController.getGuardians);
+router.get('/guardians/:id', adminController.getGuardianDetail);
+router.put('/guardians/:id', [
+  body('name').optional().trim().isLength({ min: 1, max: 50 }),
+  body('email').optional().isEmail(),
+  body('phone').optional().trim().matches(/^(01[016789]-?\d{3,4}-?\d{4}|0\d{1,2}-?\d{3,4}-?\d{4})$/),
+], adminController.updateGuardian);
 router.put('/caregivers/:id/approve', adminController.approveCaregiver);
 router.put('/caregivers/:id/reject', adminController.rejectCaregiver);
 router.put('/caregivers/:id/blacklist', adminController.blacklistCaregiver);
@@ -124,7 +133,10 @@ router.post('/contracts/:contractId/force-complete', adminController.forceComple
 import * as paymentController from '../controllers/paymentController';
 router.get('/refund-requests', paymentController.getRefundRequests);
 router.post('/payments/:id/refund-approve', paymentController.approveRefundRequest);
-router.post('/payments/:id/refund-reject', paymentController.rejectRefundRequest);
+router.post('/payments/:id/refund-reject', [
+  body('reason').optional().trim().isLength({ max: 500 }).withMessage('사유는 500자 이내여야 합니다.'),
+], paymentController.rejectRefundRequest);
+router.post('/payments/:id/refund-offline-complete', paymentController.confirmOfflineRefund);
 
 // 플랫폼 설정
 router.get('/platform-config', adminController.getPlatformConfig);

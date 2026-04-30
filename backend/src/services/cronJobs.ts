@@ -113,21 +113,51 @@ export function setupCronJobs() {
     }
   });
 
-  // 매일 자정: 간병 종료 계약 상태 변경
+  // 매일 자정: 간병 종료 계약 상태 변경 + 간병인 workStatus 해제
   cron.schedule('0 0 * * *', async () => {
     console.log('[CRON] 계약 상태 업데이트...');
     try {
       const now = new Date();
 
-      const result = await prisma.contract.updateMany({
+      // 종료된 계약 조회 후 개별 처리 (간병인별 다른 활성 계약 여부 확인 필요)
+      const expiredContracts = await prisma.contract.findMany({
         where: {
           status: { in: ['ACTIVE', 'EXTENDED'] },
           endDate: { lt: now },
         },
-        data: { status: 'COMPLETED' },
+        select: { id: true, caregiverId: true },
       });
 
-      console.log(`[CRON] 완료 처리된 계약: ${result.count}건`);
+      let completed = 0;
+      const cgsToCheck = new Set<string>();
+      for (const c of expiredContracts) {
+        const claim = await prisma.contract.updateMany({
+          where: { id: c.id, status: { in: ['ACTIVE', 'EXTENDED'] } },
+          data: { status: 'COMPLETED' },
+        });
+        if (claim.count === 1) {
+          completed += 1;
+          cgsToCheck.add(c.caregiverId);
+        }
+      }
+
+      // 다른 활성 계약 없으면 workStatus AVAILABLE 로
+      for (const caregiverId of cgsToCheck) {
+        const stillActive = await prisma.contract.count({
+          where: {
+            caregiverId,
+            status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
+          },
+        });
+        if (stillActive === 0) {
+          await prisma.caregiver.update({
+            where: { id: caregiverId },
+            data: { workStatus: 'AVAILABLE' },
+          });
+        }
+      }
+
+      console.log(`[CRON] 완료 처리된 계약: ${completed}건, workStatus 해제: ${cgsToCheck.size}명`);
     } catch (error) {
       console.error('[CRON] 계약 상태 업데이트 오류:', error);
     }
@@ -225,12 +255,15 @@ export function setupCronJobs() {
   });
 
   // 매 2분: 5분 이상 PENDING 상태인 결제 자동 실패 처리 (토스 세션 만료 후처리)
+  // - tossPaymentKey 가 이미 클레임된 행은 건드리지 않음 (confirm 진행 중이거나 DB sync 실패 격리)
+  // - 트랜잭션으로 status=FAILED + 차감된 포인트 복구
   cron.schedule('*/2 * * * *', async () => {
     try {
       const cutoff = new Date(Date.now() - 5 * 60 * 1000);
       const expiredPayments = await prisma.payment.findMany({
         where: {
           status: 'PENDING',
+          tossPaymentKey: null,
           createdAt: { lt: cutoff },
         },
         include: {
@@ -238,24 +271,46 @@ export function setupCronJobs() {
         },
       });
 
-      if (expiredPayments.length > 0) {
-        await prisma.payment.updateMany({
-          where: { id: { in: expiredPayments.map((p) => p.id) } },
-          data: { status: 'FAILED' },
-        });
+      let processed = 0;
+      for (const p of expiredPayments) {
+        let claimedThisRun = false;
+        try {
+          await prisma.$transaction(async (tx) => {
+            // 트랜지션 락: 여전히 PENDING + tossPaymentKey null 인 경우에만 1회 FAILED
+            const lock = await tx.payment.updateMany({
+              where: { id: p.id, status: 'PENDING', tossPaymentKey: null },
+              data: { status: 'FAILED' },
+            });
+            if (lock.count === 0) return; // 이미 다른 경로에서 처리됨
+            // 차감된 포인트 복구
+            if (p.pointsUsed && p.pointsUsed > 0 && p.guardian?.userId) {
+              await tx.user.update({
+                where: { id: p.guardian.userId },
+                data: { points: { increment: p.pointsUsed } },
+              });
+            }
+            claimedThisRun = true;
+            processed += 1;
+          });
 
-        for (const p of expiredPayments) {
-          await sendToAdmins({
-            key: 'PAYMENT_AUTO_EXPIRED_ADMIN',
-            vars: {
-              guardianName: p.guardian?.user?.name || '알 수 없음',
-              amount: p.totalAmount.toLocaleString(),
-            },
-            data: { paymentId: p.id, guardianId: p.guardianId },
-          }).catch(() => {});
+          // cron 이 실제로 클레임한 경우에만 관리자 알림 (다른 경로가 먼저 처리한 건 알림 X)
+          if (claimedThisRun) {
+            await sendToAdmins({
+              key: 'PAYMENT_AUTO_EXPIRED_ADMIN',
+              vars: {
+                guardianName: p.guardian?.user?.name || '알 수 없음',
+                amount: p.totalAmount.toLocaleString(),
+              },
+              data: { paymentId: p.id, guardianId: p.guardianId },
+            }).catch(() => {});
+          }
+        } catch (e) {
+          console.error('[CRON] 단건 결제 만료 처리 실패 paymentId=', p.id, e);
         }
+      }
 
-        console.log(`[CRON] PENDING 결제 만료 처리: ${expiredPayments.length}건`);
+      if (processed > 0) {
+        console.log(`[CRON] PENDING 결제 만료 처리: ${processed}건`);
       }
     } catch (error) {
       console.error('[CRON] PENDING 결제 만료 오류:', error);
@@ -330,17 +385,19 @@ export function setupCronJobs() {
 
       if (stale.length === 0) return;
 
+      let processed = 0;
       for (const r of stale) {
-        await prisma.$transaction([
-          prisma.careRequest.update({
-            where: { id: r.id },
-            data: { status: 'CANCELLED' },
-          }),
-          prisma.careApplication.updateMany({
-            where: { careRequestId: r.id, status: 'PENDING' },
-            data: { status: 'CANCELLED' },
-          }),
-        ]);
+        // 전이 락: stale 조회 직후 보호자가 간병인 선택해 MATCHED 로 바뀐 행은 건너뜀.
+        const claim = await prisma.careRequest.updateMany({
+          where: { id: r.id, status: { in: ['OPEN', 'MATCHING'] }, createdAt: { lt: cutoff } },
+          data: { status: 'CANCELLED' },
+        });
+        if (claim.count !== 1) continue;
+        processed += 1;
+        await prisma.careApplication.updateMany({
+          where: { careRequestId: r.id, status: 'PENDING' },
+          data: { status: 'CANCELLED' },
+        });
 
         if (r.guardian?.user?.id) {
           await sendFromTemplate({
@@ -355,7 +412,9 @@ export function setupCronJobs() {
         }
       }
 
-      console.log(`[CRON] 주말/공휴일 자동 매칭 실패 처리: ${stale.length}건`);
+      if (processed > 0) {
+        console.log(`[CRON] 주말/공휴일 자동 매칭 실패 처리: ${processed}건`);
+      }
     } catch (error) {
       console.error('[CRON] 자동 매칭 실패 처리 오류:', error);
     }
@@ -382,11 +441,16 @@ export function setupCronJobs() {
       });
       if (stale.length === 0) return;
 
+      let expired = 0;
       for (const ext of stale) {
-        await prisma.contractExtension.update({
-          where: { id: ext.id },
+        // 트랜지션 락: PENDING_PAYMENT 인 경우에만 1회 EXPIRED 로 전이.
+        // (보호자 confirm/reject 와 race 시 한쪽만 통과 — count===1 일 때만 알림)
+        const lock = await prisma.contractExtension.updateMany({
+          where: { id: ext.id, status: 'PENDING_PAYMENT' },
           data: { status: 'EXPIRED', expiredAt: new Date() },
         });
+        if (lock.count !== 1) continue;
+        expired += 1;
 
         await sendFromTemplate({
           userId: ext.contract.guardian.userId,
@@ -401,7 +465,9 @@ export function setupCronJobs() {
           data: { contractId: ext.contractId, extensionId: ext.id, autoExpired: true },
         }).catch(() => {});
       }
-      console.log(`[CRON] 연장 결제 자동 만료: ${stale.length}건`);
+      if (expired > 0) {
+        console.log(`[CRON] 연장 결제 자동 만료: ${expired}건`);
+      }
     } catch (error) {
       console.error('[CRON] 연장 결제 만료 오류:', error);
     }
@@ -428,11 +494,15 @@ export function setupCronJobs() {
       });
       if (stale.length === 0) return;
 
+      let expired = 0;
       for (const ext of stale) {
-        await prisma.contractExtension.update({
-          where: { id: ext.id },
+        // 트랜지션 락: PENDING_CAREGIVER_APPROVAL 인 경우에만 1회 EXPIRED
+        const lock = await prisma.contractExtension.updateMany({
+          where: { id: ext.id, status: 'PENDING_CAREGIVER_APPROVAL' },
           data: { status: 'EXPIRED', expiredAt: new Date() },
         });
+        if (lock.count !== 1) continue;
+        expired += 1;
 
         // 보호자에게 만료 안내
         await sendFromTemplate({
@@ -448,7 +518,9 @@ export function setupCronJobs() {
           data: { contractId: ext.contractId, extensionId: ext.id, autoExpired: true },
         }).catch(() => {});
       }
-      console.log(`[CRON] 간병인 연장 수락 자동 만료: ${stale.length}건`);
+      if (expired > 0) {
+        console.log(`[CRON] 간병인 연장 수락 자동 만료: ${expired}건`);
+      }
     } catch (error) {
       console.error('[CRON] 간병인 연장 수락 만료 오류:', error);
     }

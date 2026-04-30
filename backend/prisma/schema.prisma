@@ -72,6 +72,7 @@ model User {
   disputesReceived Dispute[]  @relation("DisputeTarget")
   adminActions  AdminActionLog[] @relation("AdminActionLogs")
 
+  @@unique([authProvider, socialId])
   @@index([role])
   @@index([referralCode])
 }
@@ -209,7 +210,40 @@ model Patient {
   medicalNotes    String?        // 특이사항
   weight          Float?
   height          Float?
-  diagnosis       String?        // 진단명
+  diagnosis       String?        // 진단명 (레거시 단일)
+
+  // ── 신규: 다중 진단명 / 다중 감염성질환
+  diagnoses       String[]       @default([]) // 감염성/근골격계/내분비/뇌질환/눈·귀/소화/순환/암/외상/정신신경/증상/지방종·혈액/치매/피부/호흡 중 다중
+  infections      String[]       @default([]) // VRE/CRE/결핵/옴/독감/기타 중 다중
+
+  // ── 신규: 병실/등급/수술/치료
+  roomType                String? // 일반/중환자실/격리/응급실/폐쇄/기타
+  roomTypeEtc             String? // roomType 이 기타일 때 직접 입력
+  longTermCareGrade       String? // NONE/G1/G2/G3/G4/G5/COGNITIVE/UNKNOWN/APPLYING/INTERESTED
+  hasSurgery              Boolean? // 수술 여부
+  treatments              String[] @default([]) // 없음/재활/투석/기타 중 다중
+  treatmentsEtc           String?
+
+  // ── 신규: 환자 상태 (간병 난이도)
+  paralysisStatus         String? // NONE/FULL/HEMI
+  hygieneStatus           String? // SELF/TOILET_HELP/BED_HELP/FULL_HELP/ETC
+  hygieneStatusEtc        String?
+  mealStatus              String? // SELF/PREP_HELP/FEED_HELP/NASOGASTRIC/PEG/ETC
+  mealStatusEtc           String?
+  toiletStatus            String? // SELF/AFTER_CARE/URINAL/DIAPER/CATHETER/ETC
+  toiletStatusEtc         String?
+  exerciseStatus          String? // SELF/SUPPORT/CANE_WHEELCHAIR/POSITION_CHANGE/FULL_HELP/ETC
+  exerciseStatusEtc       String?
+  hasDelirium             Boolean?
+  hasBedsore              Boolean?
+  needsSuction            Boolean?
+  hasStoma                Boolean?
+
+  // ── 신규: 입원 사유 / 코로나 / 백신
+  hospitalizationReason   String? // DISEASE/TRAFFIC/INDUSTRIAL/GENERAL/ETC
+  hospitalizationReasonEtc String?
+  covidTestRequirement    String? // CONFIRM_NEEDED/TEST_NEEDED/QUESTIONNAIRE_ONLY/NONE
+  vaccineCheckRequirement String? // CONFIRM_NEEDED/NONE
 
   careRequests    CareRequest[]
 
@@ -266,16 +300,22 @@ model CareRequest {
   endDate             DateTime?
   durationDays        Int?
 
-  preferredGender     String?           // 선호 성별
+  preferredGender     String?           // 선호 성별 (M/F/ANY)
   preferredNationality String?          // 선호 국적
-  specialRequirements String?           // 특이사항
+  specialRequirements String?           // 특이사항 / 요청사항
+
+  // ── 신규: 신청인-환자 관계 / 희망 서비스 / 희망 급여 형태
+  relationToPatient    String?          // 본인/배우자/자녀/형제·자매/기타
+  preferredServices    String[] @default([]) // 운동보조(산책)/말벗/주변정리/투약보조 중 다중
+  preferredWageType    String?          // MONTHLY_24H / MONTHLY_12H / MONTHLY_1H
+  preferredWageAmount  Int?             // 보호자가 직접 입력한 금액 (원)
 
   // 의료행위 금지 동의
   medicalActAgreed    Boolean           @default(false)
   medicalActAgreedAt  DateTime?
 
-  dailyRate           Int?              // 일당 (원)
-  hourlyRate          Int?              // 시급 (원)
+  dailyRate           Int?              // 일당 (원) — 레거시
+  hourlyRate          Int?              // 시급 (원) — 레거시
 
   status              CareRequestStatus @default(OPEN)
 
@@ -512,6 +552,7 @@ model Payment {
 
 enum RefundRequestStatus {
   PENDING
+  PROCESSING  // 관리자 직접 환불 진행 중 락 (executeRefund 진행 중 다른 시도 차단)
   APPROVED
   REJECTED
 }
@@ -811,14 +852,15 @@ model Message {
 // ==========================================
 
 model Hospital {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  name      String
-  address   String
-  phone     String?
-  latitude  Float?
-  longitude Float?
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id])
+  name           String
+  address        String
+  phone          String?
+  businessNumber String?
+  latitude       Float?
+  longitude      Float?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -877,6 +919,15 @@ model NotificationTemplate {
   description String?           // 관리자 안내 문구
   enabled     Boolean  @default(true)
   isSystem    Boolean  @default(false) // 시스템 기본 템플릿 (삭제 불가)
+
+  // 발송 채널 — ["PUSH"], ["ALIMTALK"], ["PUSH","ALIMTALK"], ["EMAIL"] 등
+  channels    String[] @default([])
+  // 발송 대상 역할 — GUARDIAN/CAREGIVER/ADMIN/HOSPITAL 다중 가능 (양측발송 = 길이 2 이상)
+  targetRoles String[] @default([])
+  // 알림톡 전용
+  alimtalkTemplateCode String?  // 카카오 승인된 템플릿 코드 (TT_xxxxx)
+  alimtalkButtonsJson  String?  // 버튼 정의 JSON (전화/링크)
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -42,6 +42,17 @@ export async function sendEmail(
   }
 }
 
+// HTML 인젝션 방어 — 모든 사용자/환자/간병인 이름 등 변수는 escape 필수
+export function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // 공통 이메일 템플릿 (전문적 디자인)
 function baseTemplate(title: string, body: string): string {
   return `
@@ -73,10 +84,10 @@ export function emailMatchingConfirmed(patientName: string, caregiverName: strin
   return baseTemplate(
     '매칭이 확정되었습니다',
     `
-    <p><b>${patientName}</b> 환자의 간병인이 매칭되었습니다.</p>
+    <p><b>${escapeHtml(patientName)}</b> 환자의 간병인이 매칭되었습니다.</p>
     <ul style="padding-left:20px;color:#4A5568;">
-      <li>간병인: <b>${caregiverName}</b></li>
-      <li>간병 시작일: ${startDate.toLocaleDateString('ko-KR')}</li>
+      <li>간병인: <b>${escapeHtml(caregiverName)}</b></li>
+      <li>간병 시작일: ${escapeHtml(startDate.toLocaleDateString('ko-KR'))}</li>
     </ul>
     <p>앱에서 계약 내용과 결제를 진행해주세요.</p>
     `,
@@ -88,10 +99,10 @@ export function emailPaymentCompleted(patientName: string, amount: number) {
   return baseTemplate(
     '결제가 완료되었습니다',
     `
-    <p><b>${patientName}</b> 환자의 간병비 결제가 완료되었습니다.</p>
+    <p><b>${escapeHtml(patientName)}</b> 환자의 간병비 결제가 완료되었습니다.</p>
     <div style="padding:16px;background:#F7FAFC;border-radius:8px;margin:12px 0;">
       <div style="color:#4A5568;font-size:13px;">결제 금액</div>
-      <div style="font-size:22px;font-weight:700;color:#1E3A5F;margin-top:4px;">${amount.toLocaleString()}원</div>
+      <div style="font-size:22px;font-weight:700;color:#1E3A5F;margin-top:4px;">${escapeHtml(amount.toLocaleString())}원</div>
     </div>
     <p>앱 '결제 내역'에서 전자영수증을 다운로드 받으실 수 있습니다.</p>
     `,
@@ -101,9 +112,9 @@ export function emailPaymentCompleted(patientName: string, amount: number) {
 // 연장 리마인더
 export function emailExtensionReminder(patientName: string, daysLeft: number) {
   return baseTemplate(
-    `간병 종료 ${daysLeft}일 전 안내`,
+    `간병 종료 ${escapeHtml(String(daysLeft))}일 전 안내`,
     `
-    <p><b>${patientName}</b> 환자의 간병이 <b style="color:#D97706;">${daysLeft}일 후 종료</b>됩니다.</p>
+    <p><b>${escapeHtml(patientName)}</b> 환자의 간병이 <b style="color:#D97706;">${escapeHtml(String(daysLeft))}일 후 종료</b>됩니다.</p>
     <p>연장이 필요하시면 앱 대시보드에서 '연장 요청'을 이용해주세요.</p>
     `,
   );
@@ -114,9 +125,9 @@ export function emailPasswordReset(name: string, tempPassword: string) {
   return baseTemplate(
     '임시 비밀번호 발급 안내',
     `
-    <p><b>${name}</b>님, 임시 비밀번호가 발급되었습니다.</p>
+    <p><b>${escapeHtml(name)}</b>님, 임시 비밀번호가 발급되었습니다.</p>
     <p style="font-size:18px;background:#F1F5F9;padding:12px 16px;border-radius:6px;letter-spacing:1px;font-family:monospace;text-align:center;">
-      <b>${tempPassword}</b>
+      <b>${escapeHtml(tempPassword)}</b>
     </p>
     <p>이 비밀번호로 로그인하신 뒤 <b>마이페이지 → 비밀번호 변경</b>에서 새로운 비밀번호로 즉시 변경해 주세요.</p>
     <p style="color:#B91C1C;font-size:13px;">본인이 요청하지 않으셨다면 즉시 고객센터로 연락주시기 바랍니다.</p>
@@ -129,7 +140,7 @@ export function emailWelcome(name: string) {
   return baseTemplate(
     '케어매치에 가입해주셔서 감사합니다',
     `
-    <p><b>${name}</b>님, 환영합니다.</p>
+    <p><b>${escapeHtml(name)}</b>님, 환영합니다.</p>
     <p>케어매치는 간병인과 보호자를 안전하게 연결하는 전문 매칭 플랫폼입니다.</p>
     <p>앱에서 간병 요청을 등록하시면 AI 매칭으로 최적의 간병인을 추천받으실 수 있습니다.</p>
     `,

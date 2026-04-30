@@ -1,14 +1,16 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
-import { authenticate } from '../middlewares/auth';
+import { authenticate, optionalAuthenticate } from '../middlewares/auth';
 import * as notificationController from '../controllers/notificationController';
 
 const router = Router();
 
-// 비회원도 가능: 디바이스 토큰 등록
-router.post('/device-token', [
+// 비회원도 가능 — 인증 토큰 있으면 그 사용자에 연결, 없으면 anonymous DeviceToken 만 저장.
+// userId 는 body 로 받지 않음 (피해자 토큰 탈취 방지)
+router.post('/device-token', optionalAuthenticate, [
   body('token').notEmpty().withMessage('푸시 토큰이 필요합니다.'),
   body('platform').optional().isIn(['android', 'ios']),
+  body('logout').optional().isBoolean(),
 ], notificationController.registerDeviceToken);
 
 // 이하 인증 필요

@@ -128,8 +128,16 @@ export default function FindWorkPage() {
       const data = res.data?.data || res.data;
       setCareRequests(data.careRequests || []);
       setTotalPages(data.pagination?.totalPages || 1);
-    } catch {
-      setError("간병 요청 목록을 불러오는 중 오류가 발생했습니다.");
+    } catch (err: any) {
+      // 미승인 간병인은 403 — 친절한 안내 메시지
+      const status = err?.response?.status;
+      const msg = err?.response?.data?.message;
+      if (status === 403) {
+        setError(msg || "간병인 승인 후 일감 조회가 가능합니다. 필수 서류를 등록하고 관리자 승인을 기다려주세요.");
+      } else {
+        setError("간병 요청 목록을 불러오는 중 오류가 발생했습니다.");
+      }
+      setCareRequests([]);
     } finally {
       setLoading(false);
     }

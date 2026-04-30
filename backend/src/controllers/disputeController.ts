@@ -152,17 +152,37 @@ export const adminUpdateDispute = async (req: AuthRequest, res: Response, next: 
     const dispute = await prisma.dispute.findUnique({ where: { id } });
     if (!dispute) throw new AppError('분쟁을 찾을 수 없습니다.', 404);
 
-    const updated = await prisma.dispute.update({
-      where: { id },
-      data: {
-        ...(status && { status }),
-        ...(resolution !== undefined && { resolution }),
-        ...((['RESOLVED', 'REJECTED', 'ESCALATED'] as const).includes(status) && {
-          handledBy: req.user!.id,
-          handledAt: new Date(),
-        }),
-      },
-    });
+    // 트랜지션 락 — PENDING/PROCESSING 에서만 RESOLVED/REJECTED/ESCALATED 로 전이
+    const isTerminalTransition = ['RESOLVED', 'REJECTED', 'ESCALATED'].includes(status);
+    if (status) {
+      const claim = await prisma.dispute.updateMany({
+        where: {
+          id,
+          // 종결 전이는 PENDING/PROCESSING 에서만, 그 외 전이는 동일 상태 중복 방지
+          status: isTerminalTransition
+            ? { in: ['PENDING', 'PROCESSING'] }
+            : { not: status as any },
+        },
+        data: {
+          status,
+          ...(resolution !== undefined && { resolution }),
+          ...(isTerminalTransition && {
+            handledBy: req.user!.id,
+            handledAt: new Date(),
+          }),
+        },
+      });
+      if (claim.count === 0) {
+        throw new AppError('이미 처리됐거나 전이 가능한 상태가 아닙니다.', 409);
+      }
+    } else if (resolution !== undefined) {
+      // 상태 변경 없이 resolution 만 갱신
+      await prisma.dispute.update({
+        where: { id },
+        data: { resolution },
+      });
+    }
+    const updated = await prisma.dispute.findUnique({ where: { id } });
 
     // 신고자에게 알림
     if (status && status !== dispute.status) {

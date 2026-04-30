@@ -48,6 +48,39 @@ interface CareRequestFormData {
 
   // Disclaimer
   disclaimerChecked: boolean;
+
+  // ── 신규: 환자 상태 / 간병 난이도
+  infections: string[];                  // 다중: NONE/VRE/CRE/TB/SCABIES/FLU/ETC
+  infectionsEtc: string;
+  roomType: string;                      // GENERAL/ICU/ISOLATION/ER/CLOSED/ETC
+  roomTypeEtc: string;
+  longTermCareGrade: string;             // NONE/G1~G5/COGNITIVE/UNKNOWN/APPLYING/INTERESTED
+  hasSurgery: string;                    // 'YES' | 'NO' | ''
+  treatments: string[];                  // 다중: NONE/REHAB/DIALYSIS/ETC
+  treatmentsEtc: string;
+  paralysisStatus: string;               // NONE/FULL/HEMI
+  hygieneStatus: string;                 // SELF/TOILET_HELP/BED_HELP/FULL_HELP/ETC
+  hygieneStatusEtc: string;
+  mealStatus: string;                    // SELF/PREP_HELP/FEED_HELP/NASOGASTRIC/PEG/ETC
+  mealStatusEtc: string;
+  toiletStatus: string;                  // SELF/AFTER_CARE/URINAL/DIAPER/CATHETER/ETC
+  toiletStatusEtc: string;
+  exerciseStatus: string;                // SELF/SUPPORT/CANE_WHEELCHAIR/POSITION_CHANGE/FULL_HELP/ETC
+  exerciseStatusEtc: string;
+  hasDelirium: string;                   // 'YES'|'NO'|''
+  hasBedsore: string;
+  needsSuction: string;
+  hasStoma: string;
+  hospitalizationReason: string;         // DISEASE/TRAFFIC/INDUSTRIAL/GENERAL/ETC
+  hospitalizationReasonEtc: string;
+  covidTestRequirement: string;          // CONFIRM_NEEDED/TEST_NEEDED/QUESTIONNAIRE_ONLY/NONE
+  vaccineCheckRequirement: string;       // CONFIRM_NEEDED/NONE
+
+  // ── 신규: 신청인-환자 관계 / 희망 서비스 / 희망 급여
+  relationToPatient: string;             // 본인/배우자/자녀/형제·자매/기타
+  preferredServices: string[];           // 다중: EXERCISE/COMPANION/TIDY/MEDICATION
+  preferredWageType: string;             // MONTHLY_24H/MONTHLY_12H/MONTHLY_1H
+  preferredWageAmount: string;           // 보호자 직접 입력 (원)
 }
 
 const initialFormData: CareRequestFormData = {
@@ -79,7 +112,141 @@ const initialFormData: CareRequestFormData = {
   preferredNationality: "",
   dailyRate: "",
   disclaimerChecked: false,
+  // 신규
+  infections: [],
+  infectionsEtc: "",
+  roomType: "",
+  roomTypeEtc: "",
+  longTermCareGrade: "",
+  hasSurgery: "",
+  treatments: [],
+  treatmentsEtc: "",
+  paralysisStatus: "",
+  hygieneStatus: "",
+  hygieneStatusEtc: "",
+  mealStatus: "",
+  mealStatusEtc: "",
+  toiletStatus: "",
+  toiletStatusEtc: "",
+  exerciseStatus: "",
+  exerciseStatusEtc: "",
+  hasDelirium: "",
+  hasBedsore: "",
+  needsSuction: "",
+  hasStoma: "",
+  hospitalizationReason: "",
+  hospitalizationReasonEtc: "",
+  covidTestRequirement: "",
+  vaccineCheckRequirement: "",
+  relationToPatient: "",
+  preferredServices: [],
+  preferredWageType: "",
+  preferredWageAmount: "",
 };
+
+// 옵션 사전
+const PATIENT_STATE_OPTIONS = {
+  ROOM_TYPE: [
+    { v: 'GENERAL', l: '일반 병실' },
+    { v: 'ICU', l: '중환자실' },
+    { v: 'ISOLATION', l: '격리병동' },
+    { v: 'ER', l: '응급실' },
+    { v: 'CLOSED', l: '폐쇄병동' },
+    { v: 'ETC', l: '기타' },
+  ],
+  GRADE: [
+    { v: 'NONE', l: '등급없음' },
+    { v: 'G1', l: '1등급' }, { v: 'G2', l: '2등급' }, { v: 'G3', l: '3등급' },
+    { v: 'G4', l: '4등급' }, { v: 'G5', l: '5등급' },
+    { v: 'COGNITIVE', l: '인지지원등급' },
+    { v: 'UNKNOWN', l: '등급 모름' },
+    { v: 'APPLYING', l: '등급 신청 중' },
+    { v: 'INTERESTED', l: '등급 신청 관심 있음' },
+  ],
+  INFECTION: [
+    { v: 'NONE', l: '아니요' },
+    { v: 'VRE', l: 'VRE' },
+    { v: 'CRE', l: 'CRE' },
+    { v: 'TB', l: '결핵' },
+    { v: 'SCABIES', l: '옴' },
+    { v: 'FLU', l: '독감' },
+    { v: 'ETC', l: '기타' },
+  ],
+  TREATMENTS: [
+    { v: 'NONE', l: '없음' },
+    { v: 'REHAB', l: '재활치료' },
+    { v: 'DIALYSIS', l: '투석치료' },
+    { v: 'ETC', l: '기타' },
+  ],
+  PARALYSIS: [
+    { v: 'NONE', l: '없음' },
+    { v: 'FULL', l: '전신마비' },
+    { v: 'HEMI', l: '편마비' },
+  ],
+  HYGIENE: [
+    { v: 'SELF', l: '스스로 가능' },
+    { v: 'TOILET_HELP', l: '화장실에서 도움 필요' },
+    { v: 'BED_HELP', l: '침대에서 도움 필요' },
+    { v: 'FULL_HELP', l: '전적인 도움 필요' },
+    { v: 'ETC', l: '기타' },
+  ],
+  MEAL: [
+    { v: 'SELF', l: '스스로 가능' },
+    { v: 'PREP_HELP', l: '식사 준비 도움 필요' },
+    { v: 'FEED_HELP', l: '입에 넣어드려야 함' },
+    { v: 'NASOGASTRIC', l: '콧줄(L-tube)' },
+    { v: 'PEG', l: '뱃줄(PEG)' },
+    { v: 'ETC', l: '기타' },
+  ],
+  TOILET: [
+    { v: 'SELF', l: '스스로 가능' },
+    { v: 'AFTER_CARE', l: '뒷처리만 도움' },
+    { v: 'URINAL', l: '소변통 도움' },
+    { v: 'DIAPER', l: '기저귀 사용' },
+    { v: 'CATHETER', l: '소변주머니 도움' },
+    { v: 'ETC', l: '기타' },
+  ],
+  EXERCISE: [
+    { v: 'SELF', l: '스스로 가능' },
+    { v: 'SUPPORT', l: '옆에서 부축 필요' },
+    { v: 'CANE_WHEELCHAIR', l: '지팡이/휠체어 보조' },
+    { v: 'POSITION_CHANGE', l: '침대 내 자세 변경' },
+    { v: 'FULL_HELP', l: '전적으로 도움 필요' },
+    { v: 'ETC', l: '기타' },
+  ],
+  HOSP_REASON: [
+    { v: 'DISEASE', l: '질병' },
+    { v: 'TRAFFIC', l: '교통사고' },
+    { v: 'INDUSTRIAL', l: '산업/근로자재해' },
+    { v: 'GENERAL', l: '일반사고' },
+    { v: 'ETC', l: '기타' },
+  ],
+  COVID: [
+    { v: 'CONFIRM_NEEDED', l: '확인 필요' },
+    { v: 'TEST_NEEDED', l: '검사 필요' },
+    { v: 'QUESTIONNAIRE_ONLY', l: '열 체크/문진표만' },
+    { v: 'NONE', l: '필요 없음' },
+  ],
+  VACCINE: [
+    { v: 'CONFIRM_NEEDED', l: '확인 필요' },
+    { v: 'NONE', l: '필요 없음' },
+  ],
+};
+
+const PREFERRED_SERVICE_OPTIONS = [
+  { v: 'EXERCISE', l: '운동 보조(산책)' },
+  { v: 'COMPANION', l: '말벗' },
+  { v: 'TIDY', l: '간단한 주변 정리' },
+  { v: 'MEDICATION', l: '투약 보조' },
+];
+
+const RELATION_OPTIONS = ['본인', '배우자', '자녀', '부모', '형제·자매', '친척', '지인', '기타'];
+
+const WAGE_TYPE_OPTIONS = [
+  { v: 'MONTHLY_24H', l: '24시간 근무 월급' },
+  { v: 'MONTHLY_12H', l: '12시간 근무 월급' },
+  { v: 'MONTHLY_1H', l: '1시간 근무 월급' },
+];
 
 /* ------------------------------------------------------------------ */
 /*  Diagnosis Options                                                  */
@@ -218,6 +385,152 @@ interface SavedPatient {
   mobilityStatus?: string | null;
   medicalNotes?: string | null;
   diagnosis?: string | null;
+  // 신규 환자 상태 필드 (DB 추가됨)
+  diagnoses?: string[] | null;
+  infections?: string[] | null;
+  roomType?: string | null;
+  roomTypeEtc?: string | null;
+  longTermCareGrade?: string | null;
+  hasSurgery?: boolean | null;
+  treatments?: string[] | null;
+  treatmentsEtc?: string | null;
+  paralysisStatus?: string | null;
+  hygieneStatus?: string | null;
+  hygieneStatusEtc?: string | null;
+  mealStatus?: string | null;
+  mealStatusEtc?: string | null;
+  toiletStatus?: string | null;
+  toiletStatusEtc?: string | null;
+  exerciseStatus?: string | null;
+  exerciseStatusEtc?: string | null;
+  hasDelirium?: boolean | null;
+  hasBedsore?: boolean | null;
+  needsSuction?: boolean | null;
+  hasStoma?: boolean | null;
+  hospitalizationReason?: string | null;
+  hospitalizationReasonEtc?: string | null;
+  covidTestRequirement?: string | null;
+  vaccineCheckRequirement?: string | null;
+  // 최근 간병 요청 (가장 최근 1건의 신청인-환자 관계 / 희망 서비스 등 자동 채움용)
+  careRequests?: Array<{
+    id: string;
+    status: string;
+    careType?: string | null;
+    scheduleType?: string | null;
+    location?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+    relationToPatient?: string | null;
+    preferredServices?: string[] | null;
+    preferredGender?: string | null;
+    specialRequirements?: string | null;
+    dailyRate?: number | null;
+  }>;
+}
+
+// ── Daum 우편번호 (Postcode) 동적 로드 + 팝업 ──
+const DAUM_POSTCODE_URL = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+
+interface DaumPostcodeResult {
+  address: string;          // 도로명 주소 (기본)
+  jibunAddress: string;     // 지번 주소
+  zonecode: string;         // 우편번호 (5자리)
+  bname: string;            // 동·읍·면
+  sido: string;             // 시·도
+  sigungu: string;          // 시·군·구
+  buildingName?: string;
+}
+
+let daumScriptPromise: Promise<void> | null = null;
+function loadDaumPostcode(): Promise<void> {
+  if (typeof window === 'undefined') return Promise.reject('SSR');
+  if ((window as any).daum?.Postcode) return Promise.resolve();
+  if (daumScriptPromise) return daumScriptPromise;
+  daumScriptPromise = new Promise<void>((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = DAUM_POSTCODE_URL;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => {
+      daumScriptPromise = null;
+      reject(new Error('Daum 우편번호 스크립트 로드 실패'));
+    };
+    document.head.appendChild(s);
+  });
+  return daumScriptPromise;
+}
+
+function openDaumPostcode(onComplete: (data: DaumPostcodeResult) => void) {
+  loadDaumPostcode()
+    .then(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Postcode = (window as any).daum.Postcode;
+      new Postcode({
+        oncomplete: (data: DaumPostcodeResult) => {
+          onComplete(data);
+        },
+      }).open();
+    })
+    .catch((e) => {
+      alert(typeof e === 'string' ? e : (e?.message || '주소 검색을 불러올 수 없습니다.'));
+    });
+}
+
+// ── 환자 상태 입력용 헬퍼 컴포넌트 ──
+function YesNoToggle({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      {hint && <p className="text-xs text-gray-400 mb-2">{hint}</p>}
+      <div className="flex gap-2">
+        {[
+          { v: 'YES', l: '예' },
+          { v: 'NO', l: '아니요' },
+        ].map((o) => (
+          <button key={o.v} type="button" onClick={() => onChange(o.v)}
+            className={`px-4 py-1.5 rounded-lg text-xs font-medium border ${value === o.v ? 'bg-primary-500 text-white border-primary-500' : 'bg-white border-gray-300 text-gray-600'}`}>
+            {o.l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RadioRow({ label, options, value, onChange }: { label: string; options: { v: string; l: string }[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => (
+          <button key={o.v} type="button" onClick={() => onChange(o.v)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${value === o.v ? 'bg-primary-500 text-white border-primary-500' : 'bg-white border-gray-300 text-gray-600'}`}>
+            {o.l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RadioWithEtc({ label, options, value, etcValue, onChange, onEtcChange }: { label: string; options: { v: string; l: string }[]; value: string; etcValue: string; onChange: (v: string) => void; onEtcChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => (
+          <button key={o.v} type="button" onClick={() => onChange(o.v)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${value === o.v ? 'bg-primary-500 text-white border-primary-500' : 'bg-white border-gray-300 text-gray-600'}`}>
+            {o.l}
+          </button>
+        ))}
+      </div>
+      {value === 'ETC' && (
+        <input type="text" className="input-field mt-2" placeholder="직접 입력"
+          value={etcValue} onChange={(e) => onEtcChange(e.target.value)} />
+      )}
+    </div>
+  );
 }
 
 export default function CareRequestForm({ onSubmit, submitting = false }: Props) {
@@ -266,10 +579,14 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
       PARTIAL: "partial",
       DEPENDENT: "bedridden",
     };
-    // 진단명 문자열 → 배열
-    const diagnosisList = p.diagnosis
-      ? p.diagnosis.split(",").map((s) => s.trim()).filter(Boolean)
-      : [];
+    // 진단명: 신규 diagnoses[] 우선, 없으면 레거시 diagnosis (콤마구분 String)
+    const diagnosisList = Array.isArray(p.diagnoses) && p.diagnoses.length > 0
+      ? p.diagnoses
+      : (p.diagnosis ? p.diagnosis.split(",").map((s) => s.trim()).filter(Boolean) : []);
+
+    // boolean → YES/NO 문자열 (UI 형식)
+    const yn = (v: boolean | null | undefined): string =>
+      v === true ? 'YES' : v === false ? 'NO' : '';
 
     setForm((prev) => ({
       ...prev,
@@ -286,7 +603,47 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
       mobility: mobilityMap[p.mobilityStatus || ""] || "",
       specialNotes: p.medicalNotes || "",
       diagnosis: diagnosisList,
+      // ── 신규 환자 상태 필드 모두 복원
+      infections: Array.isArray(p.infections) ? p.infections : [],
+      infectionsEtc: "",
+      roomType: p.roomType || "",
+      roomTypeEtc: p.roomTypeEtc || "",
+      longTermCareGrade: p.longTermCareGrade || "",
+      hasSurgery: yn(p.hasSurgery),
+      treatments: Array.isArray(p.treatments) ? p.treatments : [],
+      treatmentsEtc: p.treatmentsEtc || "",
+      paralysisStatus: p.paralysisStatus || "",
+      hygieneStatus: p.hygieneStatus || "",
+      hygieneStatusEtc: p.hygieneStatusEtc || "",
+      mealStatus: p.mealStatus || "",
+      mealStatusEtc: p.mealStatusEtc || "",
+      toiletStatus: p.toiletStatus || "",
+      toiletStatusEtc: p.toiletStatusEtc || "",
+      exerciseStatus: p.exerciseStatus || "",
+      exerciseStatusEtc: p.exerciseStatusEtc || "",
+      hasDelirium: yn(p.hasDelirium),
+      hasBedsore: yn(p.hasBedsore),
+      needsSuction: yn(p.needsSuction),
+      hasStoma: yn(p.hasStoma),
+      hospitalizationReason: p.hospitalizationReason || "",
+      hospitalizationReasonEtc: p.hospitalizationReasonEtc || "",
+      covidTestRequirement: p.covidTestRequirement || "",
+      vaccineCheckRequirement: p.vaccineCheckRequirement || "",
     }));
+
+    // 가장 최근 간병 요청에서 신청인-환자 관계 / 희망 서비스 / 선호 성별 자동 채움
+    const latestReq = Array.isArray(p.careRequests) && p.careRequests.length > 0
+      ? p.careRequests[0]
+      : null;
+    if (latestReq) {
+      const preferredGenderMap: Record<string, string> = { M: 'male', F: 'female' };
+      setForm((prev) => ({
+        ...prev,
+        relationToPatient: latestReq.relationToPatient || prev.relationToPatient || "",
+        preferredServices: Array.isArray(latestReq.preferredServices) ? latestReq.preferredServices : (prev.preferredServices || []),
+        preferredGender: latestReq.preferredGender ? (preferredGenderMap[latestReq.preferredGender] || prev.preferredGender) : prev.preferredGender,
+      }));
+    }
   };
 
   const update = (
@@ -305,6 +662,18 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
           ? prev.diagnosis.filter((d) => d !== item)
           : [...prev.diagnosis, item],
       };
+    });
+  };
+
+  // 다중 선택 토글 (infections, treatments, preferredServices 등)
+  const toggleMulti = (field: keyof CareRequestFormData, value: string) => {
+    setForm((prev) => {
+      const current = prev[field] as string[];
+      const has = current.includes(value);
+      return {
+        ...prev,
+        [field]: has ? current.filter((x) => x !== value) : [...current, value],
+      } as CareRequestFormData;
     });
   };
 
@@ -736,6 +1105,86 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               />
             )}
           </div>
+
+          {/* ===== 신규 환자 상태 섹션 ===== */}
+          <div className="border-t border-gray-200 pt-6 space-y-5">
+            <h4 className="text-base font-bold text-gray-900">환자 상태 (간병 난이도)</h4>
+
+            {/* 병실 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">병실 종류</label>
+              <div className="flex flex-wrap gap-2">
+                {PATIENT_STATE_OPTIONS.ROOM_TYPE.map((opt) => (
+                  <button key={opt.v} type="button"
+                    onClick={() => update('roomType', opt.v)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${form.roomType === opt.v ? 'bg-primary-500 text-white border-primary-500' : 'bg-white border-gray-300 text-gray-600'}`}>
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
+              {form.roomType === 'ETC' && (
+                <input type="text" className="input-field mt-2" placeholder="병실 직접 입력"
+                  value={form.roomTypeEtc} onChange={(e) => update('roomTypeEtc', e.target.value)} />
+              )}
+            </div>
+
+            {/* 장기요양등급 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">장기요양등급</label>
+              <div className="flex flex-wrap gap-2">
+                {PATIENT_STATE_OPTIONS.GRADE.map((opt) => (
+                  <button key={opt.v} type="button"
+                    onClick={() => update('longTermCareGrade', opt.v)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${form.longTermCareGrade === opt.v ? 'bg-primary-500 text-white border-primary-500' : 'bg-white border-gray-300 text-gray-600'}`}>
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 수술 여부 */}
+            <YesNoToggle label="수술 하셨나요?" value={form.hasSurgery} onChange={(v) => update('hasSurgery', v)} />
+
+            {/* 받는 치료 (다중) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">받고 있는 치료 <span className="text-xs text-gray-400">(복수 선택)</span></label>
+              <div className="flex flex-wrap gap-2">
+                {PATIENT_STATE_OPTIONS.TREATMENTS.map((opt) => (
+                  <button key={opt.v} type="button"
+                    onClick={() => toggleMulti('treatments', opt.v)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${form.treatments.includes(opt.v) ? 'bg-primary-500 text-white border-primary-500' : 'bg-white border-gray-300 text-gray-600'}`}>
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
+              {form.treatments.includes('ETC') && (
+                <input type="text" className="input-field mt-2" placeholder="치료 직접 입력"
+                  value={form.treatmentsEtc} onChange={(e) => update('treatmentsEtc', e.target.value)} />
+              )}
+            </div>
+
+            {/* 마비 상태 */}
+            <RadioRow label="마비 상태" options={PATIENT_STATE_OPTIONS.PARALYSIS} value={form.paralysisStatus} onChange={(v) => update('paralysisStatus', v)} />
+
+            {/* 위생 / 식사 / 화장실 / 운동 */}
+            <RadioWithEtc label="개인 위생 (목욕/세수/양치)" options={PATIENT_STATE_OPTIONS.HYGIENE} value={form.hygieneStatus} etcValue={form.hygieneStatusEtc} onChange={(v) => update('hygieneStatus', v)} onEtcChange={(v) => update('hygieneStatusEtc', v)} />
+            <RadioWithEtc label="식사" options={PATIENT_STATE_OPTIONS.MEAL} value={form.mealStatus} etcValue={form.mealStatusEtc} onChange={(v) => update('mealStatus', v)} onEtcChange={(v) => update('mealStatusEtc', v)} />
+            <RadioWithEtc label="화장실 이동/이용" options={PATIENT_STATE_OPTIONS.TOILET} value={form.toiletStatus} etcValue={form.toiletStatusEtc} onChange={(v) => update('toiletStatus', v)} onEtcChange={(v) => update('toiletStatusEtc', v)} />
+            <RadioWithEtc label="운동/활동" options={PATIENT_STATE_OPTIONS.EXERCISE} value={form.exerciseStatus} etcValue={form.exerciseStatusEtc} onChange={(v) => update('exerciseStatus', v)} onEtcChange={(v) => update('exerciseStatusEtc', v)} />
+
+            {/* 섬망/욕창/석션/장루 */}
+            <YesNoToggle label="섬망 증상" value={form.hasDelirium} onChange={(v) => update('hasDelirium', v)} hint="수술 후 약물로 인한 인지/행동 장애" />
+            <YesNoToggle label="욕창 증상" value={form.hasBedsore} onChange={(v) => update('hasBedsore', v)} />
+            <YesNoToggle label="석션 필요" value={form.needsSuction} onChange={(v) => update('needsSuction', v)} />
+            <YesNoToggle label="장루 관리 필요" value={form.hasStoma} onChange={(v) => update('hasStoma', v)} />
+
+            {/* 입원 사유 */}
+            <RadioWithEtc label="입원 사유" options={PATIENT_STATE_OPTIONS.HOSP_REASON} value={form.hospitalizationReason} etcValue={form.hospitalizationReasonEtc} onChange={(v) => update('hospitalizationReason', v)} onEtcChange={(v) => update('hospitalizationReasonEtc', v)} />
+
+            {/* 코로나 / 백신 */}
+            <RadioRow label="코로나 검사 여부" options={PATIENT_STATE_OPTIONS.COVID} value={form.covidTestRequirement} onChange={(v) => update('covidTestRequirement', v)} />
+            <RadioRow label="백신 접종 확인" options={PATIENT_STATE_OPTIONS.VACCINE} value={form.vaccineCheckRequirement} onChange={(v) => update('vaccineCheckRequirement', v)} />
+          </div>
         </div>
       )}
 
@@ -850,6 +1299,37 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               </div>
             </div>
           )}
+
+          {/* ===== 신규: 신청인 관계 / 희망 서비스 ===== */}
+          <div className="border-t border-gray-200 pt-6 space-y-5">
+            <h4 className="text-base font-bold text-gray-900">신청인 정보 · 희망 사항</h4>
+
+            {/* 환자와의 관계 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">신청인과 환자의 관계</label>
+              <div className="flex flex-wrap gap-2">
+                {RELATION_OPTIONS.map((r) => (
+                  <button key={r} type="button" onClick={() => update('relationToPatient', r)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${form.relationToPatient === r ? 'bg-primary-500 text-white border-primary-500' : 'bg-white border-gray-300 text-gray-600'}`}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 희망 서비스 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">희망 서비스 <span className="text-xs text-gray-400">(복수 선택)</span></label>
+              <div className="flex flex-wrap gap-2">
+                {PREFERRED_SERVICE_OPTIONS.map((opt) => (
+                  <button key={opt.v} type="button" onClick={() => toggleMulti('preferredServices', opt.v)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${form.preferredServices.includes(opt.v) ? 'bg-primary-500 text-white border-primary-500' : 'bg-white border-gray-300 text-gray-600'}`}>
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -907,17 +1387,37 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               {form.locationType === "hospital" ? "병원명" : "주소"}{" "}
               <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              className="input-field"
-              placeholder={
-                form.locationType === "hospital"
-                  ? "병원 이름을 입력하세요"
-                  : "주소를 입력하세요"
-              }
-              value={form.locationName}
-              onChange={(e) => update("locationName", e.target.value)}
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className="input-field flex-1"
+                placeholder={
+                  form.locationType === "hospital"
+                    ? "병원 이름을 입력하거나 주소 검색"
+                    : "주소 검색을 눌러주세요"
+                }
+                value={form.locationName}
+                onChange={(e) => update("locationName", e.target.value)}
+                readOnly={form.locationType === 'home'}
+              />
+              <button
+                type="button"
+                onClick={() => openDaumPostcode((data) => {
+                  update('locationName', data.address);
+                  // 자치구가 있으면 region 자동 채움
+                  if (data.sido && data.sigungu) {
+                    const region = `${data.sido} ${data.sigungu}`;
+                    if (!form.regions.includes(region)) {
+                      update('regions', [...form.regions, region]);
+                    }
+                  }
+                })}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium whitespace-nowrap"
+              >
+                🔍 주소 검색
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">우편번호 검색으로 정확한 주소를 입력해주세요.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">

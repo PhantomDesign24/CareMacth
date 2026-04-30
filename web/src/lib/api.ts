@@ -116,6 +116,7 @@ export function logout() {
   localStorage.removeItem("cm_access_token");
   localStorage.removeItem("cm_refresh_token");
   localStorage.removeItem("user"); // 유저 상태도 함께 정리 (Header의 NotificationBell 등 재렌더 차단)
+  localStorage.removeItem("cm_user");
   // 이미 로그인 페이지면 이동 안함 (reload 루프 방지)
   if (!window.location.pathname.startsWith("/auth/login")) {
     window.location.href = "/auth/login?reason=session";
@@ -132,6 +133,8 @@ export const authAPI = {
     api.post("/auth/kakao", { code }),
   naverLogin: (code: string, state: string) =>
     api.post("/auth/naver", { code, state }),
+  socialSignupComplete: (data: Record<string, unknown>) =>
+    api.post("/auth/social/complete", data),
   me: () => api.get("/auth/me"),
   deleteAccount: (password?: string, reason?: string) =>
     api.delete("/auth/me", { data: { password, reason } }),
