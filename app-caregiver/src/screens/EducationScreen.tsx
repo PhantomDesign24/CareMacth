@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,9 @@ import {
   StyleSheet,
   FlatList,
   Alert,
+  Linking,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { caregiverApi } from '../services/api';
@@ -14,7 +17,7 @@ interface EducationItem {
   id: string;
   title: string;
   description: string;
-  category: string;
+  videoUrl: string | null;
   durationMinutes: number;
   progress: number;
   isCompleted: boolean;
@@ -22,90 +25,94 @@ interface EducationItem {
 }
 
 export default function EducationScreen() {
-  const [educations, setEducations] = useState<EducationItem[]>([
-    {
-      id: 'e1',
-      title: '기본 간병 실무',
-      description: '간병인의 기본 역할과 환자 돌봄 기초 교육',
-      category: '필수',
-      durationMinutes: 120,
-      progress: 100,
-      isCompleted: true,
-      hasCertificate: true,
-    },
-    {
-      id: 'e2',
-      title: '감염 예방 및 위생 관리',
-      description: '병원 내 감염 예방 수칙과 위생 관리 방법',
-      category: '필수',
-      durationMinutes: 60,
-      progress: 85,
-      isCompleted: true,
-      hasCertificate: true,
-    },
-    {
-      id: 'e3',
-      title: '치매 환자 간병',
-      description: '치매 환자 특성 이해 및 대응 방법',
-      category: '전문',
-      durationMinutes: 90,
-      progress: 45,
-      isCompleted: false,
-      hasCertificate: false,
-    },
-    {
-      id: 'e4',
-      title: '응급 상황 대처법',
-      description: '간병 중 발생할 수 있는 응급상황 대처',
-      category: '필수',
-      durationMinutes: 45,
-      progress: 0,
-      isCompleted: false,
-      hasCertificate: false,
-    },
-    {
-      id: 'e5',
-      title: '노인 영양 관리',
-      description: '고령 환자를 위한 식사 관리 및 영양 가이드',
-      category: '선택',
-      durationMinutes: 30,
-      progress: 0,
-      isCompleted: false,
-      hasCertificate: false,
-    },
-  ]);
+  const [educations, setEducations] = useState<EducationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const handleStartCourse = (courseId: string) => {
-    Alert.alert('교육 시작', '교육 영상이 재생됩니다.');
-    // Update progress for demo
-    setEducations(educations.map((e) =>
-      e.id === courseId && e.progress === 0 ? { ...e, progress: 10 } : e
-    ));
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await caregiverApi.getCourses();
+      const list = res?.data?.data?.educations || [];
+      const mapped: EducationItem[] = list.map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        description: e.description || '',
+        videoUrl: e.videoUrl || null,
+        durationMinutes: e.duration || 0,
+        progress: typeof e.progress === 'number' ? Math.round(e.progress) : 0,
+        isCompleted: !!e.completed,
+        hasCertificate: !!e.certificateUrl,
+      }));
+      setEducations(mapped);
+    } catch (err: any) {
+      Alert.alert('교육 목록 오류', err?.response?.data?.message || '교육 목록을 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
+
+  const handleStartCourse = async (courseId: string) => {
+    const course = educations.find((c) => c.id === courseId);
+    if (!course) return;
+    if (!course.videoUrl) {
+      Alert.alert('영상 없음', '영상 URL이 등록되지 않은 과정입니다.');
+      return;
+    }
+    try {
+      const ok = await Linking.canOpenURL(course.videoUrl);
+      if (!ok) {
+        Alert.alert('열기 실패', '영상을 열 수 없습니다.');
+        return;
+      }
+      await Linking.openURL(course.videoUrl);
+    } catch {
+      Alert.alert('열기 실패', '영상을 여는 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleMarkComplete = async (courseId: string) => {
+    const course = educations.find((c) => c.id === courseId);
+    if (!course) return;
+    if (course.progress < 80) {
+      Alert.alert('수료 불가', '수강 진행도가 80% 이상이어야 수료 처리가 가능합니다. 영상 시청 후 다시 시도해주세요.');
+      return;
+    }
+    try {
+      await caregiverApi.completeCourse(courseId);
+      Alert.alert('수료 완료', `"${course.title}" 수료가 완료되었습니다.`);
+      fetchData();
+    } catch (err: any) {
+      Alert.alert('수료 실패', err?.response?.data?.message || '수료 처리 중 오류가 발생했습니다.');
+    }
   };
 
   const handleDownloadCertificate = async (courseId: string) => {
     const course = educations.find((e) => e.id === courseId);
     if (!course) return;
-
-    if (course.progress < 80) {
-      Alert.alert('수료 불가', '수강 진행도가 80% 이상이어야 수료증 발급이 가능합니다.');
+    if (!course.isCompleted) {
+      Alert.alert('수료증 없음', '먼저 과정을 수료해주세요.');
       return;
     }
-
     try {
-      await caregiverApi.requestCertificate(courseId);
-      Alert.alert('수료증 발급', `"${course.title}" 수료증이 발급되었습니다.`);
-    } catch {
-      Alert.alert('수료증 발급', `"${course.title}" 수료증이 발급되었습니다.`);
-    }
-  };
-
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case '필수': return '#E74C3C';
-      case '전문': return '#4A90D9';
-      case '선택': return '#999';
-      default: return '#999';
+      const res: any = await caregiverApi.requestCertificate(courseId);
+      const certUrl = res?.data?.data?.certificateUrl || res?.data?.certificateUrl;
+      if (certUrl) {
+        await Linking.openURL(certUrl);
+      } else {
+        Alert.alert('수료증 발급', `"${course.title}" 수료증이 발급되었습니다. 마이페이지에서 확인해주세요.`);
+      }
+    } catch (err: any) {
+      Alert.alert('수료증 발급 실패', err?.response?.data?.message || '발급 중 오류가 발생했습니다.');
     }
   };
 
@@ -119,10 +126,8 @@ export default function EducationScreen() {
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.cardTitleRow}>
-          <View style={[styles.categoryBadge, { backgroundColor: getCategoryColor(item.category) + '15' }]}>
-            <Text style={[styles.categoryText, { color: getCategoryColor(item.category) }]}>
-              {item.category}
-            </Text>
+          <View style={[styles.categoryBadge, { backgroundColor: '#4A90D9' + '15' }]}>
+            <Text style={[styles.categoryText, { color: '#4A90D9' }]}>교육</Text>
           </View>
           {item.isCompleted && (
             <View style={styles.completedBadge}>
@@ -132,7 +137,7 @@ export default function EducationScreen() {
           )}
         </View>
         <Text style={styles.cardTitle}>{item.title}</Text>
-        <Text style={styles.cardDesc}>{item.description}</Text>
+        {item.description ? <Text style={styles.cardDesc}>{item.description}</Text> : null}
         <View style={styles.durationRow}>
           <Ionicons name="time-outline" size={14} color="#888" />
           <Text style={styles.durationText}>{item.durationMinutes}분</Text>
@@ -180,9 +185,19 @@ export default function EducationScreen() {
           </TouchableOpacity>
         ) : null}
 
-        {(item.isCompleted || item.progress >= 80) && (
+        {!item.isCompleted && item.progress >= 80 && (
           <TouchableOpacity
-            style={[styles.certButton, item.isCompleted && !item.hasCertificate ? {} : {}]}
+            style={styles.certButton}
+            onPress={() => handleMarkComplete(item.id)}
+          >
+            <Ionicons name="checkmark-done-circle" size={18} color="#2ECC71" />
+            <Text style={styles.certButtonText}>수료 처리</Text>
+          </TouchableOpacity>
+        )}
+
+        {item.isCompleted && (
+          <TouchableOpacity
+            style={styles.certButton}
             onPress={() => handleDownloadCertificate(item.id)}
           >
             <Ionicons name="document-text-outline" size={18} color="#2ECC71" />
@@ -215,18 +230,26 @@ export default function EducationScreen() {
         </View>
       </View>
 
-      <FlatList
-        data={educations}
-        renderItem={renderEducation}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="school-outline" size={64} color="#DDD" />
-            <Text style={styles.emptyTitle}>등록된 교육이 없습니다</Text>
-          </View>
-        }
-      />
+      {loading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color="#2ECC71" />
+          <Text style={styles.loadingText}>교육 목록을 불러오는 중...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={educations}
+          renderItem={renderEducation}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="school-outline" size={64} color="#DDD" />
+              <Text style={styles.emptyTitle}>등록된 교육이 없습니다</Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
@@ -286,4 +309,6 @@ const styles = StyleSheet.create({
   certButtonText: { color: '#2ECC71', fontSize: 14, fontWeight: '600' },
   emptyState: { alignItems: 'center', paddingVertical: 60 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#999', marginTop: 16 },
+  loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { fontSize: 13, color: '#888' },
 });

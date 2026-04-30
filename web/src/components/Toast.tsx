@@ -20,11 +20,20 @@ export default function ToastContainer() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const addToast = useCallback((message: string, type: "success" | "error" | "info") => {
-    const id = ++toastId;
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    setToasts((prev) => {
+      // 1) 같은 메시지가 이미 떠있으면 중복 추가 안 함 (dedup)
+      const existing = prev.find((t) => t.message === message && t.type === type);
+      if (existing) return prev;
+      // 2) 화면에 5개 초과 누적 방지 — 가장 오래된 것 제거
+      const id = ++toastId;
+      const next = [...prev, { id, message, type }];
+      const trimmed = next.length > 5 ? next.slice(next.length - 5) : next;
+      // auto-dismiss
+      setTimeout(() => {
+        setToasts((cur) => cur.filter((t) => t.id !== id));
+      }, 4000);
+      return trimmed;
+    });
   }, []);
 
   useEffect(() => {

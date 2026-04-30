@@ -56,10 +56,14 @@ export async function settleEarning(contractId: string) {
     return null;
   }
 
+  // 정산 일수 — 계약 전체 기간 기준
+  const settleDays = (contract as any).durationDays
+    ?? Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000));
   const calc = calculateEarning({
     amount: remainingAmount,
     platformFeePercent: contract.platformFee,
     platformFeeFixed: (contract as any).platformFeeFixed || 0,
+    durationDays: settleDays,
     taxRate: contract.taxRate,
   });
 

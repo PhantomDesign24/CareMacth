@@ -299,6 +299,22 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Today Signups Row — 오늘 가입자 (보호자/간병인) */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <StatsCard
+          title="오늘 가입한 보호자"
+          value={`${(data?.todayGuardianSignups ?? 0).toLocaleString()}명`}
+          subtitle="오늘 00:00 ~ 현재"
+          color="blue"
+        />
+        <StatsCard
+          title="오늘 가입한 간병인"
+          value={`${(data?.todayCaregiverSignups ?? 0).toLocaleString()}명`}
+          subtitle="오늘 00:00 ~ 현재"
+          color="purple"
+        />
+      </div>
+
       {/* Revenue Chart Placeholder */}
       <div className="card">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

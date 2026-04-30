@@ -141,15 +141,19 @@ export const caregiverApi = {
   getSettlementHistory: () =>
     apiClient.get('/caregiver/settlements'),
 
-  // Education
+  // Education — 백엔드 실제 라우트(/api/education) 와 매칭
   getCourses: () =>
-    apiClient.get('/education/courses'),
-  getCourseDetail: (courseId: string) =>
-    apiClient.get(`/education/courses/${courseId}`),
+    apiClient.get('/education'),
   updateProgress: (courseId: string, progress: number) =>
-    apiClient.post(`/education/courses/${courseId}/progress`, { progress }),
+    apiClient.post(`/education/${courseId}/progress`, { progress }),
+  heartbeat: (courseId: string, videoTime: number, duration: number, playing = true) =>
+    apiClient.post(`/education/${courseId}/heartbeat`, { videoTime, duration, playing }),
+  completeCourse: (courseId: string) =>
+    apiClient.post(`/education/${courseId}/complete`),
   requestCertificate: (courseId: string) =>
-    apiClient.post(`/education/courses/${courseId}/certificate`),
+    apiClient.get(`/education/certificate/${courseId}`),
+  certificateDownloadUrl: (courseId: string) =>
+    `/education/certificate/${courseId}/download`,
 
   // Penalties
   getPenalties: () =>

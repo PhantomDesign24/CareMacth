@@ -27,6 +27,8 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
       activeContracts,
       todayPayments,
       monthlyPayments,
+      todayGuardianSignups,
+      todayCaregiverSignups,
     ] = await Promise.all([
       prisma.careRequest.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
       prisma.contract.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
@@ -41,6 +43,13 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
       prisma.payment.aggregate({
         where: { paidAt: { gte: monthStart }, status: { in: ['ESCROW', 'COMPLETED'] } },
         _sum: { totalAmount: true },
+      }),
+      // 오늘 가입한 보호자 수 (병원 역할은 별도)
+      prisma.user.count({
+        where: { createdAt: { gte: today, lt: tomorrow }, role: 'GUARDIAN' },
+      }),
+      prisma.user.count({
+        where: { createdAt: { gte: today, lt: tomorrow }, role: 'CAREGIVER' },
       }),
     ]);
 
@@ -89,6 +98,8 @@ export const getDashboard = async (_req: AuthRequest, res: Response, next: NextF
         revenue: todayPayments._sum.totalAmount || 0,
         todayRevenue: todayPayments._sum.totalAmount || 0,
         monthlyRevenue: monthlyPayments._sum.totalAmount || 0,
+        todayGuardianSignups,
+        todayCaregiverSignups,
         pendingList: pendingList.map(cg => ({
           id: cg.id,
           name: cg.user.name,
@@ -1308,8 +1319,10 @@ export const getPatients = async (req: AuthRequest, res: Response, next: NextFun
         }
         const paymentSum = contract.payments.reduce((s: number, p: any) => s + p.totalAmount, 0);
         patientPaymentData[pid].totalSpent += paymentSum;
-        // fee = % * amount + fixed
-        patientPaymentData[pid].totalFees += Math.round(paymentSum * (contract.platformFee / 100)) + (contract.platformFeeFixed || 0);
+        // fee = % * amount + (fixed × durationDays)
+        const days = (contract as any).durationDays
+          || Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000));
+        patientPaymentData[pid].totalFees += Math.round(paymentSum * (contract.platformFee / 100)) + (contract.platformFeeFixed || 0) * days;
       }
     }
 
@@ -2333,10 +2346,10 @@ export const forceCancelContract = async (req: AuthRequest, res: Response, next:
         }
       }
 
-      // ── 미정산 Earning 차감 (사용일수 기준)
+      // ── 미정산 Earning 차감 (사용일수 기준) — 정액 수수료 × 사용일수
       if (usedDays > 0) {
         const usedAmount = contract.dailyRate * usedDays;
-        const platformFeeAmount = Math.round(usedAmount * (contract.platformFee / 100)) + ((contract as any).platformFeeFixed || 0);
+        const platformFeeAmount = Math.round(usedAmount * (contract.platformFee / 100)) + ((contract as any).platformFeeFixed || 0) * usedDays;
         const taxAmount = Math.round((Math.max(0, usedAmount - platformFeeAmount)) * (contract.taxRate / 100));
         const netEarning = Math.max(0, usedAmount - platformFeeAmount - taxAmount);
         const existingEarnings = await tx.earning.findMany({
@@ -3214,6 +3227,70 @@ export const getAdminEducations = async (_req: AuthRequest, res: Response, next:
           totalCourses,
           totalCompleted: completedRecords,
           averageCompletionRate: overallCompletionRate,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /education/:id/records - 특정 교육 과정의 수강자 명단 (간병인별 진행상태)
+export const getEducationRecords = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const status = (req.query.status as string) || 'all'; // all | completed | inProgress
+
+    const education = await prisma.education.findUnique({ where: { id } });
+    if (!education) {
+      throw new AppError('교육 과정을 찾을 수 없습니다.', 404);
+    }
+
+    const where: any = { educationId: id };
+    if (status === 'completed') where.completed = true;
+    else if (status === 'inProgress') where.completed = false;
+
+    const records = await prisma.educationRecord.findMany({
+      where,
+      include: {
+        caregiver: {
+          select: {
+            id: true,
+            user: { select: { name: true, email: true, phone: true } },
+            status: true,
+          },
+        },
+      },
+      orderBy: [{ completed: 'desc' }, { completedAt: 'desc' }, { updatedAt: 'desc' }],
+    });
+
+    const items = records.map((r) => ({
+      recordId: r.id,
+      caregiverId: r.caregiverId,
+      name: r.caregiver?.user?.name || '-',
+      email: r.caregiver?.user?.email || '-',
+      phone: r.caregiver?.user?.phone || '-',
+      caregiverStatus: r.caregiver?.status || null,
+      progress: r.progress,
+      watchedSeconds: r.watchedSeconds,
+      completed: r.completed,
+      completedAt: r.completedAt,
+      updatedAt: r.updatedAt,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        education: {
+          id: education.id,
+          title: education.title,
+          duration: education.duration,
+        },
+        items,
+        summary: {
+          total: items.length,
+          completed: items.filter((i) => i.completed).length,
+          inProgress: items.filter((i) => !i.completed).length,
         },
       },
     });

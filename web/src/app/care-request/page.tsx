@@ -174,9 +174,11 @@ export default function CareRequestPage() {
       await careRequestAPI.create(requestPayload);
       setSubmitSuccess(true);
       showToast("간병 요청이 접수되었습니다. 매칭을 시작합니다.", "success");
+      // 성공 시 submitting=true 그대로 유지 → 오버레이/버튼 비활성 유지하다 리다이렉트
       setTimeout(() => {
         router.push("/dashboard/guardian");
       }, 2000);
+      return;
     } catch (err: unknown) {
       if (err instanceof AxiosError && err.response) {
         const respData = err.response.data;
@@ -188,7 +190,7 @@ export default function CareRequestPage() {
         setSubmitError(msg);
         showToast(msg, "error");
       }
-    } finally {
+      // 실패 시에만 다시 입력 가능하게 풀어줌
       setSubmitting(false);
     }
   };

@@ -372,11 +372,12 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
     const usedAmount = contract.dailyRate * usedDays;
     const proportionRemaining = totalDays > 0 ? remainingDays / totalDays : 0;
 
-    // 간병인 정산: 단일 calculateEarning 으로 통일
+    // 간병인 정산: 단일 calculateEarning 으로 통일 — 정액 수수료는 사용일수만큼 곱
     const earningCalc = calculateEarning({
       amount: usedAmount,
       platformFeePercent: contract.platformFee,
       platformFeeFixed: (contract as any).platformFeeFixed || 0,
+      durationDays: usedDays,
       taxRate: contract.taxRate,
     });
     const platformFeeAmount = earningCalc.platformFee;
@@ -1053,7 +1054,7 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     drawTableRow('일당', `${contract.dailyRate.toLocaleString()}원`);
     drawTableRow('총 금액', `${contract.totalAmount.toLocaleString()}원 (VAT 별도)`);
     const feeText = (contract as any).platformFeeFixed
-      ? `${contract.platformFee}% + ${(contract as any).platformFeeFixed.toLocaleString()}원`
+      ? `${contract.platformFee}% + ${(contract as any).platformFeeFixed.toLocaleString()}원/일`
       : `${contract.platformFee}%`;
     drawTableRow('플랫폼 수수료', feeText);
     drawTableRow('세율 (원천징수)', `${contract.taxRate}%`);

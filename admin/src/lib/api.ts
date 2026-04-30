@@ -481,6 +481,35 @@ export async function deleteEducation(id: string) {
   return apiRequest(`/admin/education/${id}`, { method: "DELETE" });
 }
 
+export interface EducationRecordItem {
+  recordId: string;
+  caregiverId: string;
+  name: string;
+  email: string;
+  phone: string;
+  caregiverStatus: string | null;
+  progress: number;
+  watchedSeconds: number;
+  completed: boolean;
+  completedAt: string | null;
+  updatedAt: string;
+}
+
+export interface EducationRecordsResponse {
+  education: { id: string; title: string; duration: number };
+  items: EducationRecordItem[];
+  summary: { total: number; completed: number; inProgress: number };
+}
+
+export async function getEducationRecords(
+  educationId: string,
+  status: "all" | "completed" | "inProgress" = "all",
+) {
+  return apiRequest<EducationRecordsResponse>(
+    `/admin/education/${educationId}/records?status=${status}`,
+  );
+}
+
 // ─── Notices (공지사항) ────────────────────────────────
 export interface NoticeAttachment {
   url: string;
@@ -631,6 +660,8 @@ export interface DashboardData {
   revenueDelta?: number;
   monthlyRevenue?: number;
   monthlyRevenueDelta?: number;
+  todayGuardianSignups?: number;
+  todayCaregiverSignups?: number;
   pendingCaregivers?: Caregiver[];
   recentDisputes?: Dispute[];
   [key: string]: unknown;

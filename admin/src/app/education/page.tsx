@@ -8,8 +8,10 @@ import {
   createEducation,
   updateEducation,
   deleteEducation,
+  getEducationRecords,
   EducationCourse,
   EducationSummary,
+  EducationRecordItem,
 } from "@/lib/api";
 
 interface CourseForm {
@@ -44,6 +46,41 @@ export default function EducationPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCourse, setEditingCourse] = useState<EducationCourse | null>(null);
   const [form, setForm] = useState<CourseForm>(emptyForm);
+
+  // 수료자 명단 모달
+  const [recordsModalCourse, setRecordsModalCourse] = useState<EducationCourse | null>(null);
+  const [recordsItems, setRecordsItems] = useState<EducationRecordItem[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsFilter, setRecordsFilter] = useState<"all" | "completed" | "inProgress">("all");
+
+  const openRecordsModal = useCallback(async (course: EducationCourse, filter: "all" | "completed" | "inProgress" = "all") => {
+    setRecordsModalCourse(course);
+    setRecordsFilter(filter);
+    setRecordsLoading(true);
+    setRecordsItems([]);
+    try {
+      const res = await getEducationRecords(course.id, filter);
+      setRecordsItems(res?.items || []);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "수강자 명단을 불러오지 못했습니다.");
+    } finally {
+      setRecordsLoading(false);
+    }
+  }, []);
+
+  const refreshRecords = useCallback(async (filter: "all" | "completed" | "inProgress") => {
+    if (!recordsModalCourse) return;
+    setRecordsFilter(filter);
+    setRecordsLoading(true);
+    try {
+      const res = await getEducationRecords(recordsModalCourse.id, filter);
+      setRecordsItems(res?.items || []);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "수강자 명단을 불러오지 못했습니다.");
+    } finally {
+      setRecordsLoading(false);
+    }
+  }, [recordsModalCourse]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -202,7 +239,16 @@ export default function EducationPage() {
       key: "completedCount",
       label: "수료인원",
       align: "center",
-      render: (v) => <span className="font-medium text-emerald-600">{(v as number).toLocaleString()}명</span>,
+      render: (v, row) => (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); openRecordsModal(row, "completed"); }}
+          className="font-medium text-emerald-600 hover:underline"
+          title="수료자 명단 보기"
+        >
+          {(v as number).toLocaleString()}명
+        </button>
+      ),
     },
     {
       key: "completionRate",
@@ -242,6 +288,13 @@ export default function EducationPage() {
       align: "center",
       render: (_v, row) => (
         <div className="flex items-center justify-center gap-1">
+          <button
+            className="btn-secondary btn-sm"
+            onClick={(e) => { e.stopPropagation(); openRecordsModal(row, "all"); }}
+            title="수강자 명단"
+          >
+            명단
+          </button>
           <button
             className="btn-secondary btn-sm"
             onClick={(e) => { e.stopPropagation(); handleEditOpen(row); }}
@@ -400,6 +453,104 @@ export default function EducationPage() {
         () => { setShowEditModal(false); setEditingCourse(null); },
         handleEditSubmit,
         "저장",
+      )}
+
+      {/* 수강자 명단 모달 */}
+      {recordsModalCourse && (
+        <div className="modal-overlay" onClick={() => { setRecordsModalCourse(null); setRecordsItems([]); }}>
+          <div className="modal-content max-w-3xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">{recordsModalCourse.title}</h3>
+                <p className="mt-1 text-xs text-gray-500">수강자 명단 — 시청 진도/수료 현황</p>
+              </div>
+              <button
+                onClick={() => { setRecordsModalCourse(null); setRecordsItems([]); }}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* 필터 탭 */}
+            <div className="mb-3 flex gap-2 border-b border-gray-200 pb-2">
+              {(["all", "completed", "inProgress"] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => refreshRecords(f)}
+                  className={`px-3 py-1.5 text-sm rounded-md ${
+                    recordsFilter === f
+                      ? "bg-primary-500 text-white"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {f === "all" ? "전체" : f === "completed" ? "수료" : "진행중"}
+                </button>
+              ))}
+            </div>
+
+            {/* 목록 */}
+            <div className="max-h-[60vh] overflow-y-auto">
+              {recordsLoading ? (
+                <div className="py-10 text-center text-sm text-gray-500">불러오는 중...</div>
+              ) : recordsItems.length === 0 ? (
+                <div className="py-10 text-center text-sm text-gray-400">해당 조건의 수강자가 없습니다.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                    <tr>
+                      <th className="px-3 py-2 text-left">이름</th>
+                      <th className="px-3 py-2 text-left">연락처</th>
+                      <th className="px-3 py-2 text-center">진도</th>
+                      <th className="px-3 py-2 text-center">상태</th>
+                      <th className="px-3 py-2 text-center">수료일</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {recordsItems.map((it) => (
+                      <tr key={it.recordId} className="hover:bg-gray-50">
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-gray-900">{it.name}</div>
+                          <div className="text-xs text-gray-400">{it.email}</div>
+                        </td>
+                        <td className="px-3 py-2 text-gray-600">{it.phone}</td>
+                        <td className="px-3 py-2 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="h-1.5 w-16 rounded-full bg-gray-200">
+                              <div
+                                className={`h-1.5 rounded-full ${it.completed ? "bg-emerald-500" : "bg-blue-400"}`}
+                                style={{ width: `${Math.min(it.progress, 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-600">{Math.round(it.progress)}%</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {it.completed ? (
+                            <span className="badge-green">수료</span>
+                          ) : (
+                            <span className="badge-gray">진행중</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center text-xs text-gray-500">
+                          {it.completedAt ? new Date(it.completedAt).toLocaleDateString("ko-KR") : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button className="btn-secondary" onClick={() => { setRecordsModalCourse(null); setRecordsItems([]); }}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

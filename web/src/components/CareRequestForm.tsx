@@ -718,8 +718,21 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
     if (!form.locationName?.trim()) return "장소명을 입력해주세요.";
     if (!form.regions || form.regions.length === 0) return "지역을 한 곳 이상 선택해주세요.";
     if (!form.startDate) return "시작일을 선택해주세요.";
+    {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const start = new Date(form.startDate);
+      if (!isNaN(start.getTime()) && start < today) return "시작일은 오늘 이후여야 합니다.";
+    }
     if (!form.duration?.trim()) return "간병 기간을 입력해주세요.";
-    // Step 4 - 동의
+    {
+      const dur = parseInt(form.duration);
+      if (!Number.isFinite(dur) || dur <= 0) return "간병 기간은 1 이상이어야 합니다.";
+    }
+    // Step 4 - 제시 일당 / 동의
+    if (!form.dailyRate?.trim()) return "제시 일당을 입력해주세요.";
+    const rate = parseInt(form.dailyRate);
+    if (!Number.isFinite(rate) || rate <= 0) return "제시 일당은 0원보다 커야 합니다.";
     if (!form.disclaimerChecked) return "의료행위 금지 안내 동의에 체크해주세요.";
     return null;
   };
@@ -746,7 +759,10 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
           form.consciousness &&
           form.mobility &&
           form.hospitalizationReason &&
-          (form.hospitalizationReason !== 'ETC' || !!form.hospitalizationReasonEtc?.trim())
+          (form.hospitalizationReason !== 'ETC' || !!form.hospitalizationReasonEtc?.trim()) &&
+          (!form.hasDementia || !!form.dementiaLevel) &&
+          (!form.hasInfection || !!form.infectionDetails?.trim()) &&
+          (!form.diagnosis.includes("기타(직접입력)") || !!form.diagnosisEtc?.trim())
         );
       case 2:
         return form.careType && form.careSchedule
@@ -759,7 +775,9 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
           form.duration
         );
       case 4:
-        return form.disclaimerChecked;
+        return form.disclaimerChecked
+          && !!form.dailyRate?.trim()
+          && parseInt(form.dailyRate) > 0;
       default:
         return false;
     }
@@ -840,15 +858,23 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                   onChange={(e) => applyPatient(e.target.value)}
                 >
                   <option value="">-- 신규로 직접 입력 --</option>
-                  {savedPatients.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                      {p.birthDate
-                        ? ` (${new Date(p.birthDate).toLocaleDateString("ko-KR")})`
-                        : ""}
-                      {p.diagnosis ? ` · ${p.diagnosis.split(",")[0]}` : ""}
-                    </option>
-                  ))}
+                  {savedPatients.map((p) => {
+                    let ageLabel = "";
+                    if (p.birthDate) {
+                      const b = new Date(p.birthDate);
+                      const now = new Date();
+                      let a = now.getFullYear() - b.getFullYear();
+                      const m = now.getMonth() - b.getMonth();
+                      if (m < 0 || (m === 0 && now.getDate() < b.getDate())) a--;
+                      if (Number.isFinite(a) && a >= 0) ageLabel = ` (만 ${a}세)`;
+                    }
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{ageLabel}
+                        {p.diagnosis ? ` · ${p.diagnosis.split(",")[0]}` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
                 {selectedPatientId && (
                   <button
@@ -1039,19 +1065,22 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               </div>
             )}
 
-            {/* 기타(직접입력) 선택 시 추가 입력란 */}
+            {/* 기타(직접입력) 선택 시 추가 입력란 — 강조 */}
             {form.diagnosis.includes("기타(직접입력)") && (
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  기타 진단명 직접 입력
+              <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 shadow-sm">
+                <label className="flex items-center gap-2 text-sm font-semibold text-amber-800 mb-2">
+                  <span>✏️</span>
+                  <span>기타 진단명 직접 입력 <span className="text-red-500">*</span></span>
                 </label>
                 <input
                   type="text"
-                  className="input-field"
+                  autoFocus
+                  className="w-full px-4 py-3 text-base bg-white border-2 border-amber-400 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none placeholder:text-gray-400"
                   placeholder="예: 파킨슨 합병증, 다발성 외상 등"
                   value={form.diagnosisEtc}
                   onChange={(e) => update("diagnosisEtc", e.target.value)}
                 />
+                <p className="text-xs text-amber-700 mt-1.5">목록에 없는 진단명을 입력해주세요.</p>
               </div>
             )}
 

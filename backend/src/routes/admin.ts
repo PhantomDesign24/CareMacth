@@ -188,6 +188,7 @@ router.delete('/holidays/:id', adminController.deleteHoliday);
 
 // 교육 관리
 router.get('/education', adminController.getAdminEducations);
+router.get('/education/:id/records', adminController.getEducationRecords);
 router.post('/education', [
   body('title').notEmpty().trim().isLength({ min: 1, max: 200 }).withMessage('제목을 입력해주세요. (1~200자)'),
   body('duration').isInt({ min: 1 }).withMessage('소요시간은 1분 이상이어야 합니다.'),

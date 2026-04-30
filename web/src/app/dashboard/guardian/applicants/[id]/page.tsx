@@ -858,12 +858,26 @@ export default function ApplicantsPage() {
             <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-2">지역 확대 재검색</h3>
               <p className="text-sm text-gray-500 mb-3">
-                현재 지역과 같은 시·도 내에서 추가로 알림을 보낼 시·군·구를 선택하세요. 해당 지역 간병인에게 공고가 재발송됩니다.
+                추가로 알림을 보낼 시·군·구를 선택하세요. 해당 지역 간병인에게 공고가 재발송됩니다.
               </p>
+
+              {/* 현재 등록된 지역 요약 */}
+              {(careRequest?.regions || []).length > 0 && (
+                <div className="mb-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="text-xs font-medium text-blue-700 mb-1.5">현재 등록된 지역</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(careRequest?.regions || []).map((r) => (
+                      <span key={r} className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-blue-500 text-white rounded-full">
+                        ✓ {r}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 시·도 셀렉터 */}
               <div className="mb-3">
-                <label className="block text-xs font-medium text-gray-600 mb-1">시·도</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">추가할 시·도 선택</label>
                 <select
                   value={expandSido}
                   onChange={(e) => { setExpandSido(e.target.value); setExpandRegions([]); }}

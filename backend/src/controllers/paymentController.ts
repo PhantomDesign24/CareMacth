@@ -267,10 +267,15 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       if (isImmediateComplete) {
         // 정산 base = amount (포인트 차감 후 실제 결제 base). 0원이면 Earning 미생성.
         if (amount > 0) {
+          // 정액 수수료 곱할 일수 — 연장이면 additionalDays, 아니면 contract.durationDays 또는 전체 기간
+          const settleDays = extension?.additionalDays
+            ?? (contract as any).durationDays
+            ?? Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000));
           const calc = calculateEarning({
             amount,
             platformFeePercent: contract.platformFee,
             platformFeeFixed: (contract as any).platformFeeFixed || 0,
+            durationDays: settleDays,
             taxRate: contract.taxRate,
           });
           await tx.earning.create({
@@ -921,10 +926,14 @@ async function executeRefund(
             remaining -= e.amount;
           } else {
             const newAmount = e.amount - remaining;
+            // 환불 후 잔여 금액 기준 일수 추정 (dailyRate 가 0이면 1일)
+            const dailyRate = (payment.contract as any).dailyRate || 0;
+            const newDays = dailyRate > 0 ? Math.max(1, Math.round(newAmount / dailyRate)) : 1;
             const newCalc = calculateEarning({
               amount: newAmount,
               platformFeePercent: payment.contract.platformFee || 10,
               platformFeeFixed: (payment.contract as any).platformFeeFixed || 0,
+              durationDays: newDays,
               taxRate: payment.contract.taxRate || 3.3,
             });
             await tx.earning.update({
@@ -1279,10 +1288,13 @@ export const confirmOfflineRefund = async (req: AuthRequest, res: Response, next
               remaining -= e.amount;
             } else {
               const newAmount = e.amount - remaining;
+              const dailyRate = (payment.contract as any).dailyRate || 0;
+              const newDays = dailyRate > 0 ? Math.max(1, Math.round(newAmount / dailyRate)) : 1;
               const newCalc = calculateEarning({
                 amount: newAmount,
                 platformFeePercent: (payment.contract as any).platformFee || 10,
                 platformFeeFixed: (payment.contract as any).platformFeeFixed || 0,
+                durationDays: newDays,
                 taxRate: (payment.contract as any).taxRate || 3.3,
               });
               await tx.earning.update({

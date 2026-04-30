@@ -118,25 +118,25 @@ export default function SettingsPage() {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">고정 수수료</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">고정 수수료 (1일 단가)</label>
               <div className="relative">
                 <input
                   type="number"
                   value={settings.oneOnOneFeeFixed ?? 0}
                   onChange={(e) => handleChange("oneOnOneFeeFixed", Number(e.target.value))}
-                  className="input-field pr-8"
+                  className="input-field pr-12"
                   step="1000"
                   min="0"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">원</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">원/일</span>
               </div>
             </div>
           </div>
           <div className="mt-3 rounded-lg bg-gray-50 p-3">
             <p className="text-xs text-gray-500">
-              예시: 간병비 200만원 시 수수료 = (2,000,000 x {settings.oneOnOneFeePercentage ?? 0}%) + {(settings.oneOnOneFeeFixed ?? 0).toLocaleString()}원
+              예시: 간병비 200만원 · 7일 시 수수료 = (2,000,000 x {settings.oneOnOneFeePercentage ?? 0}%) + ({(settings.oneOnOneFeeFixed ?? 0).toLocaleString()}원 × 7일)
               = <span className="font-semibold text-primary-600">
-                {(2000000 * (settings.oneOnOneFeePercentage ?? 0) / 100 + (settings.oneOnOneFeeFixed ?? 0)).toLocaleString()}원
+                {(2000000 * (settings.oneOnOneFeePercentage ?? 0) / 100 + (settings.oneOnOneFeeFixed ?? 0) * 7).toLocaleString()}원
               </span>
             </p>
           </div>
@@ -165,25 +165,25 @@ export default function SettingsPage() {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">고정 수수료</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">고정 수수료 (1일 단가)</label>
               <div className="relative">
                 <input
                   type="number"
                   value={settings.familyCareFeeFixed ?? 0}
                   onChange={(e) => handleChange("familyCareFeeFixed", Number(e.target.value))}
-                  className="input-field pr-8"
+                  className="input-field pr-12"
                   step="1000"
                   min="0"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">원</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">원/일</span>
               </div>
             </div>
           </div>
           <div className="mt-3 rounded-lg bg-gray-50 p-3">
             <p className="text-xs text-gray-500">
-              예시: 간병비 300만원 시 수수료 = (3,000,000 x {settings.familyCareFeePercentage ?? 0}%) + {(settings.familyCareFeeFixed ?? 0).toLocaleString()}원
+              예시: 간병비 300만원 · 7일 시 수수료 = (3,000,000 x {settings.familyCareFeePercentage ?? 0}%) + ({(settings.familyCareFeeFixed ?? 0).toLocaleString()}원 × 7일)
               = <span className="font-semibold text-primary-600">
-                {(3000000 * (settings.familyCareFeePercentage ?? 0) / 100 + (settings.familyCareFeeFixed ?? 0)).toLocaleString()}원
+                {(3000000 * (settings.familyCareFeePercentage ?? 0) / 100 + (settings.familyCareFeeFixed ?? 0) * 7).toLocaleString()}원
               </span>
             </p>
           </div>
