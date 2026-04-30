@@ -143,7 +143,15 @@ export default function InsuranceTab() {
                   </div>
                   {r.status === "COMPLETED" && r.documentUrl && (
                     <a
-                      href={r.documentUrl}
+                      href={(() => {
+                        if (!r.documentUrl) return '#';
+                        // 인증 라우트(/api/files/private/...)는 토큰 쿼리 동봉
+                        if (r.documentUrl.startsWith('/api/files/private/')) {
+                          const token = typeof window !== 'undefined' ? localStorage.getItem('cm_access_token') : null;
+                          return token ? `${r.documentUrl}?token=${encodeURIComponent(token)}` : r.documentUrl;
+                        }
+                        return r.documentUrl;
+                      })()}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 shrink-0"

@@ -51,6 +51,26 @@ export const upload = multer({
   },
 });
 
+// 민감 파일(신분증/범죄이력/보험서류 등) 전용 storage — uploads/private/ 에 저장
+const privateStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const dir = 'uploads/private/';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = crypto.randomBytes(8).toString('hex');
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}-${uniqueSuffix}${ext}`);
+  },
+});
+
+export const uploadPrivate = multer({
+  storage: privateStorage,
+  fileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
 // 공지사항 첨부용: 이미지/PDF + 일반 문서 형식 허용
 const noticeFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const allowedMimes = [

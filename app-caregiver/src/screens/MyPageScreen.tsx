@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,12 @@ import {
   ScrollView,
   Alert,
   Share,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { authService } from '../services/auth';
+import { caregiverApi } from '../services/api';
 
 interface PenaltyItem {
   id: string;
@@ -31,57 +34,107 @@ interface ActivityItem {
 
 export default function MyPageScreen({ navigation }: any) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const profile = {
-    name: '김간병',
-    email: 'caregiver@example.com',
-    phone: '010-9876-5432',
-    status: 'approved' as const,
-    hasBadge: true,
-    monthlyEarning: 3250000,
-    totalEarning: 28750000,
-    totalMatches: 48,
-    avgRating: 4.8,
-    rehireRate: 0.92,
-    penaltyCount: 1,
-    referralCode: 'CG-KGB2026',
-  };
+  const [profile, setProfile] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    status: 'pending' as 'pending' | 'approved' | 'rejected',
+    hasBadge: false,
+    monthlyEarning: 0,
+    totalEarning: 0,
+    totalMatches: 0,
+    avgRating: 0,
+    rehireRate: 0,
+    penaltyCount: 0,
+    referralCode: '',
+  });
+  const [certifications, setCertifications] = useState<{ name: string; issuedAt: string; status: string }[]>([]);
+  const [penalties, setPenalties] = useState<PenaltyItem[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
 
-  const certifications = [
-    { name: '요양보호사 1급', issuedAt: '2020-05-15', status: 'verified' },
-    { name: '간병사 자격증', issuedAt: '2019-08-20', status: 'verified' },
-    { name: '응급처치 수료', issuedAt: '2024-01-10', status: 'pending' },
-  ];
+  const fetchAll = useCallback(async () => {
+    try {
+      const [profileRes, earningsRes, penaltiesRes, activityRes] = await Promise.allSettled([
+        caregiverApi.getProfile(),
+        caregiverApi.getEarnings(),
+        caregiverApi.getPenalties(),
+        caregiverApi.getActivityHistory(),
+      ]);
 
-  const penalties: PenaltyItem[] = [
-    {
-      id: 'p1',
-      reason: '무단 지각 (2회)',
-      date: '2026-02-15',
-      type: 'warning',
-    },
-  ];
+      if (profileRes.status === 'fulfilled') {
+        const body: any = (profileRes.value as any)?.data ?? profileRes.value;
+        const data = body?.data ?? body;
+        const u = data?.user || {};
+        setProfile((prev) => ({
+          ...prev,
+          name: u.name || data?.name || '',
+          email: u.email || data?.email || '',
+          phone: u.phone || data?.phone || '',
+          status: (data?.status === 'APPROVED' ? 'approved' : data?.status === 'REJECTED' ? 'rejected' : 'pending'),
+          hasBadge: !!data?.hasBadge,
+          totalMatches: Number(data?.totalMatches || 0),
+          avgRating: Number(data?.avgRating || 0),
+          rehireRate: Number(data?.rehireRate || 0),
+          penaltyCount: Number(data?.penaltyCount || 0),
+          referralCode: u.referralCode || '',
+        }));
+        const certs = Array.isArray(data?.certificates) ? data.certificates : [];
+        setCertifications(certs.map((c: any) => ({
+          name: c.name,
+          issuedAt: c.issueDate || c.issuedAt || '',
+          status: c.verified ? 'verified' : 'pending',
+        })));
+      }
 
-  const activities: ActivityItem[] = [
-    {
-      id: 'a1',
-      patientName: '홍길동',
-      location: '서울대학교병원',
-      startDate: '2026-03-01',
-      endDate: '2026-03-15',
-      status: 'completed',
-      earnings: 2250000,
-    },
-    {
-      id: 'a2',
-      patientName: '이영희',
-      location: '세브란스병원',
-      startDate: '2026-01-10',
-      endDate: '2026-01-25',
-      status: 'completed',
-      earnings: 2400000,
-    },
-  ];
+      if (earningsRes.status === 'fulfilled') {
+        const body: any = (earningsRes.value as any)?.data ?? earningsRes.value;
+        const data = body?.data ?? body;
+        setProfile((prev) => ({
+          ...prev,
+          monthlyEarning: Number(data?.monthlyTotal ?? data?.thisMonth ?? 0),
+          totalEarning: Number(data?.totalEarning ?? data?.lifetimeTotal ?? 0),
+        }));
+      }
+
+      if (penaltiesRes.status === 'fulfilled') {
+        const body: any = (penaltiesRes.value as any)?.data ?? penaltiesRes.value;
+        const list = body?.data?.penalties ?? body?.penalties ?? body?.data ?? [];
+        setPenalties((Array.isArray(list) ? list : []).map((p: any) => ({
+          id: String(p.id),
+          reason: p.reason || p.type || '',
+          date: p.createdAt || p.date || '',
+          type: p.amount ? ('deduction' as const) : ('warning' as const),
+          amount: p.amount,
+        })));
+      }
+
+      if (activityRes.status === 'fulfilled') {
+        const body: any = (activityRes.value as any)?.data ?? activityRes.value;
+        const list = body?.data?.contracts ?? body?.contracts ?? body?.data ?? [];
+        setActivities((Array.isArray(list) ? list : []).slice(0, 20).map((c: any) => ({
+          id: String(c.id),
+          patientName: c.careRequest?.patient?.name || c.patientName || '환자',
+          location: c.careRequest?.hospitalName || c.careRequest?.address || '-',
+          startDate: c.startDate,
+          endDate: c.endDate,
+          status: (c.status === 'CANCELLED' ? 'cancelled' : 'completed') as 'completed' | 'cancelled',
+          earnings: Number(c.totalAmount || 0),
+        })));
+      }
+    } catch (err: any) {
+      console.error('[MyPage] fetchAll 실패', err?.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const onRefresh = () => { setRefreshing(true); fetchAll(); };
 
   const handleShareReferral = async () => {
     try {

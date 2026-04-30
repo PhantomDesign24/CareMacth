@@ -180,9 +180,9 @@ export const adminUpdateInsurance = async (req: AuthRequest, res: Response, next
     const req_ = await prisma.insuranceDocRequest.findUnique({ where: { id } });
     if (!req_) throw new AppError('신청을 찾을 수 없습니다.', 404);
 
-    // 파일 업로드로 서류 등록된 경우 documentUrl 자동 세팅
+    // 보험서류 — 민감 파일이므로 비공개 저장(uploadPrivate) + 인증 라우트로만 접근
     if (req.file) {
-      documentUrl = `/uploads/${req.file.filename}`;
+      documentUrl = `/api/files/private/${req.file.filename}`;
     }
 
     if (status === 'REJECTED' && !(rejectReason || adminNote)) {

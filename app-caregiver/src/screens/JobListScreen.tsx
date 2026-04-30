@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Alert,
   RefreshControl,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import JobCard from '../components/JobCard';
@@ -37,67 +38,53 @@ export default function JobListScreen() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
-  const [jobs, setJobs] = useState<JobItem[]>([
-    {
-      id: 'j1',
-      address: '서울 강남구 삼성동 - 삼성서울병원',
-      scheduleType: 'full_time',
-      careType: 'individual',
-      startDate: '2026-04-12',
-      endDate: '2026-04-22',
-      dailyRate: 150000,
-      patient: {
-        name: '김*수',
-        age: 68,
-        gender: '남성',
-        diagnosis: '뇌졸중',
-        mobilityStatus: '부분도움',
-      },
-      matchScore: 95,
-      applicationStatus: 'none',
-    },
-    {
-      id: 'j2',
-      address: '서울 서초구 반포동 - 가톨릭대 성모병원',
-      scheduleType: 'full_time',
-      careType: 'individual',
-      startDate: '2026-04-15',
-      endDate: '2026-04-30',
-      dailyRate: 160000,
-      patient: {
-        name: '이*희',
-        age: 75,
-        gender: '여성',
-        diagnosis: '고관절 골절',
-        mobilityStatus: '거동불가',
-      },
-      matchScore: 88,
-      applicationStatus: 'applied',
-    },
-    {
-      id: 'j3',
-      address: '서울 종로구 - 서울대학교병원',
-      scheduleType: 'part_time',
-      careType: 'family',
-      startDate: '2026-04-10',
-      endDate: '2026-04-20',
-      dailyRate: 120000,
-      patient: {
-        name: '박*영',
-        age: 82,
-        gender: '여성',
-        diagnosis: '치매',
-        mobilityStatus: '독립가능',
-      },
-      matchScore: 72,
-      applicationStatus: 'none',
-    },
-  ]);
+  const [jobs, setJobs] = useState<JobItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const onRefresh = async () => {
+  const fetchJobs = useCallback(async () => {
+    try {
+      const res: any = await caregiverApi.getMatchedJobs();
+      const body = res?.data ?? res;
+      const list = body?.data?.careRequests ?? body?.careRequests ?? body?.data ?? [];
+      const careTypeMap: Record<string, 'individual' | 'family'> = { INDIVIDUAL: 'individual', FAMILY: 'family' };
+      const scheduleMap: Record<string, 'full_time' | 'part_time'> = { FULL_TIME: 'full_time', PART_TIME: 'part_time' };
+      const mobilityMap: Record<string, string> = { INDEPENDENT: '독립가능', PARTIAL: '부분도움', DEPENDENT: '거동불가' };
+      const mapped: JobItem[] = (Array.isArray(list) ? list : []).map((j: any) => ({
+        id: j.id,
+        address: j.location === 'HOSPITAL' ? (j.hospitalName || j.address || '-') : (j.address || '-'),
+        scheduleType: scheduleMap[j.scheduleType] || 'full_time',
+        careType: careTypeMap[j.careType] || 'individual',
+        startDate: j.startDate,
+        endDate: j.endDate,
+        dailyRate: j.dailyRate || 0,
+        patient: {
+          name: j.patient?.name || j.patientName || '환자',
+          age: j.patient?.ageBucket || (j.patient?.birthDate ? new Date().getFullYear() - new Date(j.patient.birthDate).getFullYear() : 0),
+          gender: j.patient?.gender === 'M' ? '남성' : j.patient?.gender === 'F' ? '여성' : '-',
+          diagnosis: j.patient?.diagnosis || '-',
+          mobilityStatus: mobilityMap[j.patient?.mobilityStatus] || '-',
+        },
+        matchScore: j.matchScore?.total || 0,
+        applicationStatus: j.myApplicationStatus === 'PENDING' ? 'applied'
+          : j.myApplicationStatus === 'ACCEPTED' ? 'accepted'
+          : j.myApplicationStatus === 'REJECTED' ? 'rejected'
+          : 'none',
+      }));
+      setJobs(mapped);
+    } catch (err: any) {
+      console.error('[JobList] 공고 목록 조회 실패', err?.message);
+      setJobs([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchJobs(); }, [fetchJobs]);
+
+  const onRefresh = () => {
     setRefreshing(true);
-    // Fetch latest jobs
-    setRefreshing(false);
+    fetchJobs();
   };
 
   const handleApply = async (jobId: string) => {
@@ -107,12 +94,8 @@ export default function JobListScreen() {
         j.id === jobId ? { ...j, applicationStatus: 'applied' as const } : j
       ));
       Alert.alert('지원 완료', '지원이 완료되었습니다.\n보호자의 선택을 기다려주세요.');
-    } catch {
-      // Optimistic update for demo
-      setJobs(jobs.map((j) =>
-        j.id === jobId ? { ...j, applicationStatus: 'applied' as const } : j
-      ));
-      Alert.alert('지원 완료', '지원이 완료되었습니다.\n보호자의 선택을 기다려주세요.');
+    } catch (err: any) {
+      Alert.alert('지원 실패', err?.response?.data?.message || '지원 중 오류가 발생했습니다.');
     }
   };
 
@@ -160,6 +143,12 @@ export default function JobListScreen() {
         <Text style={styles.count}>{jobs.length}건</Text>
       </View>
 
+      {loading && jobs.length === 0 ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color="#2ECC71" />
+          <Text style={styles.emptyDesc}>공고를 불러오는 중...</Text>
+        </View>
+      ) : (
       <FlatList
         data={jobs}
         keyExtractor={(item) => item.id}
@@ -184,6 +173,7 @@ export default function JobListScreen() {
           </View>
         }
       />
+      )}
 
       {/* Reject Penalty Warning Modal */}
       <Modal

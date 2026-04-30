@@ -102,8 +102,8 @@ export const caregiverApi = {
     apiClient.get('/caregiver/profile'),
   updateProfile: (data: Record<string, unknown>) =>
     apiClient.put('/caregiver/profile', data),
-  updateStatus: (status: string) =>
-    apiClient.patch('/caregiver/status', { status }),
+  updateStatus: (workStatus: string) =>
+    apiClient.put('/caregiver/work-status', { workStatus }),
   uploadCertification: (formData: FormData) =>
     apiClient.post('/caregiver/certifications', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

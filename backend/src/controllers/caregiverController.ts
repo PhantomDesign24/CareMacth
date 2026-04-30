@@ -147,9 +147,9 @@ export const addCertificate = async (req: AuthRequest, res: Response, next: Next
 
     const { name, issuer, issueDate } = req.body;
 
-    // Handle file upload: prefer req.file, fall back to req.body.imageUrl
+    // 자격증 이미지 — 비공개 저장(uploadPrivate) 후 인증 라우트로만 접근
     const imageUrl = (req as any).file
-      ? '/uploads/' + (req as any).file.filename
+      ? '/api/files/private/' + (req as any).file.filename
       : req.body.imageUrl;
 
     if (!name || !issuer || !issueDate || !imageUrl) {
@@ -589,7 +589,8 @@ export const uploadCriminalCheck = async (req: AuthRequest, res: Response, next:
     if (!caregiver) {
       throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
     }
-    const url = `/uploads/${req.file.filename}`;
+    // 비공개 파일 — 인증 라우트(/api/files/private/...) 경유로만 접근 가능
+    const url = `/api/files/private/${req.file.filename}`;
     // 업로드만으로는 검증 완료가 아님 — criminalCheckDone 은 ADMIN 승인 시에만 true 로 전환
     const updated = await prisma.caregiver.update({
       where: { id: caregiver.id },
@@ -623,7 +624,8 @@ export const uploadIdCard = async (req: AuthRequest, res: Response, next: NextFu
     if (!caregiver) {
       throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
     }
-    const url = `/uploads/${req.file.filename}`;
+    // 비공개 파일 — 인증 라우트(/api/files/private/...) 경유로만 접근 가능
+    const url = `/api/files/private/${req.file.filename}`;
     // 업로드만으로는 신원 검증 완료가 아님 — identityVerified 는 ADMIN 승인 시에만 true 로 전환
     const updated = await prisma.caregiver.update({
       where: { id: caregiver.id },

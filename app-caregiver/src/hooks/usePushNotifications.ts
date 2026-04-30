@@ -41,11 +41,10 @@ async function registerForPushNotifications(): Promise<string | null> {
     });
   }
 
-  const tokenData = await Notifications.getExpoPushTokenAsync({
-    projectId: 'carematch-fc707',
-  });
-
-  return tokenData.data;
+  // 백엔드가 Firebase Admin SDK 로 직접 FCM 발송하므로 Expo 푸시 토큰이 아닌 네이티브 FCM 토큰 사용
+  // (getExpoPushTokenAsync 는 Expo Push Service 경유라 우리 백엔드와 연동 안 됨)
+  const tokenData = await Notifications.getDevicePushTokenAsync();
+  return tokenData.data as string;
 }
 
 export function usePushNotifications(isLoggedIn: boolean) {

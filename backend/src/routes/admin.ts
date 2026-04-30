@@ -91,12 +91,12 @@ router.get('/reviews/hidden', reportController.adminGetHiddenReviews);
 
 // 보험서류 신청 관리
 import * as insuranceController from '../controllers/insuranceController';
-import { upload as uploadMiddleware, handleUploadError as handleInsuranceUploadError, verifyUploadMagicNumber as verifyInsuranceMagic } from '../middlewares/upload';
+import { uploadPrivate as uploadInsurancePrivate, handleUploadError as handleInsuranceUploadError, verifyUploadMagicNumber as verifyInsuranceMagic } from '../middlewares/upload';
 router.get('/insurance', insuranceController.adminListInsurance);
-// PATCH: multipart(파일업로드) 또는 JSON 둘 다 허용
+// PATCH: multipart(파일업로드) 또는 JSON 둘 다 허용 — 보험서류는 민감 파일로 비공개 저장
 router.patch(
   '/insurance/:id',
-  uploadMiddleware.single('document'),
+  uploadInsurancePrivate.single('document'),
   handleInsuranceUploadError,
   verifyInsuranceMagic,
   insuranceController.adminUpdateInsurance,

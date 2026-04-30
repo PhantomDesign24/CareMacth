@@ -22,6 +22,7 @@ import notificationRoutes from './routes/notification';
 import insuranceRoutes from './routes/insurance';
 import disputeRoutes from './routes/dispute';
 import noticeRoutes from './routes/notice';
+import filesRoutes from './routes/files';
 import { errorHandler } from './middlewares/errorHandler';
 import { generalLimiter } from './middlewares/rateLimiter';
 import { sanitizeInput } from './middlewares/sanitize';
@@ -82,7 +83,14 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('combined'));
 }
 
-// 정적 파일 (업로드) - 인증 불필요하지만 디렉토리 트래버설 방어
+// 정적 파일 (업로드) - /uploads/private/* 는 인증된 라우트(/api/files/private/*)로만 접근
+// (신분증/범죄이력/보험서류 등 민감 파일)
+app.use('/uploads', (req, res, next) => {
+  if (req.path.startsWith('/private/') || req.path.includes('/../')) {
+    return res.status(404).end();
+  }
+  next();
+});
 app.use('/uploads', express.static('uploads', {
   dotfiles: 'deny',
   index: false,
@@ -131,6 +139,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/insurance', insuranceRoutes);
 app.use('/api/disputes', disputeRoutes);
 app.use('/api/notices', noticeRoutes);
+app.use('/api/files', filesRoutes);
 
 // Error handler
 app.use(errorHandler);

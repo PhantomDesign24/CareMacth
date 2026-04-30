@@ -39,62 +39,92 @@ const STATUS_OPTIONS: { value: WorkStatus; label: string; color: string }[] = [
 export default function HomeScreen({ navigation }: any) {
   const [workStatus, setWorkStatus] = useState<WorkStatus>('available');
   const [refreshing, setRefreshing] = useState(false);
+  const [todaySchedule, setTodaySchedule] = useState<TodaySchedule[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [monthlyEarnings, setMonthlyEarnings] = useState<number>(0);
+  const [totalMatches, setTotalMatches] = useState<number>(0);
+  const [rating, setRating] = useState<number>(0);
 
-  const [todaySchedule] = useState<TodaySchedule[]>([
-    {
-      id: 's1',
-      patientName: '홍길동',
-      location: '서울대학교병원 301호',
-      time: '07:00 ~ 19:00',
-      status: 'active',
-    },
-  ]);
+  const fetchHome = React.useCallback(async () => {
+    try {
+      const [profileRes, earningsRes, notifRes] = await Promise.allSettled([
+        caregiverApi.getProfile(),
+        caregiverApi.getEarnings(),
+        caregiverApi.getNotifications(),
+      ]);
 
-  const [notifications] = useState<Notification[]>([
-    {
-      id: '1',
-      title: '새로운 간병 공고',
-      message: '서울 강남구 - 개인간병 (일당 150,000원)',
-      type: 'job',
-      isRead: false,
-      createdAt: '2026-04-09T09:00:00',
-    },
-    {
-      id: '2',
-      title: '정산 완료',
-      message: '3월 간병비 1,350,000원이 입금되었습니다.',
-      type: 'payment',
-      isRead: true,
-      createdAt: '2026-04-08T14:00:00',
-    },
-    {
-      id: '3',
-      title: '교육 수료 안내',
-      message: '감염 예방 교육 수료 가능합니다.',
-      type: 'system',
-      isRead: false,
-      createdAt: '2026-04-07T11:00:00',
-    },
-  ]);
+      // 프로필 — 활성 계약(오늘 일정), 매칭 횟수, 평점, 근무 상태
+      if (profileRes.status === 'fulfilled') {
+        const body: any = (profileRes.value as any)?.data ?? profileRes.value;
+        const data = body?.data ?? body;
+        const ws = data?.workStatus;
+        if (ws === 'WORKING') setWorkStatus('working');
+        else if (ws === 'IMMEDIATE') setWorkStatus('immediate');
+        else setWorkStatus('available');
+        setTotalMatches(Number(data?.totalMatches || 0));
+        setRating(Number(data?.avgRating || 0));
+        const active = data?.activeContract;
+        if (active) {
+          setTodaySchedule([{
+            id: active.id,
+            patientName: active.patient?.name || active.careRequest?.patient?.name || '환자',
+            location: active.careRequest?.hospitalName || active.careRequest?.address || '-',
+            time: '07:00 ~ 19:00',
+            status: 'active',
+          }]);
+        } else {
+          setTodaySchedule([]);
+        }
+      }
 
-  const monthlyEarnings = 3250000;
-  const totalMatches = 48;
-  const rating = 4.8;
+      // 이번 달 수익
+      if (earningsRes.status === 'fulfilled') {
+        const body: any = (earningsRes.value as any)?.data ?? earningsRes.value;
+        const data = body?.data ?? body;
+        const monthly = data?.monthlyTotal ?? data?.thisMonth ?? data?.summary?.monthlyTotal ?? 0;
+        setMonthlyEarnings(Number(monthly));
+      }
+
+      // 알림 (최근 5개)
+      if (notifRes.status === 'fulfilled') {
+        const body: any = (notifRes.value as any)?.data ?? notifRes.value;
+        const list = body?.data?.notifications ?? body?.notifications ?? body?.data ?? [];
+        const top = (Array.isArray(list) ? list : []).slice(0, 5).map((n: any) => ({
+          id: String(n.id),
+          title: n.title || '',
+          message: n.body || n.message || '',
+          type: (String(n.type || '').toLowerCase().includes('match')
+            ? 'job'
+            : String(n.type || '').toLowerCase().includes('pay')
+              ? 'payment'
+              : 'system') as Notification['type'],
+          isRead: !!n.isRead,
+          createdAt: n.createdAt || new Date().toISOString(),
+        }));
+        setNotifications(top);
+      }
+    } catch (err: any) {
+      console.error('[HomeScreen] fetchHome 실패', err?.message);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchHome(); }, [fetchHome]);
 
   const handleStatusChange = async (status: WorkStatus) => {
+    const enumStatus = status === 'working' ? 'WORKING' : status === 'immediate' ? 'IMMEDIATE' : 'AVAILABLE';
     try {
-      await caregiverApi.updateStatus(status);
+      await caregiverApi.updateStatus(enumStatus);
       setWorkStatus(status);
-    } catch {
-      // Use optimistic update
-      setWorkStatus(status);
+    } catch (err: any) {
+      Alert.alert('상태 변경 실패', err?.response?.data?.message || '상태 변경 중 오류가 발생했습니다.');
     }
   };
 
-  const onRefresh = async () => {
+  const onRefresh = () => {
     setRefreshing(true);
-    // Refresh data
-    setRefreshing(false);
+    fetchHome();
   };
 
   const getNotificationIcon = (type: string): keyof typeof Ionicons.glyphMap => {
