@@ -537,6 +537,7 @@ export const getCareRequestById = async (req: AuthRequest, res: Response, next: 
           id: true,
           latitude: true,
           longitude: true,
+          preferredRegions: true,
           experienceYears: true,
           specialties: true,
           avgRating: true,
@@ -557,6 +558,15 @@ export const getCareRequestById = async (req: AuthRequest, res: Response, next: 
         if (anyCr.latitude && anyCr.longitude && cg.latitude && cg.longitude) {
           const dist = calculateDistance(anyCr.latitude, anyCr.longitude, cg.latitude, cg.longitude);
           distanceScore = getDistanceScore(dist);
+        }
+        // 희망 지역 매칭 보너스 (matchingService 와 동일 정책)
+        if (Array.isArray(cg.preferredRegions) && cg.preferredRegions.length > 0) {
+          const requestRegions: string[] = Array.isArray(anyCr.regions) ? anyCr.regions : [];
+          const regionMatch = cg.preferredRegions.some((cgRegion: string) => {
+            if (requestRegions.some((r: string) => r === cgRegion || r.startsWith(`${cgRegion} `) || cgRegion.startsWith(`${r} `))) return true;
+            return typeof anyCr.address === 'string' && anyCr.address.includes(cgRegion);
+          });
+          if (regionMatch) distanceScore = Math.min(30, distanceScore + 5);
         }
         const experienceScore = getExperienceScore(
           cg.experienceYears,
@@ -698,6 +708,38 @@ export const updateCareRequest = async (req: AuthRequest, res: Response, next: N
     const resolvedLocation = location !== undefined ? (locationMap[location?.toLowerCase()] || location?.toUpperCase()) : undefined;
     const resolvedPreferredGender = preferredGender !== undefined ? (preferredGender ? (genderMap[preferredGender?.toLowerCase()] || preferredGender) : preferredGender) : undefined;
 
+    // 신규 필드 검증/정규화 (create 와 동일 정책)
+    const VALID_WAGE_TYPES_U = ['MONTHLY_24H', 'MONTHLY_12H', 'MONTHLY_1H'];
+    const VALID_PREFERRED_SERVICES_U = ['EXERCISE', 'COMPANION', 'TIDY', 'MEDICATION'];
+    let resolvedUpdateWageType: string | null | undefined = undefined;
+    if (preferredWageType !== undefined) {
+      if (!preferredWageType) {
+        resolvedUpdateWageType = null;
+      } else {
+        if (!VALID_WAGE_TYPES_U.includes(preferredWageType)) {
+          throw new AppError('희망 급여 형태가 올바르지 않습니다.', 400);
+        }
+        resolvedUpdateWageType = preferredWageType;
+      }
+    }
+    let resolvedUpdateWageAmount: number | null | undefined = undefined;
+    if (preferredWageAmount !== undefined) {
+      if (preferredWageAmount === null || preferredWageAmount === '') {
+        resolvedUpdateWageAmount = null;
+      } else {
+        const n = Number(preferredWageAmount);
+        if (!Number.isFinite(n) || n < 0) {
+          throw new AppError('희망 급여 금액이 올바르지 않습니다.', 400);
+        }
+        resolvedUpdateWageAmount = Math.floor(n);
+      }
+    }
+    const resolvedUpdateServices = preferredServices !== undefined
+      ? (Array.isArray(preferredServices)
+          ? preferredServices.filter((s: any) => typeof s === 'string' && VALID_PREFERRED_SERVICES_U.includes(s))
+          : [])
+      : undefined;
+
     const updated = await prisma.careRequest.update({
       where: { id },
       data: {
@@ -718,15 +760,9 @@ export const updateCareRequest = async (req: AuthRequest, res: Response, next: N
         ...(dailyRate !== undefined && { dailyRate: parseInt(dailyRate) }),
         ...(hourlyRate !== undefined && { hourlyRate: parseInt(hourlyRate) }),
         ...(relationToPatient !== undefined && { relationToPatient: relationToPatient || null }),
-        ...(preferredServices !== undefined && {
-          preferredServices: Array.isArray(preferredServices) ? preferredServices : [],
-        }),
-        ...(preferredWageType !== undefined && { preferredWageType: preferredWageType || null }),
-        ...(preferredWageAmount !== undefined && {
-          preferredWageAmount: preferredWageAmount === null || preferredWageAmount === ''
-            ? null
-            : parseInt(String(preferredWageAmount)),
-        }),
+        ...(resolvedUpdateServices !== undefined && { preferredServices: resolvedUpdateServices }),
+        ...(resolvedUpdateWageType !== undefined && { preferredWageType: resolvedUpdateWageType }),
+        ...(resolvedUpdateWageAmount !== undefined && { preferredWageAmount: resolvedUpdateWageAmount }),
         ...(Array.isArray(req.body.regions) && { regions: req.body.regions }),
       },
       include: {
@@ -957,14 +993,14 @@ export const raiseRate = async (req: AuthRequest, res: Response, next: NextFunct
       throw new AppError('현재 상태에서는 금액을 인상할 수 없습니다. (OPEN 또는 MATCHING 상태만 가능)', 400);
     }
 
-    const currentRate = careRequest.dailyRate || 0;
-    if (newDailyRate <= currentRate) {
-      throw new AppError(`새 일당은 현재 일당(${currentRate.toLocaleString()}원)보다 높아야 합니다.`, 400);
+    const currentRate = careRequest.dailyRate;
+    if (currentRate != null && newDailyRate <= currentRate) {
+      throw new AppError(`새 일당은 현재 일당(${(currentRate ?? 0).toLocaleString()}원)보다 높아야 합니다.`, 400);
     }
 
-    // 금액 인상 — CAS 패턴: 같은 currentRate 일 때만 update 적용 (동시 인상 race 방지)
+    // 금액 인상 — CAS 패턴: 같은 currentRate 일 때만 update 적용 (NULL 도 동일하게 매칭)
     const cas = await prisma.careRequest.updateMany({
-      where: { id, dailyRate: currentRate },
+      where: { id, dailyRate: currentRate ?? null },
       data: { dailyRate: newDailyRate },
     });
     if (cas.count !== 1) {
@@ -984,11 +1020,11 @@ export const raiseRate = async (req: AuthRequest, res: Response, next: NextFunct
             userId: cg.userId,
             key: 'MATCHING_RATE_RAISED',
             vars: {
-              currentRate: currentRate.toLocaleString(),
+              currentRate: (currentRate ?? 0).toLocaleString(),
               newRate: newDailyRate.toLocaleString(),
             },
             fallbackTitle: '간병 요청 금액 인상',
-            fallbackBody: `일당이 ${currentRate.toLocaleString()}원 → ${newDailyRate.toLocaleString()}원으로 인상되었습니다`,
+            fallbackBody: `일당이 ${(currentRate ?? 0).toLocaleString()}원 → ${newDailyRate.toLocaleString()}원으로 인상되었습니다`,
             fallbackType: 'MATCHING',
             data: { careRequestId: id },
           }).catch(() => {}),
@@ -1004,7 +1040,7 @@ export const raiseRate = async (req: AuthRequest, res: Response, next: NextFunct
     res.json({
       success: true,
       data: updated,
-      message: `일당이 ${currentRate.toLocaleString()}원에서 ${newDailyRate.toLocaleString()}원으로 인상되었습니다.`,
+      message: `일당이 ${(currentRate ?? 0).toLocaleString()}원에서 ${newDailyRate.toLocaleString()}원으로 인상되었습니다.`,
       previousRate: currentRate,
       newRate: newDailyRate,
     });

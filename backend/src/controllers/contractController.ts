@@ -118,10 +118,17 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
         throw new AppError('선택한 간병인의 지원 정보를 찾을 수 없습니다.', 400);
       }
 
-      // 계약 일당: 간병인이 역제안(proposedRate) 했고 그대로 수락이 아닌 경우 그 값을, 아니면 보호자 제시 일당
+      // careRequest 를 트랜잭션 안에서 다시 잠그고 최신 dailyRate 로 계산
+      // (raise-rate 가 동시에 커밋되어도 인상된 금액으로 계약 잡히도록)
+      const lockedReq = await tx.$queryRaw<Array<{ dailyRate: number | null }>>`
+        SELECT "dailyRate" FROM "CareRequest" WHERE id = ${careRequestId} FOR UPDATE
+      `;
+      const latestDailyRate = lockedReq[0]?.dailyRate ?? null;
+
+      // 계약 일당: 간병인이 역제안(proposedRate) 했고 그대로 수락이 아닌 경우 그 값을, 아니면 보호자 제시 (최신) 일당
       const dailyRate = (!application.isAccepted && application.proposedRate && application.proposedRate > 0)
         ? application.proposedRate
-        : (careRequest.dailyRate || 150000);
+        : (latestDailyRate || 150000);
       const totalAmount = dailyRate * durationDays;
       if (totalAmount <= 0) {
         throw new AppError('계약 금액은 0보다 커야 합니다.', 400);
