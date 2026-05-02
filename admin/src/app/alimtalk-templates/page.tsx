@@ -5,6 +5,7 @@ import StatsCard from "@/components/StatsCard";
 import {
   getNotificationTemplates,
   updateNotificationTemplate,
+  createNotificationTemplate,
   getAlimtalkTemplateStats,
   NotificationTemplate,
   AlimtalkTemplateStat,
@@ -23,6 +24,21 @@ export default function AlimtalkTemplatesPage() {
   const [editCode, setEditCode] = useState("");
   const [editButtons, setEditButtons] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // 신규 등록 모달
+  const [showCreate, setShowCreate] = useState(false);
+  const [newForm, setNewForm] = useState({
+    key: "",
+    name: "",
+    title: "",
+    body: "",
+    description: "",
+    type: "SYSTEM",
+    targetRoles: [] as string[],
+    alimtalkTemplateCode: "",
+    alimtalkButtonsJson: "",
+  });
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,14 +118,76 @@ export default function AlimtalkTemplatesPage() {
     }
   };
 
+  const toggleNewRole = (role: string) => {
+    setNewForm((prev) => ({
+      ...prev,
+      targetRoles: prev.targetRoles.includes(role)
+        ? prev.targetRoles.filter((r) => r !== role)
+        : [...prev.targetRoles, role],
+    }));
+  };
+
+  const submitCreate = async () => {
+    const keyTrim = newForm.key.trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9_]*$/.test(keyTrim)) {
+      alert("키는 영문 대문자/숫자/_ 만 사용 가능합니다. 예: CUSTOM_ANNOUNCE_2026");
+      return;
+    }
+    if (!newForm.title.trim() || !newForm.body.trim()) {
+      alert("제목과 본문을 입력해주세요.");
+      return;
+    }
+    if (newForm.alimtalkButtonsJson.trim()) {
+      try { JSON.parse(newForm.alimtalkButtonsJson); }
+      catch { alert("버튼 JSON 형식이 올바르지 않습니다."); return; }
+    }
+    setCreating(true);
+    try {
+      await createNotificationTemplate({
+        key: keyTrim,
+        name: newForm.name.trim() || newForm.title.trim(),
+        title: newForm.title.trim(),
+        body: newForm.body.trim(),
+        description: newForm.description.trim() || undefined,
+        type: newForm.type,
+        channels: ["ALIMTALK"],
+        targetRoles: newForm.targetRoles,
+        alimtalkTemplateCode: newForm.alimtalkTemplateCode.trim() || null,
+        alimtalkButtonsJson: newForm.alimtalkButtonsJson.trim() || null,
+      } as any);
+      setShowCreate(false);
+      setNewForm({
+        key: "",
+        name: "",
+        title: "",
+        body: "",
+        description: "",
+        type: "SYSTEM",
+        targetRoles: [],
+        alimtalkTemplateCode: "",
+        alimtalkButtonsJson: "",
+      });
+      await load();
+    } catch (e: any) {
+      alert(e?.message || "생성 실패");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">알림톡 템플릿 관리</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          알리고에 등록된 카카오 알림톡 템플릿 코드 매핑·버튼 설정·발송 통계를 한눈에 관리합니다.
-          본문/제목 편집은 <a className="text-primary-600 underline" href="/admin/notification-templates">알림 템플릿</a> 페이지에서 합니다.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">알림톡 템플릿 관리</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            알리고에 등록된 카카오 알림톡 템플릿 코드 매핑·버튼 설정·발송 통계를 한눈에 관리합니다.
+            본문/제목 편집은 <a className="text-primary-600 underline" href="/admin/notification-templates">알림 템플릿</a> 페이지에서 합니다.
+          </p>
+        </div>
+        <button onClick={() => setShowCreate(true)} className="btn-primary self-start whitespace-nowrap">
+          + 신규 알림톡 등록
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
@@ -252,6 +330,139 @@ export default function AlimtalkTemplatesPage() {
           </div>
         )}
       </div>
+
+      {/* 신규 등록 모달 */}
+      {showCreate && (
+        <div className="modal-overlay" onClick={() => setShowCreate(false)}>
+          <div className="modal-content max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-gray-900">신규 알림톡 템플릿 등록</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                알리고에 검수 통과한 템플릿을 등록하거나, 어드민에서 일괄 발송용 알림톡을 추가합니다.
+              </p>
+            </div>
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 mb-4">
+              ⚠ <b>주의</b>: 새 키는 코드에서 자동 호출되지 않습니다.
+              일괄/수동 발송용으로만 사용되며, 자동 발송이 필요하면 백엔드에 <code className="px-1 bg-amber-100 rounded">sendFromTemplate(KEY)</code> 호출 추가가 필요합니다.
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">키 *</label>
+                  <input
+                    type="text"
+                    value={newForm.key}
+                    onChange={(e) => setNewForm({ ...newForm, key: e.target.value })}
+                    placeholder="CUSTOM_ANNOUNCE_2026"
+                    className="input-field font-mono uppercase"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-0.5">대문자/숫자/_ 만 사용</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">표시명 (선택)</label>
+                  <input
+                    type="text"
+                    value={newForm.name}
+                    onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
+                    placeholder="(미입력 시 제목 사용)"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">제목 *</label>
+                <input
+                  type="text"
+                  value={newForm.title}
+                  onChange={(e) => setNewForm({ ...newForm, title: e.target.value })}
+                  placeholder="알림 제목"
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">본문 *</label>
+                <textarea
+                  value={newForm.body}
+                  onChange={(e) => setNewForm({ ...newForm, body: e.target.value })}
+                  rows={5}
+                  placeholder="안녕하세요 {{name}}님, ..."
+                  className="input-field"
+                />
+                <p className="text-[10px] text-gray-400 mt-0.5">변수는 {"{{name}}"} 형태로 작성</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">설명 (선택)</label>
+                <input
+                  type="text"
+                  value={newForm.description}
+                  onChange={(e) => setNewForm({ ...newForm, description: e.target.value })}
+                  placeholder="이 템플릿의 사용 시점/목적"
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">대상 역할</label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { v: "GUARDIAN", label: "보호자" },
+                    { v: "CAREGIVER", label: "간병인" },
+                    { v: "HOSPITAL", label: "병원" },
+                    { v: "ADMIN", label: "관리자" },
+                  ].map((r) => (
+                    <button
+                      key={r.v}
+                      type="button"
+                      onClick={() => toggleNewRole(r.v)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        newForm.targetRoles.includes(r.v)
+                          ? "bg-primary-500 text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">알리고 TPL_CODE (선택)</label>
+                <input
+                  type="text"
+                  value={newForm.alimtalkTemplateCode}
+                  onChange={(e) => setNewForm({ ...newForm, alimtalkTemplateCode: e.target.value })}
+                  placeholder="TX_2026..."
+                  className="input-field font-mono"
+                />
+                <p className="text-[10px] text-gray-400 mt-0.5">알리고 콘솔에서 비즈채널 검수 통과 후 발급된 코드</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">버튼 JSON (선택)</label>
+                <textarea
+                  value={newForm.alimtalkButtonsJson}
+                  onChange={(e) => setNewForm({ ...newForm, alimtalkButtonsJson: e.target.value })}
+                  rows={4}
+                  placeholder={`[{"name":"바로가기","linkType":"WL","linkMo":"https://..","linkPc":"https://.."}]`}
+                  className="input-field font-mono text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => setShowCreate(false)}>취소</button>
+              <button className="btn-primary" disabled={creating} onClick={submitCreate}>
+                {creating ? "생성 중..." : "등록"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 편집 모달 — TPL_CODE + 버튼 JSON 만 */}
       {editing && (
