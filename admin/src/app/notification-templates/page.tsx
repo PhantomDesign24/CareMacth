@@ -5,12 +5,15 @@ import {
   getNotificationTemplates,
   updateNotificationTemplate,
   deleteNotificationTemplate,
+  getAlimtalkTemplateStats,
   NotificationTemplate,
+  AlimtalkTemplateStat,
 } from "@/lib/api";
 import { NOTIFICATION_TYPES } from "@/lib/constants";
 
 export default function NotificationTemplatesPage() {
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
+  const [stats, setStats] = useState<Record<string, AlimtalkTemplateStat>>({});
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<NotificationTemplate | null>(null);
   const [editForm, setEditForm] = useState<{
@@ -37,8 +40,18 @@ export default function NotificationTemplatesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getNotificationTemplates();
-      setTemplates(data);
+      const [data, statsRes] = await Promise.allSettled([
+        getNotificationTemplates(),
+        getAlimtalkTemplateStats(),
+      ]);
+      if (data.status === 'fulfilled') setTemplates(data.value);
+      if (statsRes.status === 'fulfilled') {
+        const map: Record<string, AlimtalkTemplateStat> = {};
+        for (const s of (statsRes.value?.stats || [])) {
+          map[s.templateKey] = s;
+        }
+        setStats(map);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -213,6 +226,19 @@ export default function NotificationTemplatesPage() {
                       </span>
                     )}
                     <code className="text-xs text-gray-400">{t.key}</code>
+                    {(() => {
+                      const s = stats[t.key];
+                      if (!s || s.total === 0) return null;
+                      const cls = s.successRate >= 95 ? 'bg-emerald-50 text-emerald-700'
+                        : s.successRate >= 80 ? 'bg-amber-50 text-amber-700'
+                        : 'bg-red-50 text-red-700';
+                      return (
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}
+                          title={`성공 ${s.success} · 실패 ${s.failed} · 대기 ${s.pending}`}>
+                          최근 30일 {s.total}건 · 성공률 {s.successRate}%
+                        </span>
+                      );
+                    })()}
                   </div>
                   {t.description && (
                     <p className="text-xs text-gray-400 mt-0.5">{t.description}</p>

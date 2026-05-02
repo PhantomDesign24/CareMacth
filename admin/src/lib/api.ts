@@ -513,6 +513,63 @@ export async function getEducationRecords(
   );
 }
 
+// ─── 알림톡 발송 로그 ─────────────────────────────────
+export interface AlimtalkLogItem {
+  id: string;
+  createdAt: string;
+  sentAt: string | null;
+  phone: string;
+  userName: string | null;
+  userEmail: string | null;
+  userRole: string | null;
+  templateKey: string | null;
+  templateCode: string | null;
+  title: string | null;
+  message: string;
+  status: "PENDING" | "SUCCESS" | "FAILED";
+  aligoMsgId: string | null;
+  errorReason: string | null;
+}
+
+export interface AlimtalkLogsResponse {
+  items: AlimtalkLogItem[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  summary: { todayCount: number; todaySuccessRate: number; last24hFailedCount: number };
+}
+
+export async function getAlimtalkLogs(params: {
+  status?: string;
+  templateKey?: string;
+  userQuery?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+} = {}) {
+  return apiRequest<AlimtalkLogsResponse>("/admin/alimtalk-logs", {
+    params: params as Record<string, string | number>,
+  });
+}
+
+export async function resendAlimtalkLog(id: string) {
+  return apiRequest<{ logId?: string; reason?: string }>(`/admin/alimtalk-logs/${id}/resend`, {
+    method: "POST",
+  });
+}
+
+export interface AlimtalkTemplateStat {
+  templateKey: string;
+  total: number;
+  success: number;
+  failed: number;
+  pending: number;
+  successRate: number;
+}
+
+export async function getAlimtalkTemplateStats() {
+  return apiRequest<{ stats: AlimtalkTemplateStat[] }>("/admin/alimtalk-logs/template-stats");
+}
+
 // ─── Notices (공지사항) ────────────────────────────────
 export interface NoticeAttachment {
   url: string;

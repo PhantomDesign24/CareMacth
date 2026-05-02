@@ -312,7 +312,7 @@ export async function sendToAdmins(params: {
 // 알림톡 발송 헬퍼 — 템플릿의 alimtalkTemplateCode 기준으로 발송
 async function sendAlimtalkForTemplate(
   userId: string,
-  template: { alimtalkTemplateCode: string | null; alimtalkButtonsJson: string | null },
+  template: { key?: string; alimtalkTemplateCode: string | null; alimtalkButtonsJson: string | null },
   message: string,
   subject?: string,
   overrideButtons?: AligoButton[],
@@ -339,6 +339,7 @@ async function sendAlimtalkForTemplate(
     message,
     subject,
     buttons,
+    meta: { userId, templateKey: template.key || null },
   });
 }
 

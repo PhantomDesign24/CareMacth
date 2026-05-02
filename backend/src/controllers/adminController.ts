@@ -4243,3 +4243,153 @@ export const deleteHoliday = async (req: AuthRequest, res: Response, next: NextF
     next(error);
   }
 };
+
+// ============================================================
+// 알림톡 발송 로그 (Aligo)
+// ============================================================
+
+// GET /admin/alimtalk-logs - 알림톡 발송 이력 조회
+export const getAlimtalkLogs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const status = (req.query.status as string) || '';
+    const templateKey = (req.query.templateKey as string) || '';
+    const userQuery = ((req.query.userQuery as string) || '').trim();
+    const from = req.query.from ? new Date(String(req.query.from)) : null;
+    const to = req.query.to ? new Date(String(req.query.to)) : null;
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (status && ['PENDING', 'SUCCESS', 'FAILED'].includes(status)) where.status = status;
+    if (templateKey) where.templateKey = templateKey;
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = from;
+      if (to) where.createdAt.lte = to;
+    }
+    if (userQuery) {
+      where.OR = [
+        { phone: { contains: userQuery } },
+        { user: { is: { OR: [
+          { name: { contains: userQuery } },
+          { email: { contains: userQuery } },
+          { phone: { contains: userQuery } },
+        ] } } },
+      ];
+    }
+
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [items, total, todayCount, todaySuccessCount, dayFailedCount] = await Promise.all([
+      prisma.alimtalkLog.findMany({
+        where,
+        include: { user: { select: { name: true, email: true, role: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.alimtalkLog.count({ where }),
+      prisma.alimtalkLog.count({ where: { createdAt: { gte: todayStart } } }),
+      prisma.alimtalkLog.count({ where: { createdAt: { gte: todayStart }, status: 'SUCCESS' } }),
+      prisma.alimtalkLog.count({ where: { createdAt: { gte: dayAgo }, status: 'FAILED' } }),
+    ]);
+
+    const successRate = todayCount > 0 ? Math.round((todaySuccessCount / todayCount) * 1000) / 10 : 0;
+
+    res.json({
+      success: true,
+      data: {
+        items: items.map((it: any) => ({
+          id: it.id,
+          createdAt: it.createdAt,
+          sentAt: it.sentAt,
+          phone: it.phone,
+          userName: it.user?.name || null,
+          userEmail: it.user?.email || null,
+          userRole: it.user?.role || null,
+          templateKey: it.templateKey,
+          templateCode: it.templateCode,
+          title: it.title,
+          message: it.message,
+          status: it.status,
+          aligoMsgId: it.aligoMsgId,
+          errorReason: it.errorReason,
+        })),
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
+        summary: {
+          todayCount,
+          todaySuccessRate: successRate,
+          last24hFailedCount: dayFailedCount,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /admin/alimtalk-logs/:id/resend - 실패 건 재발송
+export const resendAlimtalkLog = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const original = await prisma.alimtalkLog.findUnique({ where: { id } });
+    if (!original) throw new AppError('로그를 찾을 수 없습니다.', 404);
+    if (!original.templateCode) throw new AppError('템플릿 코드가 없는 로그는 재발송 불가합니다.', 400);
+
+    const { sendAlimtalk } = await import('../services/aligoService');
+    let buttons: any[] | undefined;
+    if (original.buttonsJson) {
+      try {
+        const v: any = original.buttonsJson;
+        buttons = Array.isArray(v) ? v : v?.button;
+      } catch {}
+    }
+    const result = await sendAlimtalk({
+      receiver: original.phone,
+      tplCode: original.templateCode,
+      message: original.message,
+      subject: original.title || undefined,
+      buttons,
+      meta: { userId: original.userId, templateKey: original.templateKey },
+    });
+
+    res.json({ success: result.success, data: { logId: result.logId, reason: result.reason } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /admin/alimtalk-logs/template-stats - 템플릿별 최근 30일 발송 통계
+export const getAlimtalkTemplateStats = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const grouped = await prisma.alimtalkLog.groupBy({
+      by: ['templateKey', 'status'],
+      where: { createdAt: { gte: since }, templateKey: { not: null } },
+      _count: true,
+    });
+    const map: Record<string, { total: number; success: number; failed: number; pending: number }> = {};
+    for (const row of grouped) {
+      const key = String(row.templateKey);
+      if (!map[key]) map[key] = { total: 0, success: 0, failed: 0, pending: 0 };
+      const cnt = (row as any)._count || 0;
+      map[key].total += cnt;
+      if (row.status === 'SUCCESS') map[key].success += cnt;
+      else if (row.status === 'FAILED') map[key].failed += cnt;
+      else if (row.status === 'PENDING') map[key].pending += cnt;
+    }
+    const stats = Object.entries(map).map(([key, v]) => ({
+      templateKey: key,
+      total: v.total,
+      success: v.success,
+      failed: v.failed,
+      pending: v.pending,
+      successRate: v.total > 0 ? Math.round((v.success / v.total) * 1000) / 10 : 0,
+    }));
+    res.json({ success: true, data: { stats } });
+  } catch (error) {
+    next(error);
+  }
+};

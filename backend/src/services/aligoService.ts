@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { prisma } from '../app';
 
 // 알리고 알림톡 발송 — https://kakaoapi.aligo.in/
 // 카카오 비즈채널 검수가 통과한 템플릿만 발송 가능 (TPL_CODE 필요)
@@ -25,18 +26,66 @@ export interface SendAlimtalkParams {
   subject?: string; // 강조표기형 제목 (선택)
   buttons?: AligoButton[]; // 버튼 (선택)
   failoverSms?: { type: 'SMS' | 'LMS'; subject?: string; message?: string }; // 발송 실패 시 SMS 대체
+  // 로그 추적용 메타 (옵션) — 로그 테이블에 templateKey/userId 기록
+  meta?: {
+    userId?: string | null;
+    templateKey?: string | null;
+  };
 }
 
 export function isAligoConfigured(): boolean {
   return !!(ALIGO_API_KEY && ALIGO_USER_ID && ALIGO_SENDER_KEY && ALIGO_SENDER_PHONE);
 }
 
-export async function sendAlimtalk(params: SendAlimtalkParams): Promise<{ success: boolean; reason?: string; raw?: any }> {
-  if (!isAligoConfigured()) {
-    return { success: false, reason: 'aligo 환경변수 미설정' };
-  }
+export async function sendAlimtalk(params: SendAlimtalkParams): Promise<{ success: boolean; reason?: string; raw?: any; logId?: string }> {
   const phone = (params.receiver || '').replace(/-/g, '');
-  if (!phone) return { success: false, reason: '수신자 번호 없음' };
+
+  // 1) PENDING 로그 사전 INSERT — 환경변수 미설정/번호 없음도 모두 기록
+  let logId: string | undefined;
+  try {
+    const log = await prisma.alimtalkLog.create({
+      data: {
+        userId: params.meta?.userId || null,
+        phone: phone || (params.receiver || ''),
+        templateKey: params.meta?.templateKey || null,
+        templateCode: params.tplCode || null,
+        title: params.subject || null,
+        message: params.message || '',
+        buttonsJson: params.buttons ? (params.buttons as any) : undefined,
+        status: 'PENDING',
+      },
+    });
+    logId = log.id;
+  } catch (e: any) {
+    // 로그 INSERT 실패가 발송을 막지는 않음
+    console.error('[aligoService] log INSERT 실패:', e?.message || e);
+  }
+
+  const finalize = async (status: 'SUCCESS' | 'FAILED', extras: { aligoMsgId?: string | null; errorReason?: string | null }) => {
+    if (!logId) return;
+    try {
+      await prisma.alimtalkLog.update({
+        where: { id: logId },
+        data: {
+          status,
+          aligoMsgId: extras.aligoMsgId || null,
+          errorReason: extras.errorReason || null,
+          sentAt: new Date(),
+        },
+      });
+    } catch (e: any) {
+      console.error('[aligoService] log UPDATE 실패:', e?.message || e);
+    }
+  };
+
+  if (!isAligoConfigured()) {
+    await finalize('FAILED', { errorReason: 'aligo 환경변수 미설정' });
+    return { success: false, reason: 'aligo 환경변수 미설정', logId };
+  }
+  if (!phone) {
+    await finalize('FAILED', { errorReason: '수신자 번호 없음' });
+    return { success: false, reason: '수신자 번호 없음', logId };
+  }
 
   const form = new URLSearchParams();
   form.append('apikey', ALIGO_API_KEY!);
@@ -65,13 +114,16 @@ export async function sendAlimtalk(params: SendAlimtalkParams): Promise<{ succes
       timeout: 10000,
     });
     const data = res.data;
-    // 알리고 응답: { code: 0, message: '성공', ... } / 실패는 code != 0
+    // 알리고 응답: { code: 0, message: '성공', info: { msg_id: '...' } } / 실패는 code != 0
     if (data && data.code === 0) {
-      return { success: true, raw: data };
+      await finalize('SUCCESS', { aligoMsgId: data?.info?.msg_id ? String(data.info.msg_id) : (data?.msg_id ? String(data.msg_id) : null) });
+      return { success: true, raw: data, logId };
     }
-    return { success: false, reason: data?.message || '알리고 발송 실패', raw: data };
+    await finalize('FAILED', { errorReason: data?.message || '알리고 발송 실패' });
+    return { success: false, reason: data?.message || '알리고 발송 실패', raw: data, logId };
   } catch (err: any) {
     console.error('[aligoService] 발송 예외:', err?.message || err);
-    return { success: false, reason: err?.message || '알리고 호출 중 오류' };
+    await finalize('FAILED', { errorReason: err?.message || '알리고 호출 중 오류' });
+    return { success: false, reason: err?.message || '알리고 호출 중 오류', logId };
   }
 }

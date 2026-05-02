@@ -201,6 +201,11 @@ router.put('/education/:id', [
 ], adminController.updateEducation);
 router.delete('/education/:id', adminController.deleteEducation);
 
+// 알림톡 발송 로그
+router.get('/alimtalk-logs', adminController.getAlimtalkLogs);
+router.get('/alimtalk-logs/template-stats', adminController.getAlimtalkTemplateStats);
+router.post('/alimtalk-logs/:id/resend', adminController.resendAlimtalkLog);
+
 // 공지사항
 import { upload, uploadNotice, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
 router.get('/notices', noticeController.adminListNotices);
