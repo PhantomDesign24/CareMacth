@@ -13,6 +13,113 @@ import {
 
 const ROLE_LABEL: Record<string, string> = { GUARDIAN: '보호자', CAREGIVER: '간병인', ADMIN: '관리자', HOSPITAL: '병원' };
 
+// 카카오톡 알림톡 미리보기 — 변수는 sample 값으로 치환
+function fillSampleVars(text: string): string {
+  if (!text) return '';
+  const samples: Record<string, string> = {
+    name: '홍길동',
+    patientName: '홍길동',
+    caregiverName: '김간병',
+    guardianName: '이보호',
+    amount: '100,000',
+    rate: '150,000',
+    days: '7',
+    startDate: '2026-05-10',
+    endDate: '2026-05-17',
+    daysLeft: '3',
+    additionalDays: '5',
+    docLabel: '보험청구용 진료비계산서',
+    reasonText: '서류 보완이 필요합니다',
+    currentRate: '150,000',
+    newRate: '170,000',
+    address: '서울 강남구 ○○병원',
+    role: '보호자',
+    rejectReason: '미흡 사항 보완 필요',
+    region: '서울 강남구',
+  };
+  return text.replace(/\{\{(\w+)\}\}/g, (_, k) => samples[k] ?? `[${k}]`);
+}
+
+interface PreviewProps {
+  title?: string;
+  body: string;
+  buttonsJson?: string;
+}
+function AlimtalkPreview({ title, body, buttonsJson }: PreviewProps) {
+  let buttons: any[] = [];
+  if (buttonsJson?.trim()) {
+    try {
+      const parsed = JSON.parse(buttonsJson);
+      buttons = Array.isArray(parsed) ? parsed : (parsed?.button || []);
+    } catch {}
+  }
+  const previewTitle = fillSampleVars(title || '');
+  const previewBody = fillSampleVars(body || '');
+
+  return (
+    <div className="bg-[#9bbbd4] rounded-2xl p-3 max-w-[320px] mx-auto shadow-md">
+      {/* 헤더 — 카카오 노란색 */}
+      <div className="bg-[#FEE500] text-[#181600] text-xs font-bold rounded-t-lg px-3 py-2 flex items-center justify-between">
+        <span>알림톡 도착</span>
+        <span className="text-[10px] font-medium">케어매치</span>
+      </div>
+      {/* 본문 카드 */}
+      <div className="bg-white rounded-b-lg overflow-hidden">
+        <div className="px-4 py-3">
+          {previewTitle && (
+            <div className="text-base font-bold text-gray-900 mb-2 whitespace-pre-wrap break-words">
+              {previewTitle}
+            </div>
+          )}
+          <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap break-words">
+            {previewBody || <span className="text-gray-300">(본문을 입력하면 미리보기가 표시됩니다)</span>}
+          </div>
+        </div>
+        {/* 버튼 */}
+        {buttons.length > 0 && (
+          <div className="border-t border-gray-200">
+            {buttons.map((b: any, i: number) => {
+              const linkTypeLabel: Record<string, string> = {
+                WL: '웹링크', AL: '앱링크', BC: '상담말하기', AC: '채널추가',
+                BK: '배송조회', MD: '메시지전달', DS: '보안인증', BT: '봇키워드',
+              };
+              const targetUrl = b?.linkMo || b?.linkPc || b?.schemeAndroid || b?.schemeIos || '';
+              const previewUrl = fillSampleVars(targetUrl);
+              return (
+                <div
+                  key={i}
+                  className="px-4 py-2.5 border-b border-gray-100 last:border-b-0 hover:bg-gray-50"
+                >
+                  <div className="text-sm font-semibold text-gray-700 text-center">
+                    {b?.name || '(버튼)'}
+                  </div>
+                  {(b?.linkType || targetUrl) && (
+                    <div className="mt-1 flex items-center justify-center gap-1.5 text-[10px] text-gray-400">
+                      {b?.linkType && (
+                        <span className="inline-block px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                          {linkTypeLabel[b.linkType] || b.linkType}
+                        </span>
+                      )}
+                      {previewUrl && (
+                        <span className="truncate max-w-[220px] font-mono" title={previewUrl}>
+                          {previewUrl}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div className="text-[10px] text-white/80 text-right mt-1.5 px-1">
+        ※ 변수는 샘플값으로 치환되어 표시됩니다
+      </div>
+    </div>
+  );
+}
+
 export default function AlimtalkTemplatesPage() {
   const [all, setAll] = useState<NotificationTemplate[]>([]);
   const [stats, setStats] = useState<Record<string, AlimtalkTemplateStat>>({});
@@ -24,6 +131,9 @@ export default function AlimtalkTemplatesPage() {
   const [editCode, setEditCode] = useState("");
   const [editButtons, setEditButtons] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // 미리보기 모달
+  const [previewOf, setPreviewOf] = useState<NotificationTemplate | null>(null);
 
   // 신규 등록 모달
   const [showCreate, setShowCreate] = useState(false);
@@ -253,7 +363,10 @@ export default function AlimtalkTemplatesPage() {
                         <div className="font-medium text-gray-900">{t.title || t.key}</div>
                         <div className="font-mono text-[10px] text-gray-400">{t.key}</div>
                         {t.body && (
-                          <div className="text-xs text-gray-500 mt-1 max-w-[300px] truncate" title={t.body}>
+                          <div
+                            className="text-xs text-gray-500 mt-1 max-w-[320px] whitespace-pre-wrap line-clamp-3"
+                            title={t.body}
+                          >
                             {t.body}
                           </div>
                         )}
@@ -315,12 +428,20 @@ export default function AlimtalkTemplatesPage() {
                         </button>
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <button
-                          onClick={() => openEdit(t)}
-                          className="px-2.5 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100"
-                        >
-                          코드/버튼 편집
-                        </button>
+                        <div className="flex flex-col gap-1 items-center">
+                          <button
+                            onClick={() => setPreviewOf(t)}
+                            className="px-2.5 py-1 rounded text-xs font-medium bg-yellow-50 text-yellow-800 hover:bg-yellow-100"
+                          >
+                            미리보기
+                          </button>
+                          <button
+                            onClick={() => openEdit(t)}
+                            className="px-2.5 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          >
+                            코드/버튼 편집
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -334,7 +455,7 @@ export default function AlimtalkTemplatesPage() {
       {/* 신규 등록 모달 */}
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>
-          <div className="modal-content max-w-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content max-w-4xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4">
               <h3 className="text-lg font-bold text-gray-900">신규 알림톡 템플릿 등록</h3>
               <p className="text-xs text-gray-500 mt-0.5">
@@ -346,7 +467,8 @@ export default function AlimtalkTemplatesPage() {
               일괄/수동 발송용으로만 사용되며, 자동 발송이 필요하면 백엔드에 <code className="px-1 bg-amber-100 rounded">sendFromTemplate(KEY)</code> 호출 추가가 필요합니다.
             </div>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">키 *</label>
@@ -452,6 +574,17 @@ export default function AlimtalkTemplatesPage() {
                   className="input-field font-mono text-xs"
                 />
               </div>
+              </div>
+
+              {/* 카톡 미리보기 */}
+              <div className="bg-gray-50 rounded-xl p-4 lg:sticky lg:top-4 self-start">
+                <div className="text-xs font-medium text-gray-500 mb-3 text-center">📱 카카오톡 알림톡 미리보기</div>
+                <AlimtalkPreview
+                  title={newForm.title}
+                  body={newForm.body}
+                  buttonsJson={newForm.alimtalkButtonsJson}
+                />
+              </div>
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
@@ -464,44 +597,57 @@ export default function AlimtalkTemplatesPage() {
         </div>
       )}
 
-      {/* 편집 모달 — TPL_CODE + 버튼 JSON 만 */}
+      {/* 편집 모달 — TPL_CODE + 버튼 JSON + 미리보기 */}
       {editing && (
         <div className="modal-overlay" onClick={() => setEditing(null)}>
-          <div className="modal-content max-w-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content max-w-4xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4">
               <h3 className="text-lg font-bold text-gray-900">{editing.title || editing.key}</h3>
               <p className="text-xs text-gray-500 font-mono mt-0.5">{editing.key}</p>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">알리고 TPL_CODE</label>
-                <input
-                  type="text"
-                  value={editCode}
-                  onChange={(e) => setEditCode(e.target.value)}
-                  placeholder="TX_2026..."
-                  className="input-field font-mono"
-                />
-                <p className="text-xs text-gray-400 mt-1">알리고 콘솔에서 카카오 비즈채널 검수 통과 후 발급된 코드</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 입력 폼 */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">알리고 TPL_CODE</label>
+                  <input
+                    type="text"
+                    value={editCode}
+                    onChange={(e) => setEditCode(e.target.value)}
+                    placeholder="TX_2026..."
+                    className="input-field font-mono"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">알리고 콘솔에서 카카오 비즈채널 검수 통과 후 발급된 코드</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">버튼 JSON (선택)</label>
+                  <textarea
+                    value={editButtons}
+                    onChange={(e) => setEditButtons(e.target.value)}
+                    rows={6}
+                    placeholder={`예시:\n[{"name":"공고 보기","linkType":"WL","linkMo":"https://cm.phantomdesign.kr/find-work","linkPc":"https://cm.phantomdesign.kr/find-work"}]`}
+                    className="input-field font-mono text-xs"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    배열 형식. linkType: WL(웹링크) / AL(앱링크) / BC(상담말하기) / AC(채널추가) / BK(배송조회)
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                  ⚠ 본문/제목 편집은 <a className="underline" href="/admin/notification-templates">알림 템플릿</a> 페이지에서 진행하세요.
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">버튼 JSON (선택)</label>
-                <textarea
-                  value={editButtons}
-                  onChange={(e) => setEditButtons(e.target.value)}
-                  rows={6}
-                  placeholder={`예시:\n[{"name":"공고 보기","linkType":"WL","linkMo":"https://cm.phantomdesign.kr/find-work","linkPc":"https://cm.phantomdesign.kr/find-work"}]`}
-                  className="input-field font-mono text-xs"
+              {/* 카톡 미리보기 */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="text-xs font-medium text-gray-500 mb-3 text-center">📱 카카오톡 알림톡 미리보기</div>
+                <AlimtalkPreview
+                  title={editing.title}
+                  body={editing.body}
+                  buttonsJson={editButtons}
                 />
-                <p className="text-xs text-gray-400 mt-1">
-                  배열 형식. linkType: WL(웹링크) / AL(앱링크) / BC(상담말하기) / AC(채널추가) / BK(배송조회) / MD(메시지전달) / DS(보안인증)
-                </p>
-              </div>
-
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-                ⚠ 본문/제목 편집은 <a className="underline" href="/admin/notification-templates">알림 템플릿</a> 페이지에서 진행하세요.
               </div>
             </div>
 
@@ -510,6 +656,41 @@ export default function AlimtalkTemplatesPage() {
               <button className="btn-primary" disabled={saving} onClick={saveEdit}>
                 {saving ? '저장 중...' : '저장'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 단독 미리보기 모달 (표 행 미리보기 버튼) */}
+      {previewOf && (
+        <div className="modal-overlay" onClick={() => setPreviewOf(null)}>
+          <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">{previewOf.title || previewOf.key}</h3>
+                <p className="text-xs text-gray-500 font-mono mt-0.5">{previewOf.key}</p>
+              </div>
+              <button
+                onClick={() => setPreviewOf(null)}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4">
+              <AlimtalkPreview
+                title={previewOf.title}
+                body={previewOf.body}
+                buttonsJson={previewOf.alimtalkButtonsJson || undefined}
+              />
+            </div>
+            <div className="mt-4 text-xs text-gray-500 space-y-1">
+              {previewOf.alimtalkTemplateCode && (
+                <div>TPL_CODE: <code className="font-mono bg-yellow-50 px-1 rounded">{previewOf.alimtalkTemplateCode}</code></div>
+              )}
+              <div>대상: {(previewOf.targetRoles || []).map(r => ROLE_LABEL[r] || r).join(', ') || '미지정'}</div>
             </div>
           </div>
         </div>

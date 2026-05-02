@@ -147,13 +147,13 @@ export default function NotificationsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">알림 관리</h1>
-        <p className="mt-1 text-sm text-gray-500">알림을 발송하고 발송 이력을 관리합니다.</p>
+        <h1 className="text-2xl font-bold text-gray-900">푸시 관리</h1>
+        <p className="mt-1 text-sm text-gray-500">FCM 푸시 알림을 발송하고 발송 이력을 관리합니다. (앱·웹 푸시)</p>
       </div>
 
       {/* 발송 폼 */}
       <div className="card">
-        <h2 className="mb-4 text-lg font-semibold text-gray-900">알림 발송</h2>
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">푸시 발송</h2>
         <form onSubmit={handleSend} className="space-y-4">
           {/* 대상 */}
           <div>
