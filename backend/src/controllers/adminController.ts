@@ -4393,3 +4393,188 @@ export const getAlimtalkTemplateStats = async (_req: AuthRequest, res: Response,
     next(error);
   }
 };
+
+// ============================================================
+// 알림톡 템플릿 — 알리고에 등록 신청 + 검수 요청 + 상태 조회
+// ============================================================
+import {
+  registerAlimtalkTemplate,
+  requestTemplateApproval,
+  listAlimtalkTemplates,
+  deleteAlimtalkTemplate,
+} from '../services/aligoService';
+
+// {{var}} → #{var} 변환
+function toAligoVarFormat(text: string): string {
+  return (text || '').replace(/\{\{(\w+)\}\}/g, '#{$1}');
+}
+
+// POST /admin/alimtalk-templates/:key/register-aligo
+//   body: { autoRequestApproval?: boolean }
+// 1) registerAlimtalkTemplate 호출 (등록)
+// 2) autoRequestApproval=true 면 requestTemplateApproval 도 자동 호출 (검수 신청)
+// 3) DB의 alimtalkTemplateCode 에 우리 키(=tpl_code) 저장
+export const registerAlimtalkOnAligo = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { key } = req.params;
+    const autoRequestApproval = req.body?.autoRequestApproval !== false; // 기본 true
+
+    const tpl = await prisma.notificationTemplate.findUnique({ where: { key } });
+    if (!tpl) throw new AppError('템플릿을 찾을 수 없습니다.', 404);
+
+    // 본문/제목 변수 형식 변환
+    const tplContent = toAligoVarFormat(tpl.body || '');
+    const tplName = (tpl.title || tpl.name || tpl.key).slice(0, 50);
+
+    // 버튼 — DB에 저장된 alimtalkButtonsJson 파싱
+    let buttons: any[] | undefined;
+    if (tpl.alimtalkButtonsJson) {
+      try {
+        const parsed = JSON.parse(tpl.alimtalkButtonsJson);
+        const arr = Array.isArray(parsed) ? parsed : parsed?.button;
+        // 변수 치환 적용 (URL 안의 {{var}} 도 #{var} 로)
+        buttons = (Array.isArray(arr) ? arr : []).map((b: any) => ({
+          name: b.name,
+          linkType: b.linkType,
+          ...(b.linkMo && { linkMo: toAligoVarFormat(b.linkMo) }),
+          ...(b.linkPc && { linkPc: toAligoVarFormat(b.linkPc) }),
+          ...(b.schemeIos && { schemeIos: toAligoVarFormat(b.schemeIos) }),
+          ...(b.schemeAndroid && { schemeAndroid: toAligoVarFormat(b.schemeAndroid) }),
+        }));
+      } catch {}
+    }
+
+    // 1) 등록
+    const reg = await registerAlimtalkTemplate({
+      tplCode: key,
+      tplName,
+      tplContent,
+      tplType: 'BA', // 기본형
+      tplEmType: 'NONE',
+      buttons,
+    });
+    if (!reg.success) {
+      throw new AppError(reg.reason || '알리고 템플릿 등록 실패', 502);
+    }
+
+    // 2) 검수 요청 (옵션)
+    let approval: any = null;
+    if (autoRequestApproval) {
+      approval = await requestTemplateApproval(key);
+    }
+
+    // 3) DB에 tpl_code 저장 (이미 있어도 덮어씀)
+    await prisma.notificationTemplate.update({
+      where: { key },
+      data: { alimtalkTemplateCode: key },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        registered: true,
+        registerInfo: reg.raw,
+        approvalRequested: !!approval?.success,
+        approvalInfo: approval?.raw || null,
+        approvalReason: approval?.reason,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /admin/alimtalk-templates/bulk-register
+//   body: { keys: string[], autoRequestApproval?: boolean }
+// 여러 템플릿을 순차 등록 + 검수 요청
+export const bulkRegisterAlimtalkTemplates = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { keys, autoRequestApproval = true } = req.body || {};
+    if (!Array.isArray(keys) || keys.length === 0) {
+      throw new AppError('등록할 템플릿 키 배열이 필요합니다.', 400);
+    }
+    const results: Array<{ key: string; success: boolean; reason?: string; approvalSuccess?: boolean }> = [];
+    for (const key of keys) {
+      const tpl = await prisma.notificationTemplate.findUnique({ where: { key } });
+      if (!tpl) {
+        results.push({ key, success: false, reason: '템플릿 없음' });
+        continue;
+      }
+      const tplContent = toAligoVarFormat(tpl.body || '');
+      const tplName = (tpl.title || tpl.name || tpl.key).slice(0, 50);
+      let buttons: any[] | undefined;
+      if (tpl.alimtalkButtonsJson) {
+        try {
+          const parsed = JSON.parse(tpl.alimtalkButtonsJson);
+          const arr = Array.isArray(parsed) ? parsed : parsed?.button;
+          buttons = (Array.isArray(arr) ? arr : []).map((b: any) => ({
+            name: b.name,
+            linkType: b.linkType,
+            ...(b.linkMo && { linkMo: toAligoVarFormat(b.linkMo) }),
+            ...(b.linkPc && { linkPc: toAligoVarFormat(b.linkPc) }),
+            ...(b.schemeIos && { schemeIos: toAligoVarFormat(b.schemeIos) }),
+            ...(b.schemeAndroid && { schemeAndroid: toAligoVarFormat(b.schemeAndroid) }),
+          }));
+        } catch {}
+      }
+      const reg = await registerAlimtalkTemplate({
+        tplCode: key,
+        tplName,
+        tplContent,
+        tplType: 'BA',
+        tplEmType: 'NONE',
+        buttons,
+      });
+      if (!reg.success) {
+        results.push({ key, success: false, reason: reg.reason });
+        continue;
+      }
+      let approvalSuccess = false;
+      if (autoRequestApproval) {
+        const apr = await requestTemplateApproval(key);
+        approvalSuccess = apr.success;
+      }
+      await prisma.notificationTemplate.update({
+        where: { key },
+        data: { alimtalkTemplateCode: key },
+      });
+      results.push({ key, success: true, approvalSuccess });
+      // 알리고 rate limit 회피용 짧은 sleep
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    res.json({ success: true, data: { results } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /admin/alimtalk-templates/aligo-status
+// 알리고 측 템플릿 상태(REG/REQ/APR/REJ) 조회
+export const getAligoTemplateStatus = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const result = await listAlimtalkTemplates();
+    if (!result.success) throw new AppError(result.reason || '알리고 조회 실패', 502);
+    res.json({
+      success: true,
+      data: {
+        list: result.list || [],
+        summary: result.info || null,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /admin/alimtalk-templates/:key/aligo
+// 알리고에서 템플릿 삭제 (승인된 템플릿은 불가)
+export const deleteAlimtalkOnAligo = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { key } = req.params;
+    const result = await deleteAlimtalkTemplate(key);
+    if (!result.success) throw new AppError(result.reason || '알리고 삭제 실패', 502);
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};

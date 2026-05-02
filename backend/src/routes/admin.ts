@@ -206,6 +206,12 @@ router.get('/alimtalk-logs', adminController.getAlimtalkLogs);
 router.get('/alimtalk-logs/template-stats', adminController.getAlimtalkTemplateStats);
 router.post('/alimtalk-logs/:id/resend', adminController.resendAlimtalkLog);
 
+// 알림톡 템플릿 — 알리고 등록/검수/조회/삭제
+router.get('/alimtalk-templates/aligo-status', adminController.getAligoTemplateStatus);
+router.post('/alimtalk-templates/bulk-register', adminController.bulkRegisterAlimtalkTemplates);
+router.post('/alimtalk-templates/:key/register-aligo', adminController.registerAlimtalkOnAligo);
+router.delete('/alimtalk-templates/:key/aligo', adminController.deleteAlimtalkOnAligo);
+
 // 공지사항
 import { upload, uploadNotice, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
 router.get('/notices', noticeController.adminListNotices);

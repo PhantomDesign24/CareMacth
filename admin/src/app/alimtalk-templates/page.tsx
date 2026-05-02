@@ -725,7 +725,7 @@ export default function AlimtalkTemplatesPage() {
       {/* 단독 미리보기 모달 (표 행 미리보기 버튼) */}
       {previewOf && (
         <div className="modal-overlay" onClick={() => setPreviewOf(null)}>
-          <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content max-w-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start justify-between">
               <div>
                 <h3 className="text-lg font-bold text-gray-900">{previewOf.title || previewOf.key}</h3>
@@ -740,16 +740,72 @@ export default function AlimtalkTemplatesPage() {
                 </svg>
               </button>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <AlimtalkPreview
-                title={previewOf.title}
-                body={previewOf.body}
-                buttonsJson={previewOf.alimtalkButtonsJson || undefined}
-              />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* 카톡 미리보기 */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="text-xs font-medium text-gray-500 mb-3 text-center">📱 카톡 미리보기</div>
+                <AlimtalkPreview
+                  title={previewOf.title}
+                  body={previewOf.body}
+                  buttonsJson={previewOf.alimtalkButtonsJson || undefined}
+                />
+              </div>
+
+              {/* 알리고 등록용 본문 — #{var} 변환 */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex flex-col">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-bold text-yellow-800">
+                    📋 알리고 등록용 본문
+                  </div>
+                  <button
+                    onClick={() => {
+                      const aligoBody = (previewOf.body || '').replace(/\{\{(\w+)\}\}/g, '#{$1}');
+                      navigator.clipboard.writeText(aligoBody).then(
+                        () => alert('알리고 등록용 본문이 클립보드에 복사되었습니다.\n알리고 콘솔에 붙여넣어 검수 신청하세요.'),
+                        () => alert('복사 실패. 수동으로 복사해주세요.'),
+                      );
+                    }}
+                    className="text-xs px-2 py-1 rounded bg-yellow-500 text-white hover:bg-yellow-600 font-medium"
+                  >
+                    📋 복사
+                  </button>
+                </div>
+                <p className="text-[10px] text-yellow-700 mb-2">
+                  변수가 <code className="bg-yellow-200 px-1 rounded">{"{{var}}"}</code> → <code className="bg-yellow-200 px-1 rounded">#{"{var}"}</code>로 변환됩니다. 이 본문을 알리고 콘솔의 템플릿 본문 칸에 그대로 붙여넣어 카카오 검수 신청하세요.
+                </p>
+                <pre className="flex-1 bg-white border border-yellow-200 rounded p-3 text-xs font-mono whitespace-pre-wrap break-words text-gray-800 overflow-auto max-h-[280px]">
+{(previewOf.body || '').replace(/\{\{(\w+)\}\}/g, '#{$1}')}
+                </pre>
+                {(() => {
+                  let buttonsArr: any[] = [];
+                  if (previewOf.alimtalkButtonsJson) {
+                    try {
+                      const parsed = JSON.parse(previewOf.alimtalkButtonsJson);
+                      buttonsArr = Array.isArray(parsed) ? parsed : (parsed?.button || []);
+                    } catch {}
+                  }
+                  if (buttonsArr.length === 0) return null;
+                  return (
+                    <div className="mt-2 text-[10px] text-yellow-700">
+                      <div className="font-semibold mb-1">버튼 정보 ({buttonsArr.length}개):</div>
+                      {buttonsArr.map((b: any, i: number) => (
+                        <div key={i} className="bg-white border border-yellow-200 rounded p-2 mb-1">
+                          <div><b>{b?.name}</b> · {b?.linkType}</div>
+                          {b?.linkMo && <div className="font-mono break-all">{b.linkMo}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
+
             <div className="mt-4 text-xs text-gray-500 space-y-1">
-              {previewOf.alimtalkTemplateCode && (
+              {previewOf.alimtalkTemplateCode ? (
                 <div>TPL_CODE: <code className="font-mono bg-yellow-50 px-1 rounded">{previewOf.alimtalkTemplateCode}</code></div>
+              ) : (
+                <div className="text-red-600">⚠ 아직 알리고에 등록되지 않았습니다. 위 "알리고 등록용 본문"을 복사해 알리고 콘솔에서 검수 신청 후 발급된 TPL_CODE를 입력하세요.</div>
               )}
               <div>대상: {(previewOf.targetRoles || []).map(r => ROLE_LABEL[r] || r).join(', ') || '미지정'}</div>
             </div>
