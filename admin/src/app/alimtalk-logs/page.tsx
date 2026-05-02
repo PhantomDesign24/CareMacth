@@ -5,7 +5,9 @@ import StatsCard from "@/components/StatsCard";
 import {
   getAlimtalkLogs,
   resendAlimtalkLog,
+  getNotificationTemplates,
   AlimtalkLogItem,
+  NotificationTemplate,
 } from "@/lib/api";
 
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
@@ -34,6 +36,20 @@ export default function AlimtalkLogsPage() {
 
   // 본문 미리보기 모달
   const [previewItem, setPreviewItem] = useState<AlimtalkLogItem | null>(null);
+
+  // 템플릿 KEY 셀렉트용
+  const [templateOptions, setTemplateOptions] = useState<{ key: string; title: string }[]>([]);
+
+  useEffect(() => {
+    getNotificationTemplates()
+      .then((rows) => {
+        const opts = (rows || [])
+          .map((t: NotificationTemplate) => ({ key: t.key, title: t.title || '' }))
+          .sort((a, b) => a.key.localeCompare(b.key));
+        setTemplateOptions(opts);
+      })
+      .catch(() => setTemplateOptions([]));
+  }, []);
 
   const fetchData = useCallback(async (pageOverride?: number) => {
     setLoading(true);
@@ -124,14 +140,19 @@ export default function AlimtalkLogsPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">템플릿 KEY</label>
-            <input
-              type="text"
+            <label className="mb-1 block text-xs font-medium text-gray-600">템플릿</label>
+            <select
               value={templateKey}
               onChange={(e) => setTemplateKey(e.target.value)}
-              placeholder="WELCOME_GUARDIAN..."
               className="input-field text-sm"
-            />
+            >
+              <option value="">전체 템플릿</option>
+              {templateOptions.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.title || t.key} ({t.key})
+                </option>
+              ))}
+            </select>
           </div>
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-medium text-gray-600">사용자 (이름·이메일·전화)</label>
