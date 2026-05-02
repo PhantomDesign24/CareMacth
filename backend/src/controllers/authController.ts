@@ -344,6 +344,8 @@ export const kakaoAuth = async (req: Request, res: Response, next: NextFunction)
         },
         include: { guardian: true, caregiver: true },
       });
+      // 카카오 자동 가입 분기 — 환영 알림 발송
+      await sendWelcomeNotification(user).catch(() => {});
     }
 
     const tokens = tokenPair(user);
@@ -438,6 +440,8 @@ export const naverAuth = async (req: Request, res: Response, next: NextFunction)
         },
         include: { guardian: true, caregiver: true },
       });
+      // 네이버 자동 가입 분기 — 환영 알림 발송
+      await sendWelcomeNotification(user).catch(() => {});
     }
 
     const tokens = tokenPair(user);
@@ -584,6 +588,10 @@ export const socialSignupComplete = async (req: Request, res: Response, next: Ne
     }
 
     const tokens = tokenPair(user);
+
+    // 환영 알림 (간병인이면 관리자 알림도 함께)
+    await sendWelcomeNotification(user).catch(() => {});
+
     res.status(201).json({
       success: true,
       data: { user: { ...user, password: undefined }, ...tokens, isNew: true },

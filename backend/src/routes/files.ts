@@ -1,12 +1,65 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs';
+import jwt from 'jsonwebtoken';
 import { authenticate, AuthRequest } from '../middlewares/auth';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
+import { config } from '../config';
 
 const router = Router();
 
+// ─────────────────────────────────────────────────────────────
+// 1) 보험 서류 1회용 토큰 다운로드 (인증 미들웨어 앞에 정의 — 카톡 알림톡 버튼 클릭용)
+//    JWT type='insurance_dl' 검증, requestId 일치 시 파일 스트리밍
+//    토큰 자체가 인증이므로 user 세션 없어도 동작
+// ─────────────────────────────────────────────────────────────
+router.get('/insurance/:requestId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const requestId = String(req.params.requestId || '');
+    const tokenStr = String(req.query.t || req.query.token || '');
+    if (!requestId || !tokenStr) {
+      throw new AppError('잘못된 다운로드 링크입니다.', 400);
+    }
+
+    let payload: any;
+    try {
+      payload = jwt.verify(tokenStr, config.jwt.secret);
+    } catch {
+      throw new AppError('만료되었거나 유효하지 않은 다운로드 링크입니다.', 401);
+    }
+    if (payload?.type !== 'insurance_dl' || payload.requestId !== requestId) {
+      throw new AppError('유효하지 않은 다운로드 토큰입니다.', 401);
+    }
+
+    const record = await prisma.insuranceDocRequest.findUnique({ where: { id: requestId } });
+    if (!record || !record.documentUrl) {
+      throw new AppError('서류를 찾을 수 없습니다.', 404);
+    }
+
+    // documentUrl 형식: /api/files/private/{filename} 또는 legacy /uploads/{filename}
+    const filename = record.documentUrl.split('/').pop() || '';
+    if (!filename || filename.includes('..')) {
+      throw new AppError('잘못된 파일 경로입니다.', 400);
+    }
+    // 우선 private 디렉토리, 없으면 legacy uploads 평면 경로
+    const privatePath = path.join(process.cwd(), 'uploads', 'private', filename);
+    const legacyPath = path.join(process.cwd(), 'uploads', filename);
+    const targetPath = fs.existsSync(privatePath) ? privatePath : (fs.existsSync(legacyPath) ? legacyPath : null);
+    if (!targetPath) {
+      throw new AppError('파일을 찾을 수 없습니다.', 404);
+    }
+
+    res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+    res.sendFile(targetPath);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// 2) 일반 비공개 파일 (신분증/범죄이력/자격증/보험서류) — 인증 + 소유권 검증
+// ─────────────────────────────────────────────────────────────
 // 쿼리스트링 토큰 허용 (이미지 src 등 헤더 못 보내는 케이스)
 router.use((req: Request, _res: Response, next: NextFunction) => {
   if (!req.headers.authorization && req.query.token) {

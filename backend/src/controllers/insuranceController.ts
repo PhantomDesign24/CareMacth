@@ -1,9 +1,11 @@
 import { Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
+import jwt from 'jsonwebtoken';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { sendFromTemplate } from '../services/notificationService';
+import { config } from '../config';
 
 // POST / - 간병보험 서류 신청
 export const createInsuranceDocRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -209,6 +211,22 @@ export const adminUpdateInsurance = async (req: AuthRequest, res: Response, next
     };
     const templateKey = status ? keyMap[status] : null;
     if (templateKey && status !== req_.status) {
+      // COMPLETED 인 경우, 카톡 알림톡에서 직접 다운로드 받을 수 있도록 1회용 단기 토큰 + 버튼 동봉
+      let overrideAlimtalkButtons: any[] | undefined;
+      let downloadUrl: string | undefined;
+      if (status === 'COMPLETED' && updated.documentUrl) {
+        const dlToken = jwt.sign(
+          { type: 'insurance_dl', requestId: id },
+          config.jwt.secret,
+          { expiresIn: '7d' },
+        );
+        const base = process.env.WEB_BASE_URL || 'https://cm.phantomdesign.kr';
+        downloadUrl = `${base}/api/files/insurance/${id}?t=${encodeURIComponent(dlToken)}`;
+        overrideAlimtalkButtons = [
+          { name: '서류 받기', linkType: 'WL', linkMo: downloadUrl, linkPc: downloadUrl },
+        ];
+      }
+
       await sendFromTemplate({
         userId: req_.requestedBy,
         key: templateKey,
@@ -216,8 +234,10 @@ export const adminUpdateInsurance = async (req: AuthRequest, res: Response, next
           patientName: req_.patientName,
           docLabel,
           reasonText,
+          downloadUrl: downloadUrl || '',
         },
         data: { insuranceId: id, documentUrl: updated.documentUrl, rejectReason: reasonText },
+        overrideAlimtalkButtons,
       }).catch(() => {});
     }
 

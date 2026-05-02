@@ -6,6 +6,15 @@ import { documentAPI } from "@/lib/api";
 import { compressImage } from "@/lib/imageCompress";
 import { formatDate } from "@/lib/format";
 
+// 인증 라우트(/api/files/private/...) 는 img/a 태그가 헤더 못 보내므로 ?token= 동봉
+function withAuthToken(url: string | null | undefined): string {
+  if (!url) return '';
+  if (!url.startsWith('/api/files/private/')) return url;
+  if (typeof window === 'undefined') return url;
+  const token = localStorage.getItem('cm_access_token');
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+}
+
 // 생년월일 셀렉트 — value 는 'YYYY-MM-DD' 문자열
 function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [y, m, d] = (value || '').split('-');
@@ -512,7 +521,7 @@ export default function CaregiverDocumentsPage() {
                   </div>
                   {cert.imageUrl && (
                     <a
-                      href={cert.imageUrl}
+                      href={withAuthToken(cert.imageUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-primary-600 hover:text-primary-700 underline shrink-0"
@@ -595,7 +604,7 @@ export default function CaregiverDocumentsPage() {
           {profile?.idCardImage ? (
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <div className="w-full sm:w-40 h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-                <img src={profile.idCardImage} alt="신분증" className="w-full h-full object-cover" />
+                <img src={withAuthToken(profile.idCardImage)} alt="신분증" className="w-full h-full object-cover" />
               </div>
               <div className="flex-1">
                 <p className="text-sm">
@@ -640,7 +649,7 @@ export default function CaregiverDocumentsPage() {
           {profile?.criminalCheckDoc ? (
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <div className="w-full sm:w-40 h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-                <img src={profile.criminalCheckDoc} alt="범죄이력 조회서" className="w-full h-full object-cover" />
+                <img src={withAuthToken(profile.criminalCheckDoc)} alt="범죄이력 조회서" className="w-full h-full object-cover" />
               </div>
               <div className="flex-1">
                 <p className="text-sm">

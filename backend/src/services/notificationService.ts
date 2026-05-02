@@ -315,6 +315,7 @@ async function sendAlimtalkForTemplate(
   template: { alimtalkTemplateCode: string | null; alimtalkButtonsJson: string | null },
   message: string,
   subject?: string,
+  overrideButtons?: AligoButton[],
 ) {
   if (!template.alimtalkTemplateCode) return;
   const user = await prisma.user.findUnique({
@@ -324,8 +325,8 @@ async function sendAlimtalkForTemplate(
   if (!user || !user.isActive || user.pushEnabled === false) return;
   if (!user.phone) return;
 
-  let buttons: AligoButton[] | undefined;
-  if (template.alimtalkButtonsJson) {
+  let buttons: AligoButton[] | undefined = overrideButtons;
+  if (!buttons && template.alimtalkButtonsJson) {
     try {
       const parsed = JSON.parse(template.alimtalkButtonsJson);
       buttons = Array.isArray(parsed) ? parsed : parsed?.buttons;
@@ -349,8 +350,9 @@ export async function sendFromTemplate(params: {
   fallbackTitle?: string;
   fallbackBody?: string;
   fallbackType?: NotificationType;
+  overrideAlimtalkButtons?: AligoButton[];
 }) {
-  const { userId, key, vars = {}, data, fallbackTitle, fallbackBody, fallbackType } = params;
+  const { userId, key, vars = {}, data, fallbackTitle, fallbackBody, fallbackType, overrideAlimtalkButtons } = params;
 
   const template = await prisma.notificationTemplate.findUnique({ where: { key } });
 
@@ -377,7 +379,7 @@ export async function sendFromTemplate(params: {
 
   // 알림톡 발송 (백그라운드)
   if (useAlimtalk && template?.alimtalkTemplateCode) {
-    void sendAlimtalkForTemplate(userId, template, body, title).catch(() => {});
+    void sendAlimtalkForTemplate(userId, template, body, title, overrideAlimtalkButtons).catch(() => {});
   }
 
   // 이메일 발송 (백그라운드) — 사용자 이메일이 있으면 단순 텍스트 본문으로 발송
