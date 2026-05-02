@@ -333,12 +333,37 @@ async function sendAlimtalkForTemplate(
     } catch {}
   }
 
+  // 버튼 URL 의 변수 치환 ({{webBase}}/#{webBase}/#{path} 등 → 실제 도메인)
+  if (buttons && buttons.length > 0) {
+    const baseUrl = process.env.WEB_BASE_URL || 'https://cm.phantomdesign.kr';
+    const webBase = baseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const subst = (s: string | undefined): string | undefined => {
+      if (!s) return s;
+      return s.replace(/\{\{webBase\}\}/g, webBase).replace(/#\{webBase\}/g, webBase);
+    };
+    buttons = buttons.map((b) => ({
+      ...b,
+      linkMo: subst(b.linkMo),
+      linkPc: subst(b.linkPc),
+      schemeIos: subst(b.schemeIos),
+      schemeAndroid: subst(b.schemeAndroid),
+    }));
+  }
+
+  // 대체문자 자동 첨부 — 알림톡 발송 실패 시 SMS/LMS 로 대체 발송 (수신자 미가입·차단·번호 변경 등)
+  // 90자 이하면 SMS, 초과면 LMS
+  const fallbackMessage = `[케어매치] ${message}`.replace(/\s+/g, ' ').trim();
+  const fallbackSms = fallbackMessage.length <= 90
+    ? { type: 'SMS' as const, message: fallbackMessage, subject: subject || '' }
+    : { type: 'LMS' as const, message: fallbackMessage, subject: subject || '케어매치 알림' };
+
   await sendAlimtalk({
     receiver: user.phone,
     tplCode: template.alimtalkTemplateCode,
     message,
     subject,
     buttons,
+    failoverSms: fallbackSms,
     meta: { userId, templateKey: template.key || null },
   });
 }
