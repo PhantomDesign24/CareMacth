@@ -40,12 +40,41 @@ function fillSampleVars(text: string): string {
   return text.replace(/\{\{(\w+)\}\}/g, (_, k) => samples[k] ?? `[${k}]`);
 }
 
+// 변수 {{var}} 가 있는 본문을 sample 치환 + 치환된 부분에 visual hint
+function renderBodyWithHighlight(text: string): JSX.Element[] {
+  if (!text) return [];
+  const samples: Record<string, string> = {
+    name: '홍길동', patientName: '홍길동', caregiverName: '김간병', guardianName: '이보호',
+    amount: '100,000', rate: '150,000', days: '7', startDate: '2026-05-10', endDate: '2026-05-17',
+    daysLeft: '3', additionalDays: '5', docLabel: '보험청구용 진료비계산서', reasonText: '서류 보완이 필요합니다',
+    currentRate: '150,000', newRate: '170,000', address: '서울 강남구 ○○병원',
+    role: '보호자', rejectReason: '미흡 사항 보완 필요', region: '서울 강남구',
+  };
+  const parts = text.split(/(\{\{\w+\}\})/g);
+  return parts.map((p, i) => {
+    const m = p.match(/^\{\{(\w+)\}\}$/);
+    if (m) {
+      const v = samples[m[1]] ?? `[${m[1]}]`;
+      return (
+        <span key={i} className="bg-yellow-100 text-yellow-900 px-1 rounded font-medium" title={`변수: {{${m[1]}}}`}>
+          {v}
+        </span>
+      );
+    }
+    return <span key={i}>{p}</span>;
+  });
+}
+
 interface PreviewProps {
   title?: string;
   body: string;
   buttonsJson?: string;
+  /** 강조표기형 제목 (subject 별도 입력 가능) — title 외 큰 강조 영역 */
+  emphasisTitle?: string;
+  /** 정보성 알림 푸터 표시 여부 */
+  showFooter?: boolean;
 }
-function AlimtalkPreview({ title, body, buttonsJson }: PreviewProps) {
+function AlimtalkPreview({ title, body, buttonsJson, emphasisTitle, showFooter = true }: PreviewProps) {
   let buttons: any[] = [];
   if (buttonsJson?.trim()) {
     try {
@@ -53,55 +82,78 @@ function AlimtalkPreview({ title, body, buttonsJson }: PreviewProps) {
       buttons = Array.isArray(parsed) ? parsed : (parsed?.button || []);
     } catch {}
   }
-  const previewTitle = fillSampleVars(title || '');
-  const previewBody = fillSampleVars(body || '');
 
   return (
-    <div className="bg-[#9bbbd4] rounded-2xl p-3 max-w-[320px] mx-auto shadow-md">
-      {/* 헤더 — 카카오 노란색 */}
-      <div className="bg-[#FEE500] text-[#181600] text-xs font-bold rounded-t-lg px-3 py-2 flex items-center justify-between">
-        <span>알림톡 도착</span>
-        <span className="text-[10px] font-medium">케어매치</span>
+    <div className="bg-[#9bbbd4] rounded-2xl p-3 max-w-[340px] mx-auto shadow-md">
+      {/* 카톡 채팅 헤더 */}
+      <div className="flex items-center gap-2 mb-2 px-1">
+        <div className="w-7 h-7 rounded-lg bg-[#FEE500] flex items-center justify-center text-[14px] font-bold text-[#3C1E1E]">
+          K
+        </div>
+        <div className="flex-1">
+          <div className="text-[12px] font-bold text-white drop-shadow-sm">케어매치</div>
+          <div className="text-[10px] text-white/90">알림톡 도착</div>
+        </div>
       </div>
+
       {/* 본문 카드 */}
-      <div className="bg-white rounded-b-lg overflow-hidden">
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
+        {/* 옐로 헤더 바 — "정보성" 라벨 */}
+        <div className="bg-[#FEE500] px-4 py-2 flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5 text-[#3C1E1E]" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 22c5.5 0 10-4.5 10-10S17.5 2 12 2 2 6.5 2 12s4.5 10 10 10z" />
+          </svg>
+          <span className="text-[11px] font-bold text-[#3C1E1E]">알림톡 도착</span>
+        </div>
+
         <div className="px-4 py-3">
-          {previewTitle && (
-            <div className="text-base font-bold text-gray-900 mb-2 whitespace-pre-wrap break-words">
-              {previewTitle}
+          {/* 강조표기형 (subject) */}
+          {emphasisTitle && (
+            <div className="text-[18px] font-extrabold text-gray-900 leading-tight mb-2 whitespace-pre-wrap break-words border-l-[3px] border-amber-400 pl-2">
+              {renderBodyWithHighlight(emphasisTitle)}
             </div>
           )}
-          <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap break-words">
-            {previewBody || <span className="text-gray-300">(본문을 입력하면 미리보기가 표시됩니다)</span>}
+
+          {/* 일반 제목 */}
+          {title && (
+            <div className="text-[15px] font-bold text-gray-900 mb-1.5 whitespace-pre-wrap break-words">
+              {renderBodyWithHighlight(title)}
+            </div>
+          )}
+
+          {/* 본문 — 줄바꿈/문단 보존 */}
+          <div className="text-[13px] text-gray-800 leading-[1.65] whitespace-pre-wrap break-words">
+            {body ? renderBodyWithHighlight(body) : <span className="text-gray-300">(본문을 입력하면 미리보기가 표시됩니다)</span>}
           </div>
         </div>
+
         {/* 버튼 */}
         {buttons.length > 0 && (
           <div className="border-t border-gray-200">
             {buttons.map((b: any, i: number) => {
               const linkTypeLabel: Record<string, string> = {
-                WL: '웹링크', AL: '앱링크', BC: '상담말하기', AC: '채널추가',
-                BK: '배송조회', MD: '메시지전달', DS: '보안인증', BT: '봇키워드',
+                WL: '🌐 웹링크', AL: '📱 앱링크', BC: '💬 상담말하기', AC: '➕ 채널추가',
+                BK: '📦 배송조회', MD: '📨 메시지전달', DS: '🔒 보안인증', BT: '🤖 봇키워드',
               };
               const targetUrl = b?.linkMo || b?.linkPc || b?.schemeAndroid || b?.schemeIos || '';
               const previewUrl = fillSampleVars(targetUrl);
               return (
                 <div
                   key={i}
-                  className="px-4 py-2.5 border-b border-gray-100 last:border-b-0 hover:bg-gray-50"
+                  className="px-4 py-3 border-b border-gray-100 last:border-b-0 bg-white hover:bg-gray-50"
                 >
-                  <div className="text-sm font-semibold text-gray-700 text-center">
-                    {b?.name || '(버튼)'}
+                  <div className="text-[14px] font-semibold text-gray-800 text-center">
+                    {b?.name || '(버튼명)'}
                   </div>
                   {(b?.linkType || targetUrl) && (
-                    <div className="mt-1 flex items-center justify-center gap-1.5 text-[10px] text-gray-400">
+                    <div className="mt-1.5 flex items-center justify-center gap-1.5 text-[10px]">
                       {b?.linkType && (
-                        <span className="inline-block px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                        <span className="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">
                           {linkTypeLabel[b.linkType] || b.linkType}
                         </span>
                       )}
                       {previewUrl && (
-                        <span className="truncate max-w-[220px] font-mono" title={previewUrl}>
+                        <span className="truncate max-w-[220px] font-mono text-gray-400" title={previewUrl}>
                           {previewUrl}
                         </span>
                       )}
@@ -112,9 +164,18 @@ function AlimtalkPreview({ title, body, buttonsJson }: PreviewProps) {
             })}
           </div>
         )}
+
+        {/* 푸터 — 정보성 안내 */}
+        {showFooter && (
+          <div className="bg-gray-50 border-t border-gray-100 px-4 py-2 text-[10px] text-gray-500 leading-relaxed text-center">
+            본 메시지는 정보성 알림으로 발송되었습니다.<br />
+            수신 거부는 카카오톡 채널 차단으로 가능합니다.
+          </div>
+        )}
       </div>
-      <div className="text-[10px] text-white/80 text-right mt-1.5 px-1">
-        ※ 변수는 샘플값으로 치환되어 표시됩니다
+
+      <div className="text-[10px] text-white/85 text-center mt-2 px-1 leading-tight">
+        ※ <span className="bg-yellow-200/80 text-yellow-900 px-1 rounded">노란색</span> 부분은 변수 — 실제 발송 시 사용자 데이터로 치환됩니다
       </div>
     </div>
   );
