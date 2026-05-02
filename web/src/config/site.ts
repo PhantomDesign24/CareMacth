@@ -18,8 +18,10 @@ export const SITE = {
     "검증된 간병인과 보호자를 AI가 실시간 매칭해드립니다. 병원간병, 재택간병, 방문요양, 생활돌봄, 24시간 간병 모두 지원. 1555-0801 전화상담 가능.",
   /** 대표 연락처 */
   phone: "1555-0801",
-  /** 카카오톡 상담 채널 URL (데스크톱 등 tel: 미지원 환경에서 사용) — 실제 채널 ID로 교체 필요 */
-  kakaoChannelUrl: "http://pf.kakao.com/_carematch/chat",
+  /** 카카오톡 채널 페이지 (홈) */
+  kakaoChannelUrl: "https://pf.kakao.com/_UTRjX",
+  /** 카카오톡 채널 1:1 상담 (상담말하기 대체용 WL 링크) */
+  kakaoChannelChatUrl: "https://pf.kakao.com/_UTRjX/chat",
   /** 대표 이메일 */
   email: "support@carematch.kr",
   /** 주요 키워드 */
