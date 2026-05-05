@@ -760,16 +760,19 @@ export const approveCaregiver = async (req: AuthRequest, res: Response, next: Ne
       throw new AppError('이미 승인된 간병인입니다.', 400);
     }
 
-    // 자격 검증 — 신분증, 범죄이력, 검증된 자격증 1개 이상 필요
+    // 자격 검증 — 정책: 신분증 필수, 범죄이력 자가 신고 필수, 자격증/회보서는 선택
     const fresh = await prisma.caregiver.findUnique({
       where: { id },
       include: { certificates: { where: { verified: true }, select: { id: true } } },
-    });
+    }) as any;
     if (!fresh) throw new AppError('간병인을 찾을 수 없습니다.', 404);
     const missing: string[] = [];
     if (!fresh.identityVerified || !fresh.idCardImage) missing.push('신분증 인증');
-    if (!fresh.criminalCheckDone || !fresh.criminalCheckDoc) missing.push('범죄이력 조회서');
-    if (fresh.certificates.length === 0) missing.push('검증된 자격증 1개 이상');
+    // 범죄이력: 자가 신고 응답(hasCriminalRecord !== null) 필수, 회보서/검증은 선택
+    if (fresh.hasCriminalRecord === null || fresh.hasCriminalRecord === undefined) {
+      missing.push('범죄이력 자가 신고');
+    }
+    // 자격증은 선택사항으로 변경 — 검증 제외
     if (missing.length > 0) {
       throw new AppError(`승인 전제 조건 미충족: ${missing.join(', ')}`, 400);
     }

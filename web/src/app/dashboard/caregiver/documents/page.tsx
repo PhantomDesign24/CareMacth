@@ -109,6 +109,7 @@ interface CaregiverProfile {
   identityVerified: boolean;
   criminalCheckDone: boolean;
   criminalCheckDoc: string | null;
+  hasCriminalRecord: boolean | null;
   backgroundCheck: boolean;
   certificates: Certificate[];
   user: {
@@ -496,7 +497,10 @@ export default function CaregiverDocumentsPage() {
 
         {/* Certificates Section */}
         <div className="card mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-6">자격증 관리</h2>
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-gray-900">자격증 관리 <span className="text-xs font-normal text-gray-400 ml-2">(선택)</span></h2>
+            <p className="text-xs text-gray-500 mt-1">요양보호사·간호조무사 등 자격증이 있으면 등록해주세요. 없어도 활동 가능합니다.</p>
+          </div>
 
           {/* Existing certificates */}
           {certificates.length > 0 && (
@@ -640,48 +644,93 @@ export default function CaregiverDocumentsPage() {
           </div>
         </div>
 
-        {/* 범죄이력 조회서 */}
+        {/* 범죄이력 자가 신고 + 회보서 (선택) */}
         <div className="card">
-          <h2 className="text-lg font-bold text-gray-900 mb-2">범죄이력 조회서 등록</h2>
+          <h2 className="text-lg font-bold text-gray-900 mb-2">범죄이력 신고 <span className="text-red-500">*</span></h2>
           <p className="text-sm text-gray-500 mb-4">
-            정부24 또는 경찰서에서 발급받은 범죄경력회보서(성범죄/아동학대 포함)를 업로드해주세요. 간병 활동 필수 서류입니다.
+            범죄이력 여부를 정직하게 응답해주세요. 회보서 파일은 선택 사항입니다.
           </p>
-          {profile?.criminalCheckDoc ? (
-            <div className="flex flex-col sm:flex-row gap-4 mb-4">
-              <div className="w-full sm:w-40 h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-                <img src={withAuthToken(profile.criminalCheckDoc)} alt="범죄이력 조회서" className="w-full h-full object-cover" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm">
-                  <span className="text-gray-500">상태:</span>{" "}
-                  <span className={profile.criminalCheckDone ? "text-green-600 font-semibold" : "text-amber-600 font-semibold"}>
-                    {profile.criminalCheckDone ? "✓ 조회 완료" : "⏳ 관리자 검토 중"}
-                  </span>
-                </p>
-                <p className="text-xs text-gray-400 mt-1">재등록 시 아래에서 새 파일을 선택하세요.</p>
-              </div>
+
+          {/* 자가 신고 (라디오) */}
+          <div className="mb-4">
+            <div className="text-sm font-medium text-gray-700 mb-2">범죄이력이 있습니까?</div>
+            <div className="flex gap-3">
+              {([
+                { v: false, label: '없음' },
+                { v: true, label: '있음' },
+              ] as const).map((opt) => {
+                const checked = profile?.hasCriminalRecord === opt.v;
+                return (
+                  <label
+                    key={String(opt.v)}
+                    className={`flex-1 cursor-pointer rounded-xl border-2 px-4 py-3 text-center text-sm font-medium transition-colors ${
+                      checked ? (opt.v ? 'border-red-300 bg-red-50 text-red-700' : 'border-emerald-300 bg-emerald-50 text-emerald-700') : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="hasCriminalRecord"
+                      checked={checked}
+                      onChange={async () => {
+                        try {
+                          await documentAPI.updateProfile({ hasCriminalRecord: opt.v });
+                          setSuccessMsg(opt.v ? '범죄이력 있음으로 신고되었습니다.' : '범죄이력 없음으로 신고되었습니다.');
+                          await fetchProfile();
+                        } catch (e: unknown) {
+                          setError(e instanceof Error ? e.message : '신고 저장 실패');
+                        }
+                      }}
+                      className="sr-only"
+                    />
+                    {opt.label}
+                  </label>
+                );
+              })}
             </div>
-          ) : (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              ⚠ 아직 범죄이력 조회서가 등록되지 않았습니다. 등록 후 승인까지 지원이 제한됩니다.
+            {profile?.hasCriminalRecord === null && (
+              <p className="mt-2 text-xs text-amber-600">⚠ 자가 신고를 응답해야 승인이 진행됩니다.</p>
+            )}
+          </div>
+
+          {/* 회보서 파일 (선택) */}
+          <div className="border-t border-gray-100 pt-4">
+            <div className="text-sm font-medium text-gray-700 mb-2">
+              범죄경력회보서 첨부 <span className="text-xs font-normal text-gray-400 ml-1">(선택)</span>
             </div>
-          )}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              id="criminal-input"
-              type="file"
-              accept="image/*,.pdf"
-              onChange={(e) => setCriminalFile(e.target.files?.[0] || null)}
-              className="flex-1 text-sm file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 file:font-semibold hover:file:bg-primary-100"
-            />
-            <button
-              type="button"
-              className="btn-primary px-6"
-              onClick={handleCriminalUpload}
-              disabled={criminalUploading || !criminalFile}
-            >
-              {criminalUploading ? "업로드 중..." : "등록"}
-            </button>
+            <p className="text-xs text-gray-500 mb-3">정부24 또는 경찰서에서 발급받은 회보서가 있으면 업로드해주세요.</p>
+            {profile?.criminalCheckDoc ? (
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <div className="w-full sm:w-40 h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                  <img src={withAuthToken(profile.criminalCheckDoc)} alt="범죄이력 조회서" className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm">
+                    <span className="text-gray-500">상태:</span>{" "}
+                    <span className={profile.criminalCheckDone ? "text-green-600 font-semibold" : "text-amber-600 font-semibold"}>
+                      {profile.criminalCheckDone ? "✓ 조회 완료" : "⏳ 관리자 검토 중"}
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">재등록 시 아래에서 새 파일을 선택하세요.</p>
+                </div>
+              </div>
+            ) : null}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                id="criminal-input"
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => setCriminalFile(e.target.files?.[0] || null)}
+                className="flex-1 text-sm file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 file:font-semibold hover:file:bg-primary-100"
+              />
+              <button
+                type="button"
+                className="btn-primary px-6"
+                onClick={handleCriminalUpload}
+                disabled={criminalUploading || !criminalFile}
+              >
+                {criminalUploading ? "업로드 중..." : "등록"}
+              </button>
+            </div>
           </div>
         </div>
 

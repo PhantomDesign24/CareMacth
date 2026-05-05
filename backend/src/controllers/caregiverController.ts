@@ -71,6 +71,7 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
       accountNumber,
       accountHolder,
       corporateName,
+      hasCriminalRecord,
     } = req.body;
 
     // Normalize gender: frontend may send "male"/"female", Prisma expects "M"/"F"
@@ -94,6 +95,7 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
         ...(accountNumber !== undefined && { accountNumber }),
         ...(accountHolder !== undefined && { accountHolder }),
         ...(corporateName !== undefined && { corporateName: corporateName || null }),
+        ...(hasCriminalRecord !== undefined && { hasCriminalRecord: hasCriminalRecord === null ? null : Boolean(hasCriminalRecord) } as any),
       },
       include: {
         user: {

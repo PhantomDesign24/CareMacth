@@ -104,10 +104,11 @@ model Caregiver {
   identityVerified Boolean @default(false)
   idCardImage      String?
 
-  // 범죄 이력 조회
-  criminalCheckDone Boolean   @default(false)
+  // 범죄 이력 — 자가 신고 + 회보서(선택)
+  hasCriminalRecord Boolean? // 자가 신고 (true=있음 / false=없음 / null=미응답)
+  criminalCheckDone Boolean   @default(false) // ADMIN 검증 완료 여부
   criminalCheckDate DateTime?
-  criminalCheckDoc  String?
+  criminalCheckDoc  String? // 회보서 파일 (선택)
 
   // 자격증
   certificates Certificate[]
