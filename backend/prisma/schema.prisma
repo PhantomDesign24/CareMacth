@@ -322,6 +322,10 @@ model CareRequest {
 
   status CareRequestStatus @default(OPEN)
 
+  // 지원자 미발생 안내 발송 추적 (재발송 방지)
+  noApplicant10minSentAt DateTime?
+  noApplicant60minSentAt DateTime?
+
   applications CareApplication[]
   contracts    Contract[]
   matchScores  MatchScore[]

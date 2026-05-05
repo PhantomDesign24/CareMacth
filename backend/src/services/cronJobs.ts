@@ -365,6 +365,81 @@ export function setupCronJobs() {
     }
   });
 
+  // 매 5분: 지원자 미발생 안내 (10분/60분 시점 단계별 발송 — 환자보호자 단독)
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const now = Date.now();
+      const cut10 = new Date(now - 10 * 60 * 1000);
+      const cut60 = new Date(now - 60 * 60 * 1000);
+
+      // 10분 시점: 공고 등록 10분 경과 + 지원자 0 + 미발송
+      const stale10 = await prisma.careRequest.findMany({
+        where: {
+          status: 'OPEN',
+          createdAt: { lt: cut10 },
+          noApplicant10minSentAt: null,
+          applications: { none: {} },
+        },
+        include: {
+          guardian: { select: { userId: true } },
+          patient: { select: { name: true } },
+        },
+      });
+      for (const r of stale10) {
+        if (!r.guardian?.userId) continue;
+        await sendFromTemplate({
+          userId: r.guardian.userId,
+          key: 'MATCH_NO_APPLICANT_10MIN',
+          vars: { patientName: r.patient?.name || '환자' },
+          fallbackTitle: '지원자 안내',
+          fallbackBody: `${r.patient?.name || '환자'} 환자의 간병 요청에 아직 지원자가 없습니다. 일당 인상 또는 지역 확대를 검토해주세요.`,
+          fallbackType: 'MATCHING',
+          data: { careRequestId: r.id },
+        }).catch(() => {});
+        await prisma.careRequest.update({
+          where: { id: r.id },
+          data: { noApplicant10minSentAt: new Date() },
+        }).catch(() => {});
+      }
+
+      // 60분 시점: 공고 등록 60분 경과 + 지원자 0 + 미발송 (상담사 연결 안내)
+      const stale60 = await prisma.careRequest.findMany({
+        where: {
+          status: 'OPEN',
+          createdAt: { lt: cut60 },
+          noApplicant60minSentAt: null,
+          applications: { none: {} },
+        },
+        include: {
+          guardian: { select: { userId: true } },
+          patient: { select: { name: true } },
+        },
+      });
+      for (const r of stale60) {
+        if (!r.guardian?.userId) continue;
+        await sendFromTemplate({
+          userId: r.guardian.userId,
+          key: 'MATCH_STALE_GUIDE_GUARDIAN',
+          vars: { patientName: r.patient?.name || '환자' },
+          fallbackTitle: '간병인 매칭 안내',
+          fallbackBody: `${r.patient?.name || '환자'} 환자의 간병 요청에 1시간 동안 지원자가 없습니다. 상담사와 연결하시거나 매칭을 취소하실 수 있습니다.`,
+          fallbackType: 'MATCHING',
+          data: { careRequestId: r.id },
+        }).catch(() => {});
+        await prisma.careRequest.update({
+          where: { id: r.id },
+          data: { noApplicant60minSentAt: new Date() },
+        }).catch(() => {});
+      }
+
+      if (stale10.length || stale60.length) {
+        console.log(`[CRON] 지원자 미발생 안내: 10분=${stale10.length}건, 60분=${stale60.length}건`);
+      }
+    } catch (error) {
+      console.error('[CRON] 지원자 미발생 안내 오류:', error);
+    }
+  });
+
   // 매 5분: 주말/공휴일 미선택 간병 요청 1시간 경과 시 자동 실패
   cron.schedule('*/5 * * * *', async () => {
     try {
