@@ -344,9 +344,11 @@ async function sendAlimtalkForTemplate(
   }
 
   // 대체문자 자동 첨부 — 알림톡 발송 실패 시 SMS/LMS 로 대체 발송 (수신자 미가입·차단·번호 변경 등)
-  // 90자 이하면 SMS, 초과면 LMS
-  const fallbackMessage = `[케어매치] ${message}`.replace(/\s+/g, ' ').trim();
-  const fallbackSms = fallbackMessage.length <= 90
+  // SMS/LMS 판정은 발송 본문(message) 자체 길이 기준 — prefix는 카운트 제외하여 LMS 강제 전환 방지
+  const compactBody = (message || '').replace(/\s+/g, ' ').trim();
+  const useShortForm = compactBody.length <= 80; // 80자 — '[케어매치] ' (8자) prefix 여유분 포함
+  const fallbackMessage = `[케어매치] ${compactBody}`;
+  const fallbackSms = useShortForm
     ? { type: 'SMS' as const, message: fallbackMessage, subject: subject || '' }
     : { type: 'LMS' as const, message: fallbackMessage, subject: subject || '케어매치 알림' };
 

@@ -95,6 +95,7 @@ interface CaregiverDetailData {
   criminalCheckDone: boolean;
   criminalCheckDate: string | null;
   criminalCheckDoc: string | null;
+  hasCriminalRecord: boolean | null;
   idCardImage: string | null;
   identityVerified: boolean;
   createdAt: string;
@@ -669,22 +670,35 @@ export default function CaregiverDetailPage() {
                 <h3 className="text-lg font-semibold text-gray-900">범죄이력 조회 결과</h3>
                 <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <div>
-                    <p className="text-xs font-medium text-gray-400">조회 여부</p>
+                    <p className="text-xs font-medium text-gray-400">자가 신고</p>
+                    <p className={`mt-0.5 text-sm font-bold ${
+                      data.hasCriminalRecord === true
+                        ? 'text-red-600'
+                        : data.hasCriminalRecord === false
+                          ? 'text-emerald-600'
+                          : 'text-gray-400'
+                    }`}>
+                      {data.hasCriminalRecord === true
+                        ? '⚠ 범죄이력 있음 (재확인 필요)'
+                        : data.hasCriminalRecord === false
+                          ? '✓ 범죄이력 없음'
+                          : '미응답'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">회보서 검증</p>
                     <p className="mt-0.5 text-sm font-medium text-gray-900">{data.criminalCheckDone ? "조회 완료" : "미조회"}</p>
                   </div>
                   <div>
                     <p className="text-xs font-medium text-gray-400">조회일</p>
                     <p className="mt-0.5 text-sm text-gray-900">{formatDate(data.criminalCheckDate)}</p>
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-400">결과</p>
-                    <p className={`mt-0.5 text-sm font-semibold ${
-                      data.criminalCheckDone ? "text-emerald-600" : "text-gray-500"
-                    }`}>
-                      {data.criminalCheckDone ? "범죄이력 없음" : "미조회"}
-                    </p>
-                  </div>
                 </div>
+                {data.hasCriminalRecord === true && (
+                  <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                    ⚠ <b>주의</b>: 본인이 범죄이력 있음으로 자가 신고했습니다. 회보서 검토 후 승인 여부를 신중히 결정해주세요.
+                  </div>
+                )}
               </div>
             </div>
           </div>

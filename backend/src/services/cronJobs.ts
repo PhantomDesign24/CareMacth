@@ -366,74 +366,110 @@ export function setupCronJobs() {
   });
 
   // 매 5분: 지원자 미발생 안내 (10분/60분 시점 단계별 발송 — 환자보호자 단독)
+  // — atomic claim(updateMany) 으로 race 방지: claim 성공한 row 만 발송
+  // — 발송 실패 시 sentAt 롤백하여 다음 cron 에서 재시도
+  // — 60분 발송은 10분 발송 후에만(noApplicant10minSentAt IS NOT NULL) → 같은 루프 동시 발송 차단
   cron.schedule('*/5 * * * *', async () => {
     try {
       const now = Date.now();
       const cut10 = new Date(now - 10 * 60 * 1000);
       const cut60 = new Date(now - 60 * 60 * 1000);
 
-      // 10분 시점: 공고 등록 10분 경과 + 지원자 0 + 미발송
-      const stale10 = await prisma.careRequest.findMany({
-        where: {
-          status: 'OPEN',
-          createdAt: { lt: cut10 },
-          noApplicant10minSentAt: null,
-          applications: { none: {} },
-        },
-        include: {
-          guardian: { select: { userId: true } },
-          patient: { select: { name: true } },
-        },
-      });
-      for (const r of stale10) {
-        if (!r.guardian?.userId) continue;
-        await sendFromTemplate({
-          userId: r.guardian.userId,
-          key: 'MATCH_NO_APPLICANT_10MIN',
-          vars: { patientName: r.patient?.name || '환자' },
-          fallbackTitle: '지원자 안내',
-          fallbackBody: `${r.patient?.name || '환자'} 환자의 간병 요청에 아직 지원자가 없습니다. 일당 인상 또는 지역 확대를 검토해주세요.`,
-          fallbackType: 'MATCHING',
-          data: { careRequestId: r.id },
-        }).catch(() => {});
-        await prisma.careRequest.update({
-          where: { id: r.id },
-          data: { noApplicant10minSentAt: new Date() },
-        }).catch(() => {});
-      }
+      const tryStage = async (
+        cutoff: Date,
+        sentAtField: 'noApplicant10minSentAt' | 'noApplicant60minSentAt',
+        templateKey: string,
+        fallbackBuilder: (patientName: string) => { title: string; body: string },
+        extraWhere: any = {},
+      ): Promise<number> => {
+        // 1) 후보 ID 조회 (그대로 발송하지 않음 — 이건 미리보기용)
+        const candidates = await prisma.careRequest.findMany({
+          where: {
+            status: 'OPEN',
+            createdAt: { lt: cutoff },
+            [sentAtField]: null,
+            applications: { none: {} },
+            ...extraWhere,
+          },
+          select: { id: true },
+        });
+        if (candidates.length === 0) return 0;
 
-      // 60분 시점: 공고 등록 60분 경과 + 지원자 0 + 미발송 (상담사 연결 안내)
-      const stale60 = await prisma.careRequest.findMany({
-        where: {
-          status: 'OPEN',
-          createdAt: { lt: cut60 },
-          noApplicant60minSentAt: null,
-          applications: { none: {} },
-        },
-        include: {
-          guardian: { select: { userId: true } },
-          patient: { select: { name: true } },
-        },
-      });
-      for (const r of stale60) {
-        if (!r.guardian?.userId) continue;
-        await sendFromTemplate({
-          userId: r.guardian.userId,
-          key: 'MATCH_STALE_GUIDE_GUARDIAN',
-          vars: { patientName: r.patient?.name || '환자' },
-          fallbackTitle: '간병인 매칭 안내',
-          fallbackBody: `${r.patient?.name || '환자'} 환자의 간병 요청에 1시간 동안 지원자가 없습니다. 상담사와 연결하시거나 매칭을 취소하실 수 있습니다.`,
-          fallbackType: 'MATCHING',
-          data: { careRequestId: r.id },
-        }).catch(() => {});
-        await prisma.careRequest.update({
-          where: { id: r.id },
-          data: { noApplicant60minSentAt: new Date() },
-        }).catch(() => {});
-      }
+        let sent = 0;
+        for (const { id } of candidates) {
+          // 2) Atomic claim — 같은 조건을 걸어 race-safe 하게 sentAt 차지 (= 1 통과만 발송)
+          const stamp = new Date();
+          const claim = await prisma.careRequest.updateMany({
+            where: {
+              id,
+              status: 'OPEN',
+              createdAt: { lt: cutoff },
+              [sentAtField]: null,
+              applications: { none: {} },
+              ...extraWhere,
+            },
+            data: { [sentAtField]: stamp },
+          });
+          if (claim.count !== 1) continue;
 
-      if (stale10.length || stale60.length) {
-        console.log(`[CRON] 지원자 미발생 안내: 10분=${stale10.length}건, 60분=${stale60.length}건`);
+          // 3) 발송용 본문 데이터 로드
+          const r = await prisma.careRequest.findUnique({
+            where: { id },
+            include: {
+              guardian: { select: { userId: true } },
+              patient: { select: { name: true } },
+            },
+          });
+          if (!r?.guardian?.userId) continue;
+          const patientName = r.patient?.name || '환자';
+          const fb = fallbackBuilder(patientName);
+
+          let success = false;
+          try {
+            await sendFromTemplate({
+              userId: r.guardian.userId,
+              key: templateKey,
+              vars: { patientName },
+              fallbackTitle: fb.title,
+              fallbackBody: fb.body,
+              fallbackType: 'MATCHING',
+              data: { careRequestId: id },
+            });
+            success = true;
+            sent += 1;
+          } catch (e: any) {
+            console.error(`[CRON ${templateKey}] 발송 실패 (${id}):`, e?.message || e);
+          }
+          // 4) 발송 실패 시 sentAt 롤백 — 다음 cron 에서 재시도
+          if (!success) {
+            await prisma.careRequest.updateMany({
+              where: { id, [sentAtField]: stamp },
+              data: { [sentAtField]: null },
+            }).catch(() => {});
+          }
+        }
+        return sent;
+      };
+
+      // 10분 시점
+      const sent10 = await tryStage(
+        cut10,
+        'noApplicant10minSentAt',
+        'MATCH_NO_APPLICANT_10MIN',
+        (n) => ({ title: '지원자 안내', body: `${n} 환자의 간병 요청에 아직 지원자가 없습니다. 일당 인상 또는 지역 확대를 검토해주세요.` }),
+      );
+
+      // 60분 시점 — 10분 발송이 완료된(noApplicant10minSentAt IS NOT NULL) 건만 대상
+      const sent60 = await tryStage(
+        cut60,
+        'noApplicant60minSentAt',
+        'MATCH_STALE_GUIDE_GUARDIAN',
+        (n) => ({ title: '간병인 매칭 안내', body: `${n} 환자의 간병 요청에 1시간 동안 지원자가 없습니다. 상담사와 연결하시거나 매칭을 취소하실 수 있습니다.` }),
+        { noApplicant10minSentAt: { not: null } },
+      );
+
+      if (sent10 || sent60) {
+        console.log(`[CRON] 지원자 미발생 안내: 10분=${sent10}건, 60분=${sent60}건`);
       }
     } catch (error) {
       console.error('[CRON] 지원자 미발생 안내 오류:', error);

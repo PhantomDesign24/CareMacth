@@ -807,12 +807,9 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
       if (caregiver.status !== 'APPROVED') {
         throw new AppError('승인된 간병인만 지원할 수 있습니다.', 403);
       }
-      // 필수 서류 등록 여부 확인 — 신분증 + 범죄이력 조회서
+      // 필수 서류: 신분증 인증만 (자격증·회보서는 선택, 범죄이력은 자가신고로 승인 단계에서 검증)
       if (!caregiver.identityVerified || !caregiver.idCardImage) {
         throw new AppError('신분증 등록 및 본인 인증이 완료된 후 지원 가능합니다.', 403);
-      }
-      if (!caregiver.criminalCheckDone || !caregiver.criminalCheckDoc) {
-        throw new AppError('범죄이력 조회서 등록이 완료된 후 지원 가능합니다.', 403);
       }
       // workStatus 는 캐시 — 실제 진행 중 계약 존재 여부로 판정 (단일 진실 원천)
       const ongoingContracts = await prisma.contract.count({

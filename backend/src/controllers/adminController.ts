@@ -638,6 +638,7 @@ export const getCaregiverDetail = async (req: AuthRequest, res: Response, next: 
         criminalCheckDone: caregiver.criminalCheckDone,
         criminalCheckDate: caregiver.criminalCheckDate,
         criminalCheckDoc: caregiver.criminalCheckDoc,
+        hasCriminalRecord: (caregiver as any).hasCriminalRecord ?? null,
         idCardImage: caregiver.idCardImage,
         identityVerified: caregiver.identityVerified,
         createdAt: caregiver.createdAt,
@@ -3721,15 +3722,29 @@ export const updateNotificationTemplate = async (req: AuthRequest, res: Response
 // POST /admin/notification-templates  (커스텀 템플릿 추가)
 export const createNotificationTemplate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { key, name, type, title, body, description } = req.body;
+    const {
+      key, name, type, title, body, description,
+      channels, targetRoles, alimtalkTemplateCode, alimtalkButtonsJson,
+    } = req.body;
     if (!key || !name || !type || !title || !body) {
       throw new AppError('key, name, type, title, body는 필수입니다.', 400);
+    }
+    if (alimtalkButtonsJson) {
+      try { JSON.parse(alimtalkButtonsJson); }
+      catch { throw new AppError('alimtalkButtonsJson 형식이 올바르지 않습니다.', 400); }
     }
     const existing = await prisma.notificationTemplate.findUnique({ where: { key } });
     if (existing) throw new AppError('이미 존재하는 키입니다.', 400);
 
     const created = await prisma.notificationTemplate.create({
-      data: { key, name, type, title, body, description, enabled: true, isSystem: false },
+      data: {
+        key, name, type, title, body, description,
+        enabled: true, isSystem: false,
+        channels: Array.isArray(channels) && channels.length > 0 ? channels : ['PUSH'],
+        targetRoles: Array.isArray(targetRoles) ? targetRoles : [],
+        alimtalkTemplateCode: alimtalkTemplateCode || null,
+        alimtalkButtonsJson: alimtalkButtonsJson || null,
+      },
     });
     res.json({ success: true, data: created });
   } catch (error) {
@@ -4339,12 +4354,21 @@ export const resendAlimtalkLog = async (req: AuthRequest, res: Response, next: N
         buttons = Array.isArray(v) ? v : v?.button;
       } catch {}
     }
+    // 일반 발송과 동일한 failover SMS 첨부 — 알림톡 실패 시 SMS 자동 폴백
+    const compactBody = (original.message || '').replace(/\s+/g, ' ').trim();
+    const useShortForm = compactBody.length <= 80;
+    const fallbackMessage = `[케어매치] ${compactBody}`;
+    const failoverSms = useShortForm
+      ? { type: 'SMS' as const, message: fallbackMessage, subject: original.title || '' }
+      : { type: 'LMS' as const, message: fallbackMessage, subject: original.title || '케어매치 알림' };
+
     const result = await sendAlimtalk({
       receiver: original.phone,
       tplCode: original.templateCode,
       message: original.message,
       subject: original.title || undefined,
       buttons,
+      failoverSms,
       meta: { userId: original.userId, templateKey: original.templateKey },
     });
 
