@@ -1684,18 +1684,8 @@ export const emergencyRematch = async (req: AuthRequest, res: Response, next: Ne
         data: { status: 'RESOLVED', resolution: `긴급 재매칭으로 처리됨: ${reason || '관리자 요청'}`, handledBy: req.user!.id, handledAt: new Date() },
       });
 
-      // 기존 간병인에게 알림
-      await tx.notification.create({
-        data: {
-          userId: contract.caregiver.userId,
-          type: 'CONTRACT',
-          title: '계약 해제 안내',
-          body: `긴급 재매칭으로 인해 계약이 해제되었습니다. 사유: ${reason || '관리자 요청'}`,
-          data: { contractId },
-        },
-      });
-
-      // 보호자에게 알림
+      // 보호자에게만 알림 (정책: 긴급 재매칭은 환자보호자 전용)
+      // 간병인 측은 별도 처리(어드민이 직접 안내) — 발송 제외
       await tx.notification.create({
         data: {
           userId: contract.guardian.userId,

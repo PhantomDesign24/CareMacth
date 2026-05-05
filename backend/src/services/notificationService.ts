@@ -133,7 +133,6 @@ export async function sendExtensionReminder(contractId: string, daysLeft: number
     where: { id: contractId },
     include: {
       guardian: { include: { user: { select: USER_PUBLIC_SELECT } } },
-      caregiver: { include: { user: { select: USER_PUBLIC_SELECT } } },
       careRequest: { include: { patient: true } },
     },
   });
@@ -141,22 +140,16 @@ export async function sendExtensionReminder(contractId: string, daysLeft: number
   if (!contract) return;
 
   const patientName = contract.careRequest.patient.name;
+  const key = daysLeft === 3 ? 'EXTENSION_REMINDER_3D' : 'EXTENSION_REMINDER_1D';
 
-  // 보호자에게 알림
-  await sendNotification({
+  // 보호자만 알림 (정책 변경 — 간병인은 발송 안 함)
+  await sendFromTemplate({
     userId: contract.guardian.userId,
-    type: 'EXTENSION',
-    title: '간병 종료 예정 안내',
-    body: `${patientName} 환자의 간병 서비스가 ${daysLeft}일 후 종료됩니다. 연장을 원하시면 마이페이지에서 연장 요청해주세요.`,
-    data: { contractId, daysLeft },
-  });
-
-  // 간병인에게도 알림
-  await sendNotification({
-    userId: contract.caregiver.userId,
-    type: 'EXTENSION',
-    title: '간병 종료 예정 안내',
-    body: `${patientName} 환자의 간병이 ${daysLeft}일 후 종료됩니다.`,
+    key,
+    vars: { patientName, daysLeft },
+    fallbackTitle: '간병 종료 예정 안내',
+    fallbackBody: `${patientName} 환자의 간병 서비스가 ${daysLeft}일 후 종료됩니다. 연장을 원하시면 마이페이지에서 연장 요청해주세요.`,
+    fallbackType: 'EXTENSION',
     data: { contractId, daysLeft },
   });
 }

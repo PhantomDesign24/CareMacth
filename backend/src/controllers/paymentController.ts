@@ -534,15 +534,16 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
           });
         }
 
-        // 알림
+        // 결제 완료 알림 — 정책 변경: 환자보호자에게만 발송
+        // (간병인 측은 매칭 완료/연장 확정 시 계약 안내에서 예상 간병비로 따로 안내)
         if (payment.contract) {
-          const caregiver = await tx.caregiver.findUnique({
-            where: { id: payment.contract.caregiverId },
+          const guardian = await tx.guardian.findUnique({
+            where: { id: payment.guardianId },
           });
-          if (caregiver) {
+          if (guardian) {
             await tx.notification.create({
               data: {
-                userId: caregiver.userId,
+                userId: guardian.userId,
                 type: 'PAYMENT',
                 title: linkedExtension ? '연장 결제 완료' : '결제가 완료되었습니다',
                 body: linkedExtension
