@@ -668,6 +668,20 @@ export default function PaymentsPage() {
       {/* Settlements Tab */}
       {activeTab === "settlements" && (
         <div className="space-y-4">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-gray-700">
+            <div className="font-semibold text-blue-900 mb-1.5">📘 정산이란?</div>
+            <ul className="space-y-1 text-xs text-gray-700 ml-4 list-disc">
+              <li>
+                <b>정산 (자동·매일)</b> — 계약이 종료되면 다음날 자동으로 간병인 귀속 금액(공급가)에서 플랫폼 수수료·원천징수 세금을 차감해 <code className="bg-white px-1 rounded text-[11px]">Earning</code> 레코드를 생성합니다.
+              </li>
+              <li>
+                <b>일괄정산 (수동)</b> — 누적된 미지급 정산건을 어드민이 한 번에 송금 완료 처리하는 단계입니다. 아래 "선택건 일괄정산" 버튼으로 다수 건을 동시에 <code className="bg-white px-1 rounded text-[11px]">isPaid=true</code> 로 전환합니다.
+              </li>
+              <li>
+                즉, <b>정산 = 금액 산정/Earning 생성</b>, <b>일괄정산 = 실제 송금 후 지급 완료 표시</b>입니다.
+              </li>
+            </ul>
+          </div>
           <div className="card">
             <div className="flex flex-wrap items-center gap-3">
               <select
@@ -737,6 +751,20 @@ export default function PaymentsPage() {
       {/* Mid-settlement Tab */}
       {activeTab === "mid-settlement" && (
         <div className="space-y-4">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-gray-700">
+            <div className="font-semibold text-amber-900 mb-1.5">💡 중간정산이란?</div>
+            <ul className="space-y-1 text-xs text-gray-700 ml-4 list-disc">
+              <li>
+                계약이 끝나기 전에도 <b>경과 일수만큼 미리 정산</b>하는 기능입니다. 장기 계약(예: 1개월 이상)에서 간병인이 매주/격주로 일부 금액을 받고 싶을 때 사용.
+              </li>
+              <li>
+                계약 시작일~오늘까지 일수 × 일당 으로 일할 정산 → 잔여분은 종료 후 자동 정산(또는 추가 중간정산)으로 처리.
+              </li>
+              <li>
+                일반 정산 흐름과 분리: <b>중간정산</b>(진행중) → 종료 후 <b>잔여 자동 정산</b> → 다수 건을 모아 <b>일괄정산</b>(송금 완료 표시).
+              </li>
+            </ul>
+          </div>
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
