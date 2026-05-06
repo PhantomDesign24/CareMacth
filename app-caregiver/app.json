@@ -14,7 +14,7 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "kr.carematch.caregiver",
+      "bundleIdentifier": "kr.carematch.giver",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSFaceIDUsageDescription": "생체 인증으로 빠르게 로그인합니다.",
@@ -35,7 +35,7 @@
         "backgroundColor": "#FFFFFF"
       },
       "googleServicesFile": "./google-services.json",
-      "package": "kr.carematch.caregiver",
+      "package": "kr.carematch.giver",
       "permissions": [
         "INTERNET",
         "USE_BIOMETRIC",

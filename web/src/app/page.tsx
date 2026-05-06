@@ -36,6 +36,7 @@ export default function HomePage() {
       <HeroSection />
       <LiveDashboardSection />
       <SpecialServiceSection />
+      <CareFeeEstimateSection />
       <CareMatchTVSection />
       <HomeBannerSection />
       <PremiumFeaturesSection />
@@ -616,6 +617,126 @@ function SpecialServiceSection() {
               <p className="text-xs sm:text-sm text-gray-500">{s.desc}</p>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  CareFeeEstimateSection — 예상 간병비 계산기 안내 (비회원 포함 전체)    */
+/* ------------------------------------------------------------------ */
+function CareFeeEstimateSection() {
+  const router = useRouter();
+  return (
+    <section className="relative py-12 md:py-16 overflow-hidden">
+      {/* 배경 그라디언트 + 장식 */}
+      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #FFF7ED 0%, #FFFBF5 50%, #ECFDF5 100%)" }} />
+      <div className="absolute -top-20 -right-20 w-96 h-96 rounded-full bg-orange-200/30 blur-3xl" />
+      <div className="absolute -bottom-32 -left-20 w-96 h-96 rounded-full bg-emerald-200/30 blur-3xl" />
+
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+          {/* 좌측: 카피 + CTA */}
+          <div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 text-orange-600 text-xs font-bold mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+              회원가입 없이 무료
+            </span>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-gray-900 leading-tight mb-3">
+              우리 가족 간병,<br />
+              <span className="text-transparent bg-clip-text" style={{ backgroundImage: "linear-gradient(135deg, #FF922E 0%, #FF6B35 100%)" }}>
+                얼마면 될까요?
+              </span>
+            </h2>
+            <p className="text-sm sm:text-base text-gray-600 leading-relaxed mb-6">
+              진단명과 환자 상태 4가지만 입력하면<br className="hidden sm:block" />
+              하루 예상 간병비를 <strong className="text-gray-900">30초 안에</strong> 확인할 수 있습니다.
+            </p>
+
+            {/* 예시 결과 미리보기 */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-md p-5 mb-6 max-w-sm">
+              <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
+                <span className="text-xs font-bold text-gray-500">예시 — 뇌경색 환자</span>
+                <span className="text-[10px] text-gray-400">2024.06 시세</span>
+              </div>
+              <div className="text-center mb-3">
+                <div className="text-[11px] text-gray-500 mb-1">하루 예상 간병비 (평균)</div>
+                <div className="flex items-baseline justify-center gap-1">
+                  <span className="text-3xl font-extrabold text-orange-500 tabular-nums">135,000</span>
+                  <span className="text-base font-bold text-gray-700">원</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-1 text-center">
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="text-[9px] text-gray-400">최소</div>
+                  <div className="text-[11px] font-bold text-gray-700">125,000원</div>
+                </div>
+                <div className="bg-orange-50 rounded-lg py-1.5 ring-1 ring-orange-200">
+                  <div className="text-[9px] text-orange-500">평균</div>
+                  <div className="text-[11px] font-bold text-orange-600">135,000원</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="text-[9px] text-gray-400">최대</div>
+                  <div className="text-[11px] font-bold text-gray-700">164,000원</div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => router.push("/care-fee-estimate")}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl text-white font-bold shadow-lg hover:shadow-xl hover:translate-y-[-1px] transition-all text-sm sm:text-base"
+              style={{ background: "linear-gradient(135deg, #FF922E 0%, #FF6B35 100%)" }}
+            >
+              지금 무료로 계산해보기
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </button>
+
+            {/* 특징 3개 */}
+            <div className="mt-5 grid grid-cols-3 gap-3 max-w-md">
+              {[
+                { icon: "⚡", title: "30초", desc: "간단 4문항" },
+                { icon: "🎯", title: "정확", desc: "시장 시세" },
+                { icon: "🆓", title: "무료", desc: "가입 불필요" },
+              ].map((item) => (
+                <div key={item.title} className="text-center">
+                  <div className="text-xl mb-0.5">{item.icon}</div>
+                  <div className="text-xs font-bold text-gray-900">{item.title}</div>
+                  <div className="text-[10px] text-gray-500">{item.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 우측: 비주얼 이미지 */}
+          <div className="relative">
+            <div className="relative rounded-3xl overflow-hidden shadow-2xl bg-white">
+              <img
+                src="/img/care-fee-hero.png"
+                alt="간병비 계산"
+                className="w-full h-auto"
+                loading="lazy"
+              />
+            </div>
+            {/* 플로팅 뱃지 */}
+            <div className="hidden sm:flex absolute -top-3 -right-3 lg:-right-6 px-4 py-2 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg items-center gap-2">
+              <span className="text-xl">💡</span>
+              <div>
+                <div className="text-[10px] opacity-90">평균 1일</div>
+                <div className="text-sm font-bold">~135,000원</div>
+              </div>
+            </div>
+            <div className="hidden sm:flex absolute -bottom-4 -left-4 lg:-left-6 px-4 py-3 rounded-2xl bg-white shadow-lg border border-gray-100 items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-500 flex items-center justify-center text-xl">📊</div>
+              <div>
+                <div className="text-[10px] text-gray-500">매월 업데이트</div>
+                <div className="text-sm font-bold text-gray-900">시장 시세 반영</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

@@ -222,12 +222,24 @@ export async function verifyCertificate(caregiverId: string, certId: string) {
   return apiRequest(`/admin/caregivers/${caregiverId}/certificates/${certId}/verify`, { method: "PUT" });
 }
 
+export async function unverifyCertificate(caregiverId: string, certId: string) {
+  return apiRequest(`/admin/caregivers/${caregiverId}/certificates/${certId}/verify`, { method: "DELETE" });
+}
+
 export async function verifyIdCard(caregiverId: string) {
   return apiRequest(`/admin/caregivers/${caregiverId}/verify-id-card`, { method: "PUT" });
 }
 
+export async function unverifyIdCard(caregiverId: string) {
+  return apiRequest(`/admin/caregivers/${caregiverId}/verify-id-card`, { method: "DELETE" });
+}
+
 export async function verifyCriminalCheck(caregiverId: string) {
   return apiRequest(`/admin/caregivers/${caregiverId}/verify-criminal-check`, { method: "PUT" });
+}
+
+export async function unverifyCriminalCheck(caregiverId: string) {
+  return apiRequest(`/admin/caregivers/${caregiverId}/verify-criminal-check`, { method: "DELETE" });
 }
 
 // ─── Holidays ─────────────────────────────────────────

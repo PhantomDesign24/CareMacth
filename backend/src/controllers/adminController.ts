@@ -5,7 +5,7 @@ import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { logAdminAction } from '../services/auditLog';
-import { sendFromTemplate, renderTemplate, colorForRole, NOTIF_COLOR_PATIENT, NOTIF_COLOR_CAREGIVER } from '../services/notificationService';
+import { sendFromTemplate, renderTemplate, colorForRole, NOTIF_COLOR_PATIENT, NOTIF_COLOR_CAREGIVER, sendNotification as sendUserNotification } from '../services/notificationService';
 import { calculateEarning } from '../utils/earning';
 
 // GET /dashboard - 대시보드 통계
@@ -2911,6 +2911,93 @@ export const verifyCriminalCheck = async (req: AuthRequest, res: Response, next:
     });
 
     res.json({ success: true, message: '범죄이력 조회서 검증이 완료되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /caregivers/:caregiverId/certificates/:certId/verify - 자격증 검증 취소
+export const unverifyCertificate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { caregiverId, certId } = req.params;
+    const certificate = await prisma.certificate.findFirst({
+      where: { id: certId, caregiverId },
+      include: { caregiver: { select: { userId: true } } },
+    });
+    if (!certificate) throw new AppError('자격증을 찾을 수 없습니다.', 404);
+    if (!certificate.verified) throw new AppError('아직 검증되지 않은 자격증입니다.', 400);
+
+    await prisma.certificate.update({
+      where: { id: certId },
+      data: { verified: false },
+    });
+
+    // 간병인에게 알림
+    sendUserNotification({
+      userId: certificate.caregiver.userId,
+      type: 'SYSTEM',
+      title: '자격증 검증이 취소되었습니다',
+      body: `관리자에 의해 "${certificate.name}" 자격증의 검증이 취소되었습니다. 자세한 사항은 고객센터로 문의해주세요.`,
+      data: { certificateId: certId },
+    }).catch(() => {});
+
+    res.json({ success: true, message: '자격증 검증이 취소되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /caregivers/:id/verify-id-card - 신분증 본인 확인 취소
+export const unverifyIdCard = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const caregiver = await prisma.caregiver.findUnique({ where: { id } });
+    if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    if (!caregiver.identityVerified) throw new AppError('아직 본인 확인되지 않은 간병인입니다.', 400);
+
+    await prisma.caregiver.update({
+      where: { id },
+      data: { identityVerified: false },
+    });
+
+    // 간병인에게 알림 — 일감 지원이 막히는 중대한 변경
+    sendUserNotification({
+      userId: caregiver.userId,
+      type: 'SYSTEM',
+      title: '신분증 본인 확인이 취소되었습니다',
+      body: '관리자에 의해 신분증 본인 확인이 취소되어 일감 지원이 일시 제한됩니다. 신분증을 재제출하거나 고객센터로 문의해주세요.',
+      data: {},
+    }).catch(() => {});
+
+    res.json({ success: true, message: '신분증 본인 확인이 취소되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /caregivers/:id/verify-criminal-check - 범죄이력 조회서 검증 취소
+export const unverifyCriminalCheck = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const caregiver = await prisma.caregiver.findUnique({ where: { id } });
+    if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    if (!caregiver.criminalCheckDone) throw new AppError('아직 검증되지 않은 범죄이력 조회서입니다.', 400);
+
+    await prisma.caregiver.update({
+      where: { id },
+      data: { criminalCheckDone: false, criminalCheckDate: null },
+    });
+
+    // 간병인에게 알림
+    sendUserNotification({
+      userId: caregiver.userId,
+      type: 'SYSTEM',
+      title: '범죄이력 조회서 검증이 취소되었습니다',
+      body: '관리자에 의해 범죄이력 조회서의 검증이 취소되었습니다. 범죄이력 조회서를 재제출하거나 고객센터로 문의해주세요.',
+      data: {},
+    }).catch(() => {});
+
+    res.json({ success: true, message: '범죄이력 조회서 검증이 취소되었습니다.' });
   } catch (error) {
     next(error);
   }

@@ -42,8 +42,11 @@ router.post('/caregivers/:id/memo', [
   body('content').notEmpty().trim().isLength({ min: 1, max: 2000 }).withMessage('메모 내용을 입력해주세요. (1~2000자)'),
 ], adminController.addConsultMemo);
 router.put('/caregivers/:caregiverId/certificates/:certId/verify', adminController.verifyCertificate);
+router.delete('/caregivers/:caregiverId/certificates/:certId/verify', adminController.unverifyCertificate);
 router.put('/caregivers/:id/verify-id-card', adminController.verifyIdCard);
+router.delete('/caregivers/:id/verify-id-card', adminController.unverifyIdCard);
 router.put('/caregivers/:id/verify-criminal-check', adminController.verifyCriminalCheck);
+router.delete('/caregivers/:id/verify-criminal-check', adminController.unverifyCriminalCheck);
 
 // 알림 관리
 router.get('/notifications', adminController.getNotifications);

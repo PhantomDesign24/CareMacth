@@ -14,6 +14,9 @@ import {
   verifyCertificate,
   verifyIdCard,
   verifyCriminalCheck,
+  unverifyCertificate,
+  unverifyIdCard,
+  unverifyCriminalCheck,
 } from "@/lib/api";
 import {
   caregiverStatusLabel as statusLabel,
@@ -356,6 +359,45 @@ export default function CaregiverDetailPage() {
       await fetchData();
     } catch (err: any) {
       alert(err?.message || "범죄이력 조회서 검증 처리 중 오류가 발생했습니다.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleUnverifyCertificate(certId: string) {
+    if (!confirm("이 자격증의 검증을 취소하시겠습니까? 검증 전 상태로 되돌립니다.")) return;
+    try {
+      setActionLoading(true);
+      await unverifyCertificate(id, certId);
+      await fetchData();
+    } catch (err: any) {
+      alert(err?.message || "자격증 검증 취소 처리 중 오류가 발생했습니다.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleUnverifyIdCard() {
+    if (!confirm("신분증 본인 확인을 취소하시겠습니까? 검증 전 상태로 되돌립니다.")) return;
+    try {
+      setActionLoading(true);
+      await unverifyIdCard(id);
+      await fetchData();
+    } catch (err: any) {
+      alert(err?.message || "신분증 검증 취소 처리 중 오류가 발생했습니다.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleUnverifyCriminalCheck() {
+    if (!confirm("범죄이력 조회서 검증을 취소하시겠습니까? 검증 전 상태로 되돌립니다.")) return;
+    try {
+      setActionLoading(true);
+      await unverifyCriminalCheck(id);
+      await fetchData();
+    } catch (err: any) {
+      alert(err?.message || "범죄이력 조회서 검증 취소 처리 중 오류가 발생했습니다.");
     } finally {
       setActionLoading(false);
     }
@@ -754,13 +796,21 @@ export default function CaregiverDetailPage() {
                             원본 보기
                           </a>
                         )}
-                        {!cert.verified && (
+                        {!cert.verified ? (
                           <button
                             onClick={() => handleVerifyCertificate(cert.id)}
                             disabled={actionLoading}
                             className="btn-primary btn-sm"
                           >
                             {actionLoading ? "처리 중..." : "검증 확인"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleUnverifyCertificate(cert.id)}
+                            disabled={actionLoading}
+                            className="btn-sm text-xs text-red-600 hover:text-red-700 hover:underline px-2"
+                          >
+                            검증 취소
                           </button>
                         )}
                       </div>
@@ -791,13 +841,21 @@ export default function CaregiverDetailPage() {
                       <a href={data.idCardImage} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm inline-block">
                         원본 보기
                       </a>
-                      {!data.identityVerified && (
+                      {!data.identityVerified ? (
                         <button
                           onClick={handleVerifyIdCard}
                           disabled={actionLoading}
                           className="btn-primary btn-sm"
                         >
                           {actionLoading ? "처리 중..." : "본인 확인"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleUnverifyIdCard}
+                          disabled={actionLoading}
+                          className="btn-sm text-xs text-red-600 hover:text-red-700 hover:underline px-2"
+                        >
+                          본인 확인 취소
                         </button>
                       )}
                     </div>
@@ -846,13 +904,21 @@ export default function CaregiverDetailPage() {
                       <a href={data.criminalCheckDoc} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm inline-block">
                         원본 보기
                       </a>
-                      {!data.criminalCheckDone && (
+                      {!data.criminalCheckDone ? (
                         <button
                           onClick={handleVerifyCriminalCheck}
                           disabled={actionLoading}
                           className="btn-primary btn-sm"
                         >
                           {actionLoading ? "처리 중..." : "검증 확인"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleUnverifyCriminalCheck}
+                          disabled={actionLoading}
+                          className="btn-sm text-xs text-red-600 hover:text-red-700 hover:underline px-2"
+                        >
+                          검증 취소
                         </button>
                       )}
                     </div>
