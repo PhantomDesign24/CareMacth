@@ -2981,6 +2981,43 @@ export const getNotifications = async (req: AuthRequest, res: Response, next: Ne
   }
 };
 
+// GET /admin/notifications/users-search?q= — 알림 개별 발송용 사용자 검색.
+// 이름/이메일/전화번호 부분일치, 활성 사용자만, 최대 20명 반환.
+export const searchNotificationUsers = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 1) {
+      return res.json({ success: true, data: { users: [] } });
+    }
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } },
+          { phone: { contains: q } },
+        ],
+      },
+      select: { id: true, name: true, email: true, phone: true, role: true },
+      take: 20,
+      orderBy: { name: 'asc' },
+    });
+    res.json({ success: true, data: { users } });
+  } catch (e) { next(e); }
+};
+
+// POST /admin/notifications/upload-image — 알림 이미지 업로드.
+// 매직넘버 검증된 이미지를 받아 공개 URL 반환.
+export const uploadNotificationImage = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const file = (req as any).file;
+    if (!file) throw new AppError('파일이 필요합니다.', 400);
+    // upload 미들웨어가 저장한 파일명/경로 → 공개 URL
+    const url = `/uploads/${file.filename}`;
+    res.json({ success: true, data: { url, filename: file.filename, size: file.size } });
+  } catch (e) { next(e); }
+};
+
 // 일괄 발송 헬퍼 — 각 사용자별 알림 생성 → FCM 발송 → 결과를 개별 notification.pushSent/pushSuccess 에 기록.
 // 어드민 알림함에서 미발송/발송 실패가 정확히 표시되도록 반드시 이 헬퍼를 통해야 한다.
 async function createAndSendBulkPush(args: {
@@ -3022,16 +3059,17 @@ async function createAndSendBulkPush(args: {
 
   let totalSuccess = 0;
   if (args.firebase.apps.length && byColor.size > 0) {
+    // sendEach 로 메시지마다 다른 data(notificationId) 주입 — 푸시 탭 시 자동 markRead 가능.
     await Promise.all(
       Array.from(byColor.entries()).map(async ([color, group]) => {
-        const tokens = group.map((g) => g.fcmToken!);
+        const messages = group.map((g) => ({
+          token: g.fcmToken!,
+          notification: { title: args.title, body: args.body, ...(args.imageUrl ? { imageUrl: args.imageUrl } : {}) },
+          data: { ...dataPayload, notificationId: g.id },
+          android: { priority: 'high' as const, notification: { sound: 'default', channelId: 'carematch-default', color, ...(args.imageUrl ? { imageUrl: args.imageUrl } : {}) } },
+        }));
         try {
-          const result = await args.firebase.messaging().sendEachForMulticast({
-            tokens,
-            notification: { title: args.title, body: args.body, ...(args.imageUrl ? { imageUrl: args.imageUrl } : {}) },
-            data: dataPayload,
-            android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', color, ...(args.imageUrl ? { imageUrl: args.imageUrl } : {}) } },
-          });
+          const result = await args.firebase.messaging().sendEach(messages);
           const now = new Date();
           await Promise.all(
             group.map((g, i) => {
@@ -3206,22 +3244,31 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
         })
       );
 
-      // 모든 디바이스(회원+비회원)에 FCM 푸시 발송 — 단일 컬러 (혼합 청중)
+      // 모든 디바이스(회원+비회원)에 FCM 푸시 발송 — 사용자 토큰엔 notificationId 주입.
+      // 익명 디바이스(deviceToken.userId=null)는 notificationId 없음.
       let successCount = 0;
       const tokenSuccess = new Map<string, boolean>();
       if (firebase.apps.length) {
-        const tokens = deviceTokens.map(d => d.token);
-        try {
-          const result = await firebase.messaging().sendEachForMulticast({
-            tokens,
+        // 사용자 토큰 → notification.id 매핑
+        const tokenToNotifId = new Map<string, string>();
+        for (const n of createdNotifs) {
+          if (n.fcmToken) tokenToNotifId.set(n.fcmToken, n.id);
+        }
+        const baseData = Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)]));
+        const messages = deviceTokens.map((d) => {
+          const notifId = tokenToNotifId.get(d.token);
+          return {
+            token: d.token,
             notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
-            data: Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)])),
-            android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', color: NOTIF_COLOR_PATIENT, ...(imageUrl ? { imageUrl } : {}) } },
-          });
+            data: notifId ? { ...baseData, notificationId: notifId } : baseData,
+            android: { priority: 'high' as const, notification: { sound: 'default', channelId: 'carematch-default', color: NOTIF_COLOR_PATIENT, ...(imageUrl ? { imageUrl } : {}) } },
+          };
+        });
+        try {
+          const result = await firebase.messaging().sendEach(messages);
           successCount = result.successCount;
-          // 각 토큰의 성공 여부 매핑
-          tokens.forEach((t, i) => {
-            tokenSuccess.set(t, result.responses?.[i]?.success === true);
+          messages.forEach((m, i) => {
+            tokenSuccess.set(m.token, result.responses?.[i]?.success === true);
           });
         } catch (e) {
           console.error('[FCM] 전체 발송 오류:', e);

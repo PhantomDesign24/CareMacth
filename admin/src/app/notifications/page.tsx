@@ -5,6 +5,8 @@ import {
   getAdminNotifications,
   sendAdminNotification,
   deleteUnsentNotifications,
+  searchNotificationUsers,
+  uploadNotificationImage,
   type AdminNotification,
 } from "@/lib/api";
 import {
@@ -57,6 +59,11 @@ export default function NotificationsPage() {
   // Send form state
   const [target, setTarget] = useState<"all" | "individual" | "all_devices" | "guardians" | "caregivers">("all");
   const [userId, setUserId] = useState("");
+  const [userQuery, setUserQuery] = useState("");
+  const [userResults, setUserResults] = useState<{ id: string; name: string; email: string; phone: string; role: string }[]>([]);
+  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [sendType, setSendType] = useState("SYSTEM");
@@ -97,6 +104,55 @@ export default function NotificationsPage() {
     fetchNotifications();
   }, [fetchNotifications]);
 
+  // 사용자 검색 (300ms debounce)
+  useEffect(() => {
+    if (target !== "individual") return;
+    const q = userQuery.trim();
+    if (!q || selectedUser) {
+      setUserResults([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        setSearching(true);
+        const result = await searchNotificationUsers(q);
+        setUserResults(result.users || []);
+      } catch {
+        setUserResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [userQuery, target, selectedUser]);
+
+  // 이미지 파일 업로드
+  async function handleImageFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("이미지 파일만 업로드 가능합니다.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert("이미지는 5MB 이하만 업로드 가능합니다.");
+      return;
+    }
+    try {
+      setUploading(true);
+      const result = await uploadNotificationImage(file);
+      // 백엔드가 /uploads/ 상대경로 반환 → 절대 URL 로 변환
+      const absUrl = result.url.startsWith("http") ? result.url : `${window.location.origin}${result.url}`;
+      setImageUrl(absUrl);
+    } catch (err: any) {
+      alert(err?.message || "이미지 업로드 실패");
+    } finally {
+      setUploading(false);
+      // input value 초기화 (같은 파일 재선택 가능)
+      e.target.value = "";
+    }
+  }
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !body.trim()) {
@@ -132,6 +188,9 @@ export default function NotificationsPage() {
       setTitle("");
       setBody("");
       setUserId("");
+      setSelectedUser(null);
+      setUserQuery("");
+      setUserResults([]);
       setLinkUrl("");
       setImageUrl("");
       // Refresh the list
@@ -175,17 +234,61 @@ export default function NotificationsPage() {
             </div>
           </div>
 
-          {/* userId (개별 발송 시) */}
+          {/* 사용자 검색 (개별 발송 시) — 이름/이메일/전화로 검색 */}
           {target === "individual" && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">사용자 ID</label>
-              <input
-                type="text"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                placeholder="사용자 UUID를 입력하세요"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              />
+              <label className="mb-1 block text-sm font-medium text-gray-700">사용자 검색</label>
+              {selectedUser ? (
+                <div className="flex items-center justify-between rounded-lg border border-primary-300 bg-primary-50 px-3 py-2 text-sm">
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-gray-900">{selectedUser.name} <span className="ml-1 inline-block rounded bg-gray-200 px-1.5 py-0.5 text-[10px] text-gray-600">{selectedUser.role}</span></span>
+                    <span className="text-xs text-gray-600">{selectedUser.email}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedUser(null); setUserId(""); setUserQuery(""); setUserResults([]); }}
+                    className="text-xs text-gray-500 hover:text-red-600"
+                  >
+                    변경
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={userQuery}
+                    onChange={(e) => setUserQuery(e.target.value)}
+                    placeholder="이름·이메일·전화번호로 검색"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                  {userQuery.trim() && (
+                    <div className="absolute z-10 mt-1 w-full max-h-72 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                      {searching && (
+                        <div className="px-3 py-2 text-xs text-gray-400">검색 중...</div>
+                      )}
+                      {!searching && userResults.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-gray-400">일치하는 사용자 없음</div>
+                      )}
+                      {userResults.map((u) => (
+                        <button
+                          type="button"
+                          key={u.id}
+                          onClick={() => { setSelectedUser(u); setUserId(u.id); setUserQuery(""); setUserResults([]); }}
+                          className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                        >
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-semibold text-gray-900 truncate">
+                              {u.name}
+                              <span className="ml-2 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">{u.role}</span>
+                            </span>
+                            <span className="text-xs text-gray-500 truncate">{u.email} · {u.phone}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -241,21 +344,43 @@ export default function NotificationsPage() {
             />
           </div>
 
-          {/* 이미지 URL */}
+          {/* 이미지 (URL 입력 또는 파일 업로드) */}
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">이미지 URL <span className="text-gray-400 font-normal">(선택)</span></label>
-            <input
-              type="text"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="예: https://cm.phantomdesign.kr/uploads/banner.png"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            />
+            <label className="mb-1 block text-sm font-medium text-gray-700">이미지 <span className="text-gray-400 font-normal">(선택)</span></label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="이미지 URL 직접 입력 또는 파일 업로드"
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <label className={`shrink-0 cursor-pointer rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                {uploading ? '업로드 중...' : '파일 선택'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageFileChange}
+                  className="hidden"
+                  disabled={uploading}
+                />
+              </label>
+              {imageUrl && (
+                <button
+                  type="button"
+                  onClick={() => setImageUrl("")}
+                  className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50"
+                >
+                  지우기
+                </button>
+              )}
+            </div>
             {imageUrl && (
               <div className="mt-2">
                 <img src={imageUrl} alt="미리보기" className="h-20 rounded-lg border object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
               </div>
             )}
+            <p className="mt-1 text-xs text-gray-400">이미지 파일은 최대 5MB. 업로드 후 자동으로 URL 채워집니다.</p>
           </div>
 
           {/* 결과 메시지 */}

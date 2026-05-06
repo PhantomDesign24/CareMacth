@@ -46,6 +46,8 @@ router.put('/caregivers/:id/verify-criminal-check', adminController.verifyCrimin
 
 // 알림 관리
 router.get('/notifications', adminController.getNotifications);
+router.get('/notifications/users-search', adminController.searchNotificationUsers);
+router.post('/notifications/upload-image', upload.single('file'), handleUploadError, verifyUploadMagicNumber, adminController.uploadNotificationImage);
 router.post('/notifications/send', [
   body('title').notEmpty().trim().isLength({ min: 1, max: 200 }).withMessage('제목을 입력해주세요. (1~200자)'),
   body('body').notEmpty().trim().isLength({ min: 1, max: 2000 }).withMessage('내용을 입력해주세요. (1~2000자)'),

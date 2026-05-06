@@ -10,7 +10,6 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Switch,
   Linking,
   Modal,
   AppState,
@@ -31,9 +30,7 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 
 import * as Notifications from 'expo-notifications';
-import * as LocalAuthentication from 'expo-local-authentication';
 import * as Device from 'expo-device';
-import * as SecureStore from 'expo-secure-store';
 // 앱 종료: React Native 내장 BackHandler.exitApp()만 사용 (Android 전용, iOS는 원래 종료 불가)
 import { APP_CONFIG } from './src/config';
 
@@ -70,13 +67,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [canGoBack, setCanGoBack] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userToken, setUserToken] = useState('');
-  const [biometricReady, setBiometricReady] = useState(false);
-  const [showBiometricLogin, setShowBiometricLogin] = useState(false);
-  const [pendingTokenInjection, setPendingTokenInjection] = useState<string | null>(null);
   const [paymentActive, setPaymentActive] = useState(false);
 
   // 디버그 로그 오버레이 (결제 흐름 추적용)
@@ -110,47 +103,6 @@ export default function App() {
     setModal({ ...config, visible: true });
   };
   const hideModal = () => setModal(prev => ({ ...prev, visible: false }));
-
-  // 앱 시작 시 저장된 생체인증 토큰 확인
-  useEffect(() => {
-    (async () => {
-      try {
-        const enabled = await SecureStore.getItemAsync('biometric_enabled');
-        const savedToken = await SecureStore.getItemAsync('saved_token');
-        if (enabled === 'true' && savedToken) {
-          setBiometricEnabled(true);
-          setShowBiometricLogin(true);
-        }
-      } catch {}
-      setBiometricReady(true);
-    })();
-  }, []);
-
-  // 생체인증 로그인 시도
-  const tryBiometricLogin = async () => {
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: '생체인증으로 로그인',
-        fallbackLabel: '비밀번호로 로그인',
-        disableDeviceFallback: false,
-      });
-      if (result.success) {
-        const savedToken = await SecureStore.getItemAsync('saved_token');
-        if (savedToken) {
-          // JWT 형식 검증 (XSS 방어: JWT는 [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+ 만 허용)
-          if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(savedToken)) {
-            // 이상한 값 → SecureStore 초기화
-            await SecureStore.deleteItemAsync('saved_token');
-            return;
-          }
-          setUserToken(savedToken);
-          setShowBiometricLogin(false);
-          // WebView가 준비되면 onLoadEnd에서 주입하도록 예약
-          setPendingTokenInjection(savedToken);
-        }
-      }
-    } catch {}
-  };
 
   // 알림 채널은 권한과 별개로 앱 시작 즉시 1회 등록 (Android)
   // — 앱 이름 라벨이 알림 상단에 정상 표시되려면 채널이 시스템에 먼저 만들어져 있어야 함
@@ -327,14 +279,7 @@ export default function App() {
       if (data.type === 'USER_INFO') {
         if (data.name) setUserName(data.name);
         if (data.email) setUserEmail(data.email);
-        if (data.token) {
-          setUserToken(data.token);
-          // 생체인증 활성화 상태면 토큰 저장
-          const bioEnabled = await SecureStore.getItemAsync('biometric_enabled');
-          if (bioEnabled === 'true') {
-            await SecureStore.setItemAsync('saved_token', data.token);
-          }
-        }
+        if (data.token) setUserToken(data.token);
       }
       // 로그인 시 FCM 토큰을 유저에 연결
       if (data.type === 'USER_LOGIN' && data.userId) {
@@ -350,8 +295,6 @@ export default function App() {
           setUserName('');
           setUserEmail('');
           setUserToken('');
-          await SecureStore.deleteItemAsync('saved_token').catch(() => {});
-          await SecureStore.deleteItemAsync('biometric_enabled').catch(() => {});
           showModal({
             icon: 'alert-circle-outline',
             iconColor: '#E74C3C',
@@ -546,38 +489,6 @@ export default function App() {
     true;
   `;
 
-  // 생체인증 로그인 화면
-  if (showBiometricLogin && biometricReady) {
-    return (
-      <SafeAreaProvider>
-      <View style={styles.bioLoginScreen}>
-        <StatusBar style="dark" />
-        <View style={styles.bioLoginLogo}>
-          <Ionicons name="heart" size={48} color="#FF922E" />
-        </View>
-        <Text style={styles.bioLoginTitle}>케어매치</Text>
-        <Text style={styles.bioLoginDesc}>생체인증으로 로그인하세요</Text>
-        <TouchableOpacity style={styles.bioLoginButton} onPress={tryBiometricLogin}>
-          <Ionicons name="finger-print" size={24} color="#fff" />
-          <Text style={styles.bioLoginButtonText}>생체인증 로그인</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bioLoginSkip} onPress={() => setShowBiometricLogin(false)}>
-          <Text style={styles.bioLoginSkipText}>아이디/비밀번호로 로그인</Text>
-        </TouchableOpacity>
-      </View>
-      </SafeAreaProvider>
-    );
-  }
-
-  // 생체인증 확인 중
-  if (!biometricReady) {
-    return (
-      <View style={styles.bioLoginScreen}>
-        <ActivityIndicator size="large" color="#FF922E" />
-      </View>
-    );
-  }
-
   return (
     <SafeAreaProvider>
     <SafeAreaView style={styles.container}>
@@ -609,47 +520,6 @@ export default function App() {
             </View>
           </View>
 
-          {/* 설정 — 푸시 알림 토글은 WebView 내부 마이페이지의 "알림 설정" 카드에서 관리 (중복 제거) */}
-          <View style={styles.mypageSection}>
-            <Text style={styles.mypageSectionTitle}>설정</Text>
-            <View style={styles.mypageRow}>
-              <View style={styles.mypageRowLeft}>
-                <Ionicons name="finger-print" size={20} color="#FF922E" />
-                <Text style={styles.mypageRowText}>생체인증 로그인</Text>
-              </View>
-              <Switch
-                value={biometricEnabled}
-                onValueChange={async (val) => {
-                  if (!userToken) {
-                    showModal({ icon: 'lock-closed-outline', iconColor: '#FF922E', title: '로그인 필요', message: '생체인증을 설정하려면 먼저 로그인해주세요.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] });
-                    return;
-                  }
-                  if (val) {
-                    try {
-                      const compatible = await LocalAuthentication.hasHardwareAsync();
-                      if (!compatible) { showModal({ icon: 'warning-outline', iconColor: '#F5A623', title: '지원 안 됨', message: '이 기기는 생체인증을 지원하지 않습니다.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] }); return; }
-                      const enrolled = await LocalAuthentication.isEnrolledAsync();
-                      if (!enrolled) { showModal({ icon: 'finger-print', iconColor: '#F5A623', title: '등록 필요', message: '기기 설정에서 지문 또는 Face ID를 등록해주세요.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] }); return; }
-                      const result = await LocalAuthentication.authenticateAsync({ promptMessage: '생체인증을 등록합니다' });
-                      if (result.success) {
-                        await SecureStore.setItemAsync('biometric_enabled', 'true');
-                        await SecureStore.setItemAsync('saved_token', userToken);
-                        setBiometricEnabled(true);
-                        showModal({ icon: 'checkmark-circle', iconColor: '#2ECC71', title: '설정 완료', message: '다음부터 생체인증으로 바로 로그인됩니다.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] });
-                      }
-                    } catch { showModal({ icon: 'close-circle', iconColor: '#E74C3C', title: '오류', message: '생체인증 설정에 실패했습니다.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] }); }
-                  } else {
-                    await SecureStore.deleteItemAsync('biometric_enabled');
-                    await SecureStore.deleteItemAsync('saved_token');
-                    setBiometricEnabled(false);
-                    showModal({ icon: 'finger-print', iconColor: '#999', title: '비활성화', message: '생체인증이 비활성화되었습니다.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] });
-                  }
-                }}
-                trackColor={{ false: '#ddd', true: '#FFD4A8' }}
-                thumbColor={biometricEnabled ? '#FF922E' : '#f4f3f4'}
-              />
-            </View>
-          </View>
 
           {/* 서비스 */}
           <View style={styles.mypageSection}>
@@ -727,21 +597,15 @@ export default function App() {
                 message: '로그아웃 하시겠습니까?',
                 buttons: [
                   { text: '취소', style: 'cancel', onPress: hideModal },
-                  { text: '로그아웃', style: 'danger', onPress: async () => {
+                  { text: '로그아웃', style: 'danger', onPress: () => {
                     hideModal();
                     setUserName('');
                     setUserEmail('');
                     setUserToken('');
                     setActiveTab('home');
-                    // 생체인증 설정되어 있으면 로그아웃 후 생체인증 화면 표시
-                    const bioEnabled = await SecureStore.getItemAsync('biometric_enabled');
-                    const savedToken = await SecureStore.getItemAsync('saved_token');
                     setTimeout(() => {
                       if (webViewRef.current) {
                         webViewRef.current.injectJavaScript("localStorage.removeItem('cm_access_token'); localStorage.removeItem('cm_refresh_token'); window.location.href = '/auth/login'; true;");
-                      }
-                      if (bioEnabled === 'true' && savedToken) {
-                        setShowBiometricLogin(true);
                       }
                     }, 200);
                   }},
@@ -847,15 +711,6 @@ export default function App() {
           onLoadEnd={() => {
             addLog('LOAD_END', 'ok');
             setLoading(false);
-            // 생체인증 후 대기 중인 토큰 주입
-            if (pendingTokenInjection && webViewRef.current) {
-              webViewRef.current.injectJavaScript(`
-                localStorage.setItem('cm_access_token', '${pendingTokenInjection}');
-                window.location.href = '/dashboard/guardian';
-                true;
-              `);
-              setPendingTokenInjection(null);
-            }
           }}
           onMessage={onMessage}
           injectedJavaScript={injectedJS}

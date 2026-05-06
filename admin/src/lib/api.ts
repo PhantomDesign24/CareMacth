@@ -280,6 +280,31 @@ export async function deleteUnsentNotifications() {
   return apiRequest("/admin/notifications/unsent", { method: "DELETE" });
 }
 
+// 알림 개별 발송용 사용자 검색 (이름/이메일/전화 부분일치)
+export async function searchNotificationUsers(q: string) {
+  return apiRequest<{ users: { id: string; name: string; email: string; phone: string; role: string }[] }>(
+    "/admin/notifications/users-search",
+    { params: { q } }
+  );
+}
+
+// 알림 이미지 업로드 (FormData) — apiRequest 가 JSON 전용이라 fetch 직접 사용
+export async function uploadNotificationImage(file: File): Promise<{ url: string; filename: string; size: number }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const res = await fetch("/api/admin/notifications/upload-image", {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  const json = await res.json();
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || "이미지 업로드 실패");
+  }
+  return json.data;
+}
+
 // ─── Patients ─────────────────────────────────────────
 export async function getPatients(params?: { search?: string; status?: string; page?: number; limit?: number; gender?: string; mobilityStatus?: string }) {
   return apiRequest<PaginatedResponse<Patient>>("/admin/patients", {
