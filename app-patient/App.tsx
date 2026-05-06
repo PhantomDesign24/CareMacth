@@ -161,29 +161,63 @@ export default function App() {
     } catch (e) { console.log('Push setup error:', e); }
   };
 
-  // 알림 수신 리스너
+  // 푸시 탭 시 적용할 URL 을 잠깐 보관 (WebView 가 onLoadEnd 후 적용)
+  const [pendingPushUrl, setPendingPushUrl] = useState<string | null>(null);
+
+  const handlePushResponse = useCallback(async (data: any) => {
+    if (!data) return;
+    // 1) 알림 자동 읽음 처리 — 네이티브 fetch (cold start 에서도 안전)
+    const notifId = data.notificationId ? String(data.notificationId).replace(/[^A-Za-z0-9_-]/g, '') : '';
+    if (notifId) {
+      // userToken 있으면 즉시 호출, 없으면 WebView localStorage 에서 시도 (둘 다 fallback)
+      let token = userToken;
+      if (!token && webViewRef.current) {
+        // WebView 의 localStorage 에서 토큰 꺼내서 호출하도록 inject — token 이 미적재면 실패해도 무해
+        webViewRef.current.injectJavaScript(
+          `(function(){try{var t=localStorage.getItem('cm_access_token');if(t){fetch('https://${DOMAIN}/api/notifications/${notifId}/read',{method:'PUT',headers:{'Authorization':'Bearer '+t}});}}catch(e){}})();true;`
+        );
+      }
+      if (token) {
+        try {
+          await fetch(`https://${DOMAIN}/api/notifications/${notifId}/read`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+        } catch {}
+      }
+    }
+    // 2) URL 이동 — WebView 준비됐으면 즉시, 아니면 onLoadEnd 까지 대기
+    if (data.url) {
+      const url = String(data.url);
+      if (loading || !webViewRef.current) {
+        setPendingPushUrl(url);
+      } else {
+        webViewRef.current.injectJavaScript(`window.location.href = '${url}'; true;`);
+      }
+    }
+  }, [userToken, loading]);
+
+  // 알림 수신 리스너 (앱 실행 중 도착)
   useEffect(() => {
     if (!Notifications) return;
     try {
       const sub1 = Notifications.addNotificationReceivedListener(() => {});
       const sub2 = Notifications.addNotificationResponseReceivedListener((response: any) => {
-        const data = response?.notification?.request?.content?.data;
-        // 푸시 탭 → 해당 알림을 즉시 읽음 처리 (WebView localStorage 토큰 사용)
-        if (data?.notificationId && webViewRef.current) {
-          const safeId = String(data.notificationId).replace(/[^A-Za-z0-9_-]/g, '');
-          if (safeId) {
-            webViewRef.current.injectJavaScript(
-              `(function(){try{var t=localStorage.getItem('cm_access_token');if(t){fetch('https://${DOMAIN}/api/notifications/${safeId}/read',{method:'PUT',headers:{'Authorization':'Bearer '+t}});}}catch(e){}})();true;`
-            );
-          }
-        }
-        if (data?.url && webViewRef.current) {
-          webViewRef.current.injectJavaScript(`window.location.href = '${data.url}'; true;`);
-        }
+        handlePushResponse(response?.notification?.request?.content?.data);
       });
       return () => { sub1.remove(); sub2.remove(); };
     } catch {}
-  }, []);
+  }, [handlePushResponse]);
+
+  // Cold start — 앱이 꺼진 상태에서 푸시로 깨어난 경우
+  useEffect(() => {
+    (async () => {
+      try {
+        const last = await Notifications.getLastNotificationResponseAsync();
+        if (last) handlePushResponse(last?.notification?.request?.content?.data);
+      } catch {}
+    })();
+  }, [handlePushResponse]);
 
   // Android 뒤로가기
   useEffect(() => {
@@ -711,6 +745,16 @@ export default function App() {
           onLoadEnd={() => {
             addLog('LOAD_END', 'ok');
             setLoading(false);
+            // 푸시 탭으로 cold-started 된 경우 보관해둔 URL 적용
+            if (pendingPushUrl && webViewRef.current) {
+              const u = pendingPushUrl;
+              setPendingPushUrl(null);
+              setTimeout(() => {
+                if (webViewRef.current) {
+                  webViewRef.current.injectJavaScript(`window.location.href = '${u}'; true;`);
+                }
+              }, 300);
+            }
           }}
           onMessage={onMessage}
           injectedJavaScript={injectedJS}
