@@ -29,6 +29,8 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
 
 function typeToHref(n: Notification, role?: string): string | null {
   const d = n.data || {};
+  // 백엔드가 명시한 url 이 있으면 최우선 사용
+  if (typeof d.url === "string" && d.url.length > 0) return d.url;
   const isCaregiver = role === "CAREGIVER";
   const isGuardian = role === "GUARDIAN";
   const guardianDash = "/dashboard/guardian";

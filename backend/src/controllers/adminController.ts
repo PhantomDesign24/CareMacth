@@ -2852,6 +2852,7 @@ export const verifyCertificate = async (req: AuthRequest, res: Response, next: N
         id: certId,
         caregiverId,
       },
+      include: { caregiver: { select: { userId: true } } },
     });
 
     if (!certificate) {
@@ -2866,6 +2867,14 @@ export const verifyCertificate = async (req: AuthRequest, res: Response, next: N
       where: { id: certId },
       data: { verified: true },
     });
+
+    sendUserNotification({
+      userId: certificate.caregiver.userId,
+      type: 'SYSTEM',
+      title: '자격증 검증이 완료되었습니다',
+      body: `"${certificate.name}" 자격증이 관리자 검증을 통과했습니다. 보호자에게 더 신뢰감을 줄 수 있어요.`,
+      data: { url: '/dashboard/caregiver/documents#certificates', certificateId: certId },
+    }).catch(() => {});
 
     res.json({
       success: true,
@@ -2890,6 +2899,14 @@ export const verifyIdCard = async (req: AuthRequest, res: Response, next: NextFu
       data: { identityVerified: true },
     });
 
+    sendUserNotification({
+      userId: caregiver.userId,
+      type: 'SYSTEM',
+      title: '신분증 본인 확인이 완료되었습니다',
+      body: '본인 인증이 완료되어 이제 일감에 지원할 수 있습니다. 일감 찾기에서 원하는 공고를 확인해보세요.',
+      data: { url: '/find-work' },
+    }).catch(() => {});
+
     res.json({ success: true, message: '신분증 본인 확인이 완료되었습니다.' });
   } catch (error) {
     next(error);
@@ -2909,6 +2926,14 @@ export const verifyCriminalCheck = async (req: AuthRequest, res: Response, next:
       where: { id },
       data: { criminalCheckDone: true, criminalCheckDate: new Date() },
     });
+
+    sendUserNotification({
+      userId: caregiver.userId,
+      type: 'SYSTEM',
+      title: '범죄이력 조회서 검증이 완료되었습니다',
+      body: '범죄이력 조회서 검증이 완료되어 보호자에게 안전한 간병인으로 표시됩니다.',
+      data: { url: '/dashboard/caregiver/documents#criminal-check' },
+    }).catch(() => {});
 
     res.json({ success: true, message: '범죄이력 조회서 검증이 완료되었습니다.' });
   } catch (error) {
@@ -2932,13 +2957,13 @@ export const unverifyCertificate = async (req: AuthRequest, res: Response, next:
       data: { verified: false },
     });
 
-    // 간병인에게 알림
+    // 간병인에게 알림 — 자격증 관리 페이지로 직접 이동
     sendUserNotification({
       userId: certificate.caregiver.userId,
       type: 'SYSTEM',
       title: '자격증 검증이 취소되었습니다',
-      body: `관리자에 의해 "${certificate.name}" 자격증의 검증이 취소되었습니다. 자세한 사항은 고객센터로 문의해주세요.`,
-      data: { certificateId: certId },
+      body: `관리자에 의해 "${certificate.name}" 자격증의 검증이 취소되었습니다. 서류를 다시 확인해주세요.`,
+      data: { url: '/dashboard/caregiver/documents#certificates', certificateId: certId },
     }).catch(() => {});
 
     res.json({ success: true, message: '자격증 검증이 취소되었습니다.' });
@@ -2960,13 +2985,13 @@ export const unverifyIdCard = async (req: AuthRequest, res: Response, next: Next
       data: { identityVerified: false },
     });
 
-    // 간병인에게 알림 — 일감 지원이 막히는 중대한 변경
+    // 간병인에게 알림 — 일감 지원이 막히는 중대한 변경. 신분증 재등록 페이지로 직접 이동.
     sendUserNotification({
       userId: caregiver.userId,
       type: 'SYSTEM',
       title: '신분증 본인 확인이 취소되었습니다',
-      body: '관리자에 의해 신분증 본인 확인이 취소되어 일감 지원이 일시 제한됩니다. 신분증을 재제출하거나 고객센터로 문의해주세요.',
-      data: {},
+      body: '관리자에 의해 신분증 본인 확인이 취소되어 일감 지원이 일시 제한됩니다. 신분증을 재등록해주세요.',
+      data: { url: '/dashboard/caregiver/documents#id-card' },
     }).catch(() => {});
 
     res.json({ success: true, message: '신분증 본인 확인이 취소되었습니다.' });
@@ -2988,13 +3013,13 @@ export const unverifyCriminalCheck = async (req: AuthRequest, res: Response, nex
       data: { criminalCheckDone: false, criminalCheckDate: null },
     });
 
-    // 간병인에게 알림
+    // 간병인에게 알림 — 범죄이력 재제출 페이지로 직접 이동
     sendUserNotification({
       userId: caregiver.userId,
       type: 'SYSTEM',
       title: '범죄이력 조회서 검증이 취소되었습니다',
-      body: '관리자에 의해 범죄이력 조회서의 검증이 취소되었습니다. 범죄이력 조회서를 재제출하거나 고객센터로 문의해주세요.',
-      data: {},
+      body: '관리자에 의해 범죄이력 조회서의 검증이 취소되었습니다. 범죄이력 조회서를 재제출해주세요.',
+      data: { url: '/dashboard/caregiver/documents#criminal-check' },
     }).catch(() => {});
 
     res.json({ success: true, message: '범죄이력 조회서 검증이 취소되었습니다.' });

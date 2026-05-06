@@ -258,19 +258,21 @@ export default function App() {
   }, []);
 
   // 탭 클릭 → 웹뷰 URL 변경 (마이페이지는 네이티브)
+  // 같은 경로 재탭 시: 스크롤 top + 페이지 reload (route guard / 캐시 stale 회피)
+  // 다른 경로: 즉시 이동 (history 오염 최소화)
   const handleTabPress = useCallback((tab: Tab) => {
     if (tab.key === 'mypage' && !userToken) {
-      // 비로그인 시 로그인 페이지로 이동
       if (webViewRef.current) {
-        webViewRef.current.injectJavaScript("window.location.href = '/auth/login'; true;");
+        webViewRef.current.injectJavaScript("try{window.location.href='/auth/login';}catch(e){} true;");
       }
       setActiveTab('home');
       return;
     }
     setActiveTab(tab.key);
     if (tab.key !== 'mypage' && tab.path && webViewRef.current) {
+      const target = tab.path;
       webViewRef.current.injectJavaScript(
-        `window.location.href = '${tab.path}'; true;`
+        `(function(){try{var cur=window.location.pathname+window.location.search;if(cur===${JSON.stringify(target)}){window.scrollTo({top:0,behavior:'smooth'});}else{window.location.href=${JSON.stringify(target)};}}catch(e){}})();true;`
       );
     }
   }, [userToken]);

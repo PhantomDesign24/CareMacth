@@ -227,6 +227,27 @@ export default function CaregiverDocumentsPage() {
     fetchProfile();
   }, [fetchProfile]);
 
+  // 알림에서 들어왔을 때 hash 기반 자동 스크롤 + 잠깐 하이라이트
+  // (#id-card / #certificates / #criminal-check)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const apply = () => {
+      const hash = (window.location.hash || "").replace(/^#/, "");
+      if (!hash) return;
+      const el = document.getElementById(hash);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      // 시각 강조 — 주황 ring 1.6초
+      el.classList.add("ring-4", "ring-orange-300", "ring-offset-2");
+      setTimeout(() => {
+        el.classList.remove("ring-4", "ring-orange-300", "ring-offset-2");
+      }, 1600);
+    };
+    // 프로필 로딩 후 DOM 그려진 뒤에 실행되도록 약간 지연
+    const t = setTimeout(apply, 300);
+    return () => clearTimeout(t);
+  }, [profile]);
+
   const handleSpecialtyToggle = (specialty: string) => {
     setSpecialties((prev) =>
       prev.includes(specialty)
@@ -496,7 +517,7 @@ export default function CaregiverDocumentsPage() {
         </div>
 
         {/* Certificates Section */}
-        <div className="card mb-6">
+        <div id="certificates" className="card mb-6 scroll-mt-20 transition-all duration-500" data-focus-section="certificates">
           <div className="mb-6">
             <h2 className="text-lg font-bold text-gray-900">자격증 관리 <span className="text-xs font-normal text-gray-400 ml-2">(선택)</span></h2>
             <p className="text-xs text-gray-500 mt-1">요양보호사·간호조무사 등 자격증이 있으면 등록해주세요. 없어도 활동 가능합니다.</p>
@@ -600,7 +621,7 @@ export default function CaregiverDocumentsPage() {
         </div>
 
         {/* 신분증 */}
-        <div className="card">
+        <div id="id-card" className="card scroll-mt-20 transition-all duration-500" data-focus-section="id-card">
           <h2 className="text-lg font-bold text-gray-900 mb-2">신분증 등록</h2>
           <p className="text-sm text-gray-500 mb-4">
             주민등록증·운전면허증 등 본인 확인용 신분증을 업로드해주세요. 관리자 검토 후 인증 완료되며, 인증 완료 전까지는 지원이 제한됩니다.
@@ -645,7 +666,7 @@ export default function CaregiverDocumentsPage() {
         </div>
 
         {/* 범죄이력 자가 신고 + 회보서 (선택) */}
-        <div className="card">
+        <div id="criminal-check" className="card scroll-mt-20 transition-all duration-500" data-focus-section="criminal-check">
           <h2 className="text-lg font-bold text-gray-900 mb-2">범죄이력 신고 <span className="text-red-500">*</span></h2>
           <p className="text-sm text-gray-500 mb-4">
             범죄이력 여부를 정직하게 응답해주세요. 회보서 파일은 선택 사항입니다.
