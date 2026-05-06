@@ -4,6 +4,7 @@ import { authenticate, authorize } from '../middlewares/auth';
 import * as adminController from '../controllers/adminController';
 import * as reportController from '../controllers/reportController';
 import * as noticeController from '../controllers/noticeController';
+import { upload, uploadNotice, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
 
 const router = Router();
 
@@ -215,7 +216,6 @@ router.post('/alimtalk-templates/:key/register-aligo', adminController.registerA
 router.delete('/alimtalk-templates/:key/aligo', adminController.deleteAlimtalkOnAligo);
 
 // 공지사항
-import { upload, uploadNotice, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
 router.get('/notices', noticeController.adminListNotices);
 router.post('/notices', noticeController.adminCreateNotice);
 router.put('/notices/:id', noticeController.adminUpdateNotice);
