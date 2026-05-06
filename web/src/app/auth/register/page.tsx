@@ -177,6 +177,17 @@ function RegisterPageInner() {
     } catch (err: unknown) {
       if (err instanceof AxiosError && err.response) {
         const respData = err.response.data;
+        // 409 충돌 — 이미 가입된 소셜/이메일/전화번호. 사용자에게 안내하고 로그인 페이지로 자동 이동.
+        if (err.response.status === 409) {
+          const msg = respData?.message || '이미 가입된 계정입니다. 로그인 페이지로 이동합니다.';
+          setErrorMessage(msg);
+          // sessionStorage 의 stale signupToken/payload 정리 (재시도 루프 방지)
+          try { sessionStorage.removeItem('cm_signup_payload'); } catch {}
+          try { sessionStorage.removeItem('kakao_oauth_state'); } catch {}
+          try { sessionStorage.removeItem('naver_oauth_state'); } catch {}
+          setTimeout(() => router.push('/auth/login'), 1500);
+          return;
+        }
         // 입력 검증 오류 — express-validator(400, errors 배열) + 전통적 422(errors 객체) 둘 다 처리
         if ((err.response.status === 400 || err.response.status === 422) && respData?.errors) {
           const errors: Record<string, string> = {};

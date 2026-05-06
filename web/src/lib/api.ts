@@ -54,6 +54,11 @@ api.interceptors.response.use(
     };
 
     if (error.response?.status === 401 && !originalRequest._retry) {
+      // 토큰이 애초에 없는 401 = 비로그인 사용자 호출. 세션 만료 X → 리다이렉트 안 함.
+      if (typeof window !== 'undefined' && !localStorage.getItem('cm_access_token')) {
+        return Promise.reject(error);
+      }
+
       originalRequest._retry = true;
 
       try {
