@@ -6,7 +6,6 @@ import Link from "next/link";
 import { dashboardAPI, careRequestAPI, paymentAPI, guardianAPI, contractAPI, extensionAPI, authAPI, insuranceAPI, disputeAPI, reviewAPI } from "@/lib/api";
 import { formatDate, formatMoney, formatCareStatus, formatContractStatus, formatPaymentStatus, formatPaymentMethod, formatCareType, formatLocation, formatMobility } from "@/lib/format";
 import { showToast } from "@/components/Toast";
-import NotificationPrefsSection from "@/components/NotificationPrefsSection";
 import InsuranceTab from "@/components/InsuranceTab";
 import SignaturePad from "@/components/SignaturePad";
 import { SITE } from "@/config/site";
@@ -1504,8 +1503,20 @@ function GuardianDashboard() {
                 <p className="text-sm text-gray-500">계정 관련 설정을 변경합니다.</p>
               </div>
 
-              {/* 알림 카테고리 설정 */}
-              <NotificationPrefsSection />
+              {/* 알림 설정 — 별도 페이지로 분리 (모바일 UX) */}
+              <Link
+                href="/dashboard/notification-settings"
+                className="flex items-center justify-between border border-gray-200 bg-white rounded-2xl p-5 hover:border-primary-300 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center text-primary-600">🔔</div>
+                  <div>
+                    <div className="font-bold text-gray-900">알림 설정</div>
+                    <div className="text-xs text-gray-500 mt-0.5">푸시 / 카테고리별 알림 켜고 끄기</div>
+                  </div>
+                </div>
+                <span className="text-gray-400 text-xl">›</span>
+              </Link>
 
               <div className="border border-red-200 bg-red-50 rounded-2xl p-6">
                 <h4 className="font-bold text-red-700 mb-2">회원 탈퇴</h4>

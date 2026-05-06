@@ -41,6 +41,23 @@ export default function Header() {
     } catch { setUser(null); }
   }, [pathname]);
 
+  // 모바일 앱(WebView) 에 현재 로그인 상태 동기화 (페이지당 1회).
+  // 앱 재설치/캐시 클리어 후에도 user.fcmToken 이 stale 토큰으로 남아 푸시 실패하던 문제 해결.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const rn = (window as any).ReactNativeWebView;
+    if (!rn?.postMessage) return;
+    try {
+      const token = localStorage.getItem("cm_access_token");
+      const stored = localStorage.getItem("user");
+      if (token && stored) {
+        const u = JSON.parse(stored);
+        rn.postMessage(JSON.stringify({ type: "USER_INFO", token, name: u?.name, email: u?.email }));
+        if (u?.id) rn.postMessage(JSON.stringify({ type: "USER_LOGIN", userId: u.id, role: u.role }));
+      }
+    } catch {}
+  }, []);
+
   const handleLogout = () => {
     // 모든 토큰·사용자 캐시 정리 (refresh 토큰 남아있으면 인터셉터가 자동 재로그인함)
     localStorage.removeItem("cm_access_token");
@@ -48,6 +65,13 @@ export default function Header() {
     localStorage.removeItem("user");
     localStorage.removeItem("cm_user");
     setUser(null);
+    // 모바일 앱(WebView) 에 로그아웃 알림 — FCM 토큰 유저 연결 해제
+    if (typeof window !== "undefined") {
+      const rn = (window as any).ReactNativeWebView;
+      if (rn?.postMessage) {
+        try { rn.postMessage(JSON.stringify({ type: "USER_LOGOUT" })); } catch {}
+      }
+    }
     // router.push 대신 full reload 로 모든 메모리 state·axios 캐시 초기화
     window.location.href = "/";
   };
@@ -314,7 +338,7 @@ export default function Header() {
                   <FiUser className="w-4 h-4" /> 마이페이지
                 </Link>
                 <Link
-                  href={user.role === "CAREGIVER" ? "/dashboard/caregiver?tab=notifications" : "/dashboard/guardian?tab=notifications"}
+                  href="/dashboard/notifications"
                   className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
                 >
                   <FiBell className="w-4 h-4" /> 알림

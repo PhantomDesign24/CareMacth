@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { authAPI, setTokens } from "@/lib/api";
+import { authAPI, setTokens, notifyAppLogin } from "@/lib/api";
 import { AxiosError } from "axios";
 
 type Role = "guardian" | "caregiver" | "hospital" | "";
@@ -130,6 +130,7 @@ function RegisterPageInner() {
           // Header / 다른 컴포넌트가 읽는 'user' 키와 결제 페이지가 읽는 'cm_user' 키 둘 다 채움
           localStorage.setItem("user", JSON.stringify(socialData.user));
           localStorage.setItem("cm_user", JSON.stringify(socialData.user));
+          notifyAppLogin(socialData.user, socialData.access_token);
         }
         router.push(`/auth/register/complete?role=${resolvedRole}&name=${encodeURIComponent(name)}`);
         return;
@@ -170,6 +171,7 @@ function RegisterPageInner() {
       if (data.user) {
         localStorage.setItem("user", JSON.stringify(data.user));
         localStorage.setItem("cm_user", JSON.stringify(data.user));
+        notifyAppLogin(data.user, data.access_token);
       }
 
       // 가입 완료 페이지로 이동 (역할별 다음 액션 안내)

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { notifyAppLogin } from "@/lib/api";
 
 function KakaoCallbackInner() {
   const router = useRouter();
@@ -59,6 +60,7 @@ function KakaoCallbackInner() {
           }
           localStorage.setItem("user", JSON.stringify(data.data.user));
           localStorage.setItem("cm_user", JSON.stringify(data.data.user));
+          notifyAppLogin(data.data.user, data.data.access_token);
           const role = data.data.user.role;
           if (role === "GUARDIAN" || role === "ADMIN") {
             router.replace("/dashboard/guardian");

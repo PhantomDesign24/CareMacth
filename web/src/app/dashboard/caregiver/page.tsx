@@ -7,7 +7,6 @@ import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, rep
 import { formatDate, formatContractStatus, formatCareType, formatLocation, formatPenaltyType } from "@/lib/format";
 import { showToast } from "@/components/Toast";
 import SignaturePad from "@/components/SignaturePad";
-import NotificationPrefsSection from "@/components/NotificationPrefsSection";
 
 interface EarningItem {
   id: string;
@@ -1578,8 +1577,20 @@ function CaregiverDashboard() {
                 </button>
               </div>
 
-              {/* 알림 카테고리 설정 */}
-              <NotificationPrefsSection />
+              {/* 알림 설정 — 별도 페이지로 분리 (모바일 UX) */}
+              <Link
+                href="/dashboard/notification-settings"
+                className="flex items-center justify-between border border-gray-200 bg-white rounded-2xl p-5 hover:border-primary-300 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">🔔</div>
+                  <div>
+                    <div className="font-bold text-gray-900">알림 설정</div>
+                    <div className="text-xs text-gray-500 mt-0.5">푸시 / 카테고리별 알림 켜고 끄기</div>
+                  </div>
+                </div>
+                <span className="text-gray-400 text-xl">›</span>
+              </Link>
 
               <div className="border border-red-200 bg-red-50 rounded-2xl p-6">
                 <h4 className="font-bold text-red-700 mb-2">회원 탈퇴</h4>

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { notifyAppLogin } from "@/lib/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -44,6 +45,8 @@ export default function LoginPage() {
       }
       localStorage.setItem("user", JSON.stringify(data.data.user));
       localStorage.setItem("cm_user", JSON.stringify(data.data.user));
+      // WebView 앱일 경우 네이티브에 로그인 이벤트 전달 → FCM 토큰을 해당 유저에 연결
+      notifyAppLogin(data.data.user, accessToken);
       const role = data.data.user.role;
       if (role === "ADMIN") {
         // 어드민 패널이 별도 'token' key 를 쓰므로 동기화만 해두고, 리디렉션은 보호자 대시보드

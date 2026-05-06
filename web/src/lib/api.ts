@@ -103,6 +103,32 @@ export function setTokens(accessToken: string, refreshToken: string) {
   localStorage.setItem("cm_refresh_token", refreshToken);
 }
 
+// 모바일 앱(WebView) 에 로그인/로그아웃 이벤트 전달.
+// App.tsx 의 onMessage 핸들러가 USER_INFO/USER_LOGIN 받으면 FCM 토큰을
+// 해당 유저에 연결(또는 해제)한다. 이게 빠지면 user.fcmToken 이 stale 토큰으로 남아 푸시가 실패함.
+export function notifyAppLogin(user: { id?: string; role?: string } | null, accessToken?: string | null) {
+  if (typeof window === "undefined") return;
+  const rn = (window as any).ReactNativeWebView;
+  if (!rn?.postMessage) return;
+  try {
+    if (accessToken) {
+      rn.postMessage(JSON.stringify({ type: "USER_INFO", token: accessToken, name: (user as any)?.name, email: (user as any)?.email }));
+    }
+    if (user?.id) {
+      rn.postMessage(JSON.stringify({ type: "USER_LOGIN", userId: user.id, role: user.role }));
+    }
+  } catch {}
+}
+
+export function notifyAppLogout() {
+  if (typeof window === "undefined") return;
+  const rn = (window as any).ReactNativeWebView;
+  if (!rn?.postMessage) return;
+  try {
+    rn.postMessage(JSON.stringify({ type: "USER_LOGOUT" }));
+  } catch {}
+}
+
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("cm_access_token");
@@ -122,6 +148,7 @@ export function logout() {
   localStorage.removeItem("cm_refresh_token");
   localStorage.removeItem("user"); // 유저 상태도 함께 정리 (Header의 NotificationBell 등 재렌더 차단)
   localStorage.removeItem("cm_user");
+  notifyAppLogout();
   // 이미 로그인 페이지면 이동 안함 (reload 루프 방지)
   if (!window.location.pathname.startsWith("/auth/login")) {
     window.location.href = "/auth/login?reason=session";

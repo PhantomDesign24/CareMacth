@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { notifyAppLogin } from "@/lib/api";
 
 function NaverCallbackInner() {
   const router = useRouter();
@@ -57,6 +58,7 @@ function NaverCallbackInner() {
           }
           localStorage.setItem("user", JSON.stringify(data.data.user));
           localStorage.setItem("cm_user", JSON.stringify(data.data.user));
+          notifyAppLogin(data.data.user, data.data.access_token);
           const role = data.data.user.role;
           if (role === "GUARDIAN" || role === "ADMIN") {
             router.replace("/dashboard/guardian");
