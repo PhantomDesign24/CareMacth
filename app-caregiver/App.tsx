@@ -71,7 +71,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>('jobs');
   const [canGoBack, setCanGoBack] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [pushEnabled, setPushEnabled] = useState(true);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
@@ -428,35 +427,9 @@ export default function App() {
               </View>
             </View>
 
-            {/* 설정 */}
+            {/* 설정 — 푸시 알림 토글은 WebView 내부 마이페이지의 "알림 설정" 카드에서 관리 (중복 제거) */}
             <View style={styles.mypageSection}>
               <Text style={styles.mypageSectionTitle}>설정</Text>
-              <View style={styles.mypageRow}>
-                <View style={styles.mypageRowLeft}>
-                  <Ionicons name="notifications-outline" size={20} color="#2ECC71" />
-                  <Text style={styles.mypageRowText}>푸시 알림</Text>
-                </View>
-                <Switch
-                  value={pushEnabled}
-                  onValueChange={async (val) => {
-                    setPushEnabled(val);
-                    if (userToken) {
-                      try {
-                        await fetch(`${APP_CONFIG.apiUrl}/notifications/push-setting`, {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
-                          body: JSON.stringify({ enabled: val }),
-                        });
-                      } catch {}
-                    } else {
-                      showModal({ icon: 'lock-closed-outline', iconColor: '#2ECC71', title: '로그인 필요', message: '푸시 설정을 변경하려면 로그인이 필요합니다.', buttons: [{ text: '확인', style: 'primary', onPress: hideModal }] });
-                      setPushEnabled(!val);
-                    }
-                  }}
-                  trackColor={{ false: '#ddd', true: '#B6E9CA' }}
-                  thumbColor={pushEnabled ? '#2ECC71' : '#f4f3f4'}
-                />
-              </View>
               <View style={styles.mypageRow}>
                 <View style={styles.mypageRowLeft}>
                   <Ionicons name="finger-print" size={20} color="#2ECC71" />
@@ -610,6 +583,7 @@ export default function App() {
             }}
             onMessage={onMessage}
             injectedJavaScript={injectedJS}
+            injectedJavaScriptBeforeContentLoaded={`window.IS_CAREMATCH_APP=true;window.APP_TYPE='CAREGIVER';true;`}
             javaScriptEnabled
             domStorageEnabled
             allowsBackForwardNavigationGestures

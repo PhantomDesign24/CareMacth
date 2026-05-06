@@ -33,7 +33,13 @@ export default function BottomTabBar() {
   if (!mounted || !user) return null;
 
   // 모바일 앱(WebView) 안에서는 네이티브 탭바와 중복되므로 숨김
-  if (typeof window !== "undefined" && (window as any).IS_CAREMATCH_APP) return null;
+  // 1) injectedJavaScript 로 주입된 전역 플래그 우선 (App.tsx 가 설정)
+  // 2) 주입 타이밍이 늦은 경우 fallback 으로 user-agent 검사 (CareMatch-Patient/android 등)
+  if (typeof window !== "undefined") {
+    if ((window as any).IS_CAREMATCH_APP) return null;
+    const ua = window.navigator?.userAgent || "";
+    if (/CareMatch-(Patient|Caregiver)/i.test(ua)) return null;
+  }
 
   // ADMIN은 웹 탭바 숨김 (관리자 패널 별도)
   if (user.role === "ADMIN") return null;
