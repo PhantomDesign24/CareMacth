@@ -33,6 +33,31 @@ const tokenPair = (user: { id: string; email: string; role: string; tokenVersion
   return { token: access_token, access_token, refresh_token };
 };
 
+// 같은 이메일/전화로 다른 가입수단 계정이 있는지 검사 — 카카오/네이버 콜백에서 사전 안내용
+async function detectCrossProviderConflict(args: {
+  email?: string | null;
+  phone?: string | null;
+  ignoreProvider: 'KAKAO' | 'NAVER';
+}): Promise<{ provider: string; message: string } | null> {
+  const { email, phone, ignoreProvider } = args;
+  const orConditions: any[] = [];
+  if (email) orConditions.push({ email });
+  if (phone) orConditions.push({ phone });
+  if (orConditions.length === 0) return null;
+  const existing = await prisma.user.findFirst({
+    where: { OR: orConditions, isActive: true },
+    select: { authProvider: true },
+  });
+  if (!existing) return null;
+  if (existing.authProvider === ignoreProvider) return null;
+  const providerLabelMap: Record<string, string> = { LOCAL: '이메일/비밀번호', KAKAO: '카카오', NAVER: '네이버' };
+  const label = providerLabelMap[existing.authProvider] || existing.authProvider;
+  return {
+    provider: existing.authProvider,
+    message: `이미 ${label} 가입 계정이 있습니다. ${label}(으)로 로그인해주세요.`,
+  };
+}
+
 // 소셜 가입 완료용 단기 JWT (5분) — 콜백 → register → /social/complete 사이 트러스트 보장
 type SocialSignupPayload = {
   type: 'social_signup';
@@ -308,6 +333,15 @@ export const kakaoAuth = async (req: Request, res: Response, next: NextFunction)
       include: { guardian: true, caregiver: true },
     });
 
+    // 신규처럼 보일 때, 같은 이메일/전화로 다른 가입수단 계정이 있으면 사전에 차단 안내.
+    // 사용자가 무한 가입 루프에 빠지지 않도록 콜백 단계에서 막음.
+    if (!user) {
+      const conflict = await detectCrossProviderConflict({ email, phone, ignoreProvider: 'KAKAO' });
+      if (conflict) {
+        throw new AppError(conflict.message, 409, { code: 'PROVIDER_CONFLICT', provider: conflict.provider });
+      }
+    }
+
     if (!user) {
       if (!role) {
         const signupToken = issueSocialSignupToken({
@@ -405,6 +439,10 @@ export const naverAuth = async (req: Request, res: Response, next: NextFunction)
     });
 
     if (!user) {
+      const conflict = await detectCrossProviderConflict({ email, phone: mobile, ignoreProvider: 'NAVER' });
+      if (conflict) {
+        throw new AppError(conflict.message, 409, { code: 'PROVIDER_CONFLICT', provider: conflict.provider });
+      }
       if (!role) {
         const signupToken = issueSocialSignupToken({
           provider: 'NAVER',

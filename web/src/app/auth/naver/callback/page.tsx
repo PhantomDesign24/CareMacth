@@ -41,6 +41,11 @@ function NaverCallbackInner() {
         const data = await res.json();
 
         if (!data.success) {
+          if (data.code === 'PROVIDER_CONFLICT') {
+            setError(data.message || "이미 다른 방식으로 가입된 계정입니다. 해당 방식으로 로그인해주세요.");
+            setTimeout(() => router.replace('/auth/login'), 2000);
+            return;
+          }
           setError(data.message || "네이버 로그인 처리에 실패했습니다.");
           return;
         }

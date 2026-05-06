@@ -41,6 +41,12 @@ function KakaoCallbackInner() {
         const data = await res.json();
 
         if (!data.success) {
+          // 다른 가입수단으로 이미 가입된 케이스 → 메시지 보여주고 로그인 페이지로 자동 이동
+          if (data.code === 'PROVIDER_CONFLICT') {
+            setError(data.message || "이미 다른 방식으로 가입된 계정입니다. 해당 방식으로 로그인해주세요.");
+            setTimeout(() => router.replace('/auth/login'), 2000);
+            return;
+          }
           setError(data.message || "카카오 로그인 처리에 실패했습니다.");
           return;
         }
