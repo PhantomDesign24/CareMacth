@@ -2981,6 +2981,96 @@ export const getNotifications = async (req: AuthRequest, res: Response, next: Ne
   }
 };
 
+// 일괄 발송 헬퍼 — 각 사용자별 알림 생성 → FCM 발송 → 결과를 개별 notification.pushSent/pushSuccess 에 기록.
+// 어드민 알림함에서 미발송/발송 실패가 정확히 표시되도록 반드시 이 헬퍼를 통해야 한다.
+async function createAndSendBulkPush(args: {
+  firebase: any;
+  recipients: { userId: string; fcmToken: string | null; pushEnabled: boolean | null; tintColor: string }[];
+  notificationType: any;
+  title: string;
+  body: string;
+  imageUrl?: string;
+  notificationData: Record<string, any>;
+}): Promise<number> {
+  const dataPayload = Object.fromEntries(
+    Object.entries(args.notificationData).map(([k, v]) => [k, String(v)])
+  );
+
+  // 1. 알림 레코드 생성 (id 회수 위해 개별 create)
+  const created = await Promise.all(
+    args.recipients.map(async (r) => {
+      const n = await prisma.notification.create({
+        data: {
+          userId: r.userId,
+          type: args.notificationType,
+          title: args.title,
+          body: args.body,
+          data: Object.keys(args.notificationData).length ? args.notificationData : undefined,
+        },
+      });
+      return { id: n.id, ...r };
+    })
+  );
+
+  // 2. 색상별로 그룹핑 (FCM 호출은 컬러별 1회)
+  const byColor = new Map<string, typeof created>();
+  for (const c of created) {
+    if (!c.fcmToken || c.pushEnabled === false) continue;
+    if (!byColor.has(c.tintColor)) byColor.set(c.tintColor, []);
+    byColor.get(c.tintColor)!.push(c);
+  }
+
+  let totalSuccess = 0;
+  if (args.firebase.apps.length && byColor.size > 0) {
+    await Promise.all(
+      Array.from(byColor.entries()).map(async ([color, group]) => {
+        const tokens = group.map((g) => g.fcmToken!);
+        try {
+          const result = await args.firebase.messaging().sendEachForMulticast({
+            tokens,
+            notification: { title: args.title, body: args.body, ...(args.imageUrl ? { imageUrl: args.imageUrl } : {}) },
+            data: dataPayload,
+            android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', color, ...(args.imageUrl ? { imageUrl: args.imageUrl } : {}) } },
+          });
+          const now = new Date();
+          await Promise.all(
+            group.map((g, i) => {
+              const ok = result.responses?.[i]?.success === true;
+              if (ok) totalSuccess++;
+              return prisma.notification.update({
+                where: { id: g.id },
+                data: {
+                  pushSent: true,
+                  pushSuccess: ok,
+                  pushError: ok ? null : (result.responses?.[i]?.error?.message || '발송 실패'),
+                  pushSentAt: now,
+                },
+              });
+            })
+          );
+        } catch (e: any) {
+          await prisma.notification.updateMany({
+            where: { id: { in: group.map((g) => g.id) } },
+            data: { pushSent: true, pushSuccess: false, pushError: e?.message || '전체 발송 실패', pushSentAt: new Date() },
+          });
+        }
+      })
+    );
+  }
+
+  // 3. 토큰 없거나 푸시 비활성 사용자 — 미발송 사유 기록
+  const sendableIds = new Set(Array.from(byColor.values()).flat().map((g) => g.id));
+  const noTokenIds = created.filter((c) => !sendableIds.has(c.id)).map((c) => c.id);
+  if (noTokenIds.length > 0) {
+    await prisma.notification.updateMany({
+      where: { id: { in: noTokenIds } },
+      data: { pushSent: false, pushError: 'FCM 토큰 없음 또는 푸시 비활성' },
+    });
+  }
+
+  return totalSuccess;
+}
+
 // POST /notifications/send - 알림 발송 (관리자용)
 export const sendNotification = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -3056,34 +3146,17 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
         throw new AppError('발송 대상 사용자가 없습니다.', 400);
       }
 
-      await prisma.notification.createMany({
-        data: users.map((u) => ({
-          userId: u.id,
-          type: notificationType,
-          title,
-          body,
-          data: Object.keys(notificationData).length ? notificationData : undefined,
-        })),
-      });
-
-      // FCM 푸시 발송
       const adminFb = await import('../config/firebase');
       const firebase = adminFb.default;
-      let pushCount = 0;
-      if (firebase.apps.length) {
-        const tokens = users.filter(u => u.fcmToken && u.pushEnabled !== false).map(u => u.fcmToken!);
-        if (tokens.length > 0) {
-          try {
-            const result = await firebase.messaging().sendEachForMulticast({
-              tokens,
-              notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
-              data: Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)])),
-              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', color: tintColor } },
-            });
-            pushCount = result.successCount;
-          } catch {}
-        }
-      }
+      const pushCount = await createAndSendBulkPush({
+        firebase,
+        recipients: users.map((u) => ({ userId: u.id, fcmToken: u.fcmToken, pushEnabled: u.pushEnabled, tintColor })),
+        notificationType,
+        title,
+        body,
+        imageUrl,
+        notificationData,
+      });
 
       const roleLabel = target === 'guardians' ? '보호자' : '간병인';
       res.status(201).json({
@@ -3111,26 +3184,31 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
         throw new AppError('등록된 디바이스가 없습니다.', 400);
       }
 
-      // 회원에게는 DB 알림도 저장
+      // 회원에게는 DB 알림 저장 — 회원별 fcmToken 도 함께 가져와서 추후 결과 매핑에 사용
       const users = await prisma.user.findMany({
         where: { isActive: true },
-        select: { id: true },
+        select: { id: true, fcmToken: true, pushEnabled: true },
       });
 
-      if (users.length > 0) {
-        await prisma.notification.createMany({
-          data: users.map((u) => ({
-            userId: u.id,
-            type: notificationType,
-            title,
-            body,
-            data: Object.keys(notificationData).length ? notificationData : undefined,
-          })),
-        });
-      }
+      // 회원 알림 생성 (id 회수)
+      const createdNotifs = await Promise.all(
+        users.map(async (u) => {
+          const n = await prisma.notification.create({
+            data: {
+              userId: u.id,
+              type: notificationType,
+              title,
+              body,
+              data: Object.keys(notificationData).length ? notificationData : undefined,
+            },
+          });
+          return { id: n.id, userId: u.id, fcmToken: u.fcmToken, pushEnabled: u.pushEnabled };
+        })
+      );
 
-      // 모든 디바이스에 FCM 푸시 발송
+      // 모든 디바이스(회원+비회원)에 FCM 푸시 발송 — 단일 컬러 (혼합 청중)
       let successCount = 0;
+      const tokenSuccess = new Map<string, boolean>();
       if (firebase.apps.length) {
         const tokens = deviceTokens.map(d => d.token);
         try {
@@ -3141,10 +3219,44 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
             android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', color: NOTIF_COLOR_PATIENT, ...(imageUrl ? { imageUrl } : {}) } },
           });
           successCount = result.successCount;
+          // 각 토큰의 성공 여부 매핑
+          tokens.forEach((t, i) => {
+            tokenSuccess.set(t, result.responses?.[i]?.success === true);
+          });
         } catch (e) {
           console.error('[FCM] 전체 발송 오류:', e);
         }
       }
+
+      // 회원 알림 결과 기록 — 각 사용자의 fcmToken 이 발송 성공했는지 매핑
+      const now = new Date();
+      await Promise.all(
+        createdNotifs.map((n) => {
+          if (!n.fcmToken || n.pushEnabled === false) {
+            return prisma.notification.update({
+              where: { id: n.id },
+              data: { pushSent: false, pushError: 'FCM 토큰 없음 또는 푸시 비활성' },
+            });
+          }
+          const ok = tokenSuccess.get(n.fcmToken);
+          if (ok === undefined) {
+            // 토큰이 deviceTokens 에 없음 (deviceToken 테이블 미등록) — 미발송으로 표시
+            return prisma.notification.update({
+              where: { id: n.id },
+              data: { pushSent: false, pushError: '디바이스 토큰 미등록' },
+            });
+          }
+          return prisma.notification.update({
+            where: { id: n.id },
+            data: {
+              pushSent: true,
+              pushSuccess: ok,
+              pushError: ok ? null : '발송 실패',
+              pushSentAt: now,
+            },
+          });
+        })
+      );
 
       res.status(201).json({
         success: true,
@@ -3161,45 +3273,22 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
         throw new AppError('발송 대상 사용자가 없습니다.', 400);
       }
 
-      await prisma.notification.createMany({
-        data: users.map((u) => ({
-          userId: u.id,
-          type: notificationType,
-          title,
-          body,
-          data: Object.keys(notificationData).length ? notificationData : undefined,
-        })),
-      });
-
-      // FCM 푸시 발송 — 역할별로 두 번 호출 (틴트 색상 다름)
       const adminFb = await import('../config/firebase');
       const firebase = adminFb.default;
-      let pushCount = 0;
-      if (firebase.apps.length) {
-        const sendable = users.filter((u) => u.fcmToken && u.pushEnabled !== false);
-        const caregiverTokens = sendable.filter((u) => u.role === 'CAREGIVER').map((u) => u.fcmToken!);
-        const patientTokens = sendable.filter((u) => u.role !== 'CAREGIVER').map((u) => u.fcmToken!);
-        const dataPayload = Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)]));
-        const send = async (tokens: string[], color: string) => {
-          if (tokens.length === 0) return 0;
-          try {
-            const result = await firebase.messaging().sendEachForMulticast({
-              tokens,
-              notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
-              data: dataPayload,
-              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', color } },
-            });
-            return result.successCount;
-          } catch {
-            return 0;
-          }
-        };
-        const [c1, c2] = await Promise.all([
-          send(patientTokens, NOTIF_COLOR_PATIENT),
-          send(caregiverTokens, NOTIF_COLOR_CAREGIVER),
-        ]);
-        pushCount = c1 + c2;
-      }
+      const pushCount = await createAndSendBulkPush({
+        firebase,
+        recipients: users.map((u) => ({
+          userId: u.id,
+          fcmToken: u.fcmToken,
+          pushEnabled: u.pushEnabled,
+          tintColor: u.role === 'CAREGIVER' ? NOTIF_COLOR_CAREGIVER : NOTIF_COLOR_PATIENT,
+        })),
+        notificationType,
+        title,
+        body,
+        imageUrl,
+        notificationData,
+      });
 
       res.status(201).json({
         success: true,
