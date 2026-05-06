@@ -5,7 +5,7 @@ import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { logAdminAction } from '../services/auditLog';
-import { sendFromTemplate, renderTemplate } from '../services/notificationService';
+import { sendFromTemplate, renderTemplate, colorForRole, NOTIF_COLOR_PATIENT, NOTIF_COLOR_CAREGIVER } from '../services/notificationService';
 import { calculateEarning } from '../utils/earning';
 
 // GET /dashboard - 대시보드 통계
@@ -3030,7 +3030,7 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
               token: user.fcmToken,
               notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
               data: { ...Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)])), notificationId: notification.id },
-              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', ...(imageUrl ? { imageUrl } : {}) } },
+              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', color: colorForRole(user.role), ...(imageUrl ? { imageUrl } : {}) } },
             });
             await prisma.notification.update({ where: { id: notification.id }, data: { pushSent: true, pushSuccess: true, pushSentAt: new Date() } });
           } catch {
@@ -3046,6 +3046,7 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
     } else if (target === 'guardians' || target === 'caregivers') {
       // 보호자/간병인 필터 발송
       const role = target === 'guardians' ? 'GUARDIAN' : 'CAREGIVER';
+      const tintColor = target === 'caregivers' ? NOTIF_COLOR_CAREGIVER : NOTIF_COLOR_PATIENT;
       const users = await prisma.user.findMany({
         where: { isActive: true, role },
         select: { id: true, fcmToken: true, pushEnabled: true },
@@ -3077,7 +3078,7 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
               tokens,
               notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
               data: Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)])),
-              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default' } },
+              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', color: tintColor } },
             });
             pushCount = result.successCount;
           } catch {}
@@ -3137,7 +3138,7 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
             tokens,
             notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
             data: Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)])),
-            android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', ...(imageUrl ? { imageUrl } : {}) } },
+            android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', color: NOTIF_COLOR_PATIENT, ...(imageUrl ? { imageUrl } : {}) } },
           });
           successCount = result.successCount;
         } catch (e) {
@@ -3150,10 +3151,10 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
         message: `디바이스 ${deviceTokens.length}대 중 ${successCount}대 푸시 발송, 회원 ${users.length}명 알림 저장`,
       });
     } else {
-      // 전체 회원 발송
+      // 전체 회원 발송 (보호자/간병인 분리하여 각자 브랜드 컬러로 발송)
       const users = await prisma.user.findMany({
         where: { isActive: true },
-        select: { id: true, fcmToken: true, pushEnabled: true },
+        select: { id: true, fcmToken: true, pushEnabled: true, role: true },
       });
 
       if (users.length === 0) {
@@ -3170,23 +3171,34 @@ export const sendNotification = async (req: AuthRequest, res: Response, next: Ne
         })),
       });
 
-      // FCM 푸시 발송
+      // FCM 푸시 발송 — 역할별로 두 번 호출 (틴트 색상 다름)
       const adminFb = await import('../config/firebase');
       const firebase = adminFb.default;
       let pushCount = 0;
       if (firebase.apps.length) {
-        const tokens = users.filter(u => u.fcmToken && u.pushEnabled !== false).map(u => u.fcmToken!);
-        if (tokens.length > 0) {
+        const sendable = users.filter((u) => u.fcmToken && u.pushEnabled !== false);
+        const caregiverTokens = sendable.filter((u) => u.role === 'CAREGIVER').map((u) => u.fcmToken!);
+        const patientTokens = sendable.filter((u) => u.role !== 'CAREGIVER').map((u) => u.fcmToken!);
+        const dataPayload = Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)]));
+        const send = async (tokens: string[], color: string) => {
+          if (tokens.length === 0) return 0;
           try {
             const result = await firebase.messaging().sendEachForMulticast({
               tokens,
               notification: { title, body, ...(imageUrl ? { imageUrl } : {}) },
-              data: Object.fromEntries(Object.entries(notificationData).map(([k, v]) => [k, String(v)])),
-              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default' } },
+              data: dataPayload,
+              android: { priority: 'high', notification: { sound: 'default', channelId: 'carematch-default', color } },
             });
-            pushCount = result.successCount;
-          } catch {}
-        }
+            return result.successCount;
+          } catch {
+            return 0;
+          }
+        };
+        const [c1, c2] = await Promise.all([
+          send(patientTokens, NOTIF_COLOR_PATIENT),
+          send(caregiverTokens, NOTIF_COLOR_CAREGIVER),
+        ]);
+        pushCount = c1 + c2;
       }
 
       res.status(201).json({

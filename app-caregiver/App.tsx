@@ -132,6 +132,17 @@ export default function App() {
     } catch {}
   };
 
+  // 알림 채널은 권한과 별개로 앱 시작 즉시 1회 등록 (Android)
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    Notifications.setNotificationChannelAsync('carematch-default', {
+      name: '케어매치 간병인 알림',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      sound: 'default',
+    }).catch(() => {});
+  }, []);
+
   // 푸시 알림 등록
   useEffect(() => { registerPushNotifications(); }, []);
 
@@ -145,15 +156,6 @@ export default function App() {
         finalStatus = s;
       }
       if (finalStatus !== 'granted') return;
-
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('carematch-default', {
-          name: '케어매치 간병인 알림',
-          importance: Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 250, 250, 250],
-          sound: 'default',
-        });
-      }
 
       const tokenData = await Notifications.getDevicePushTokenAsync();
       const fcmToken = tokenData.data;
@@ -172,6 +174,15 @@ export default function App() {
     const sub1 = Notifications.addNotificationReceivedListener(() => {});
     const sub2 = Notifications.addNotificationResponseReceivedListener((response: any) => {
       const data = response?.notification?.request?.content?.data;
+      // 푸시 탭 → 해당 알림을 즉시 읽음 처리 (WebView localStorage 토큰 사용)
+      if (data?.notificationId && webViewRef.current) {
+        const safeId = String(data.notificationId).replace(/[^A-Za-z0-9_-]/g, '');
+        if (safeId) {
+          webViewRef.current.injectJavaScript(
+            `(function(){try{var t=localStorage.getItem('cm_access_token');if(t){fetch('https://${DOMAIN}/api/notifications/${safeId}/read',{method:'PUT',headers:{'Authorization':'Bearer '+t}});}}catch(e){}})();true;`
+          );
+        }
+      }
       if (data?.url && webViewRef.current) {
         webViewRef.current.injectJavaScript(`window.location.href = '${data.url}'; true;`);
       }

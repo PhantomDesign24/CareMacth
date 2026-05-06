@@ -12,6 +12,14 @@ interface SendNotificationParams {
   data?: Record<string, any>;
 }
 
+// 알림 아이콘 배경 틴트 색상 (상태바·알림 트레이의 작은 아이콘 둘레 색)
+// 보호자 앱(GUARDIAN/HOSPITAL/ADMIN) = 주황, 간병인 앱(CAREGIVER) = 초록
+export const NOTIF_COLOR_PATIENT = '#FF922E';
+export const NOTIF_COLOR_CAREGIVER = '#2ECC71';
+export function colorForRole(role?: string | null): string {
+  return role === 'CAREGIVER' ? NOTIF_COLOR_CAREGIVER : NOTIF_COLOR_PATIENT;
+}
+
 /**
  * FCM 푸시 알림 발송
  */
@@ -19,7 +27,8 @@ async function sendPushNotification(
   fcmToken: string,
   title: string,
   body: string,
-  data?: Record<string, any>
+  data?: Record<string, any>,
+  color: string = NOTIF_COLOR_PATIENT,
 ): Promise<boolean> {
   if (!admin.apps.length) {
     console.warn('[FCM] Firebase 미초기화 - 푸시 발송 건너뜀');
@@ -38,6 +47,7 @@ async function sendPushNotification(
         notification: {
           sound: 'default',
           channelId: 'carematch-default',
+          color,
         },
       },
       apns: {
@@ -88,7 +98,7 @@ export async function sendNotification(params: SendNotificationParams) {
   // 2. FCM 푸시 알림 발송 + 결과 기록
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { fcmToken: true, pushEnabled: true, notificationPrefs: true },
+    select: { fcmToken: true, pushEnabled: true, notificationPrefs: true, role: true },
   });
 
   // 카테고리별 설정 체크: 명시적으로 false면 발송 안 함, 그 외(true/undefined)는 발송
@@ -98,11 +108,13 @@ export async function sendNotification(params: SendNotificationParams) {
     (user.notificationPrefs as any)[type] !== false;
 
   if (user?.fcmToken && user?.pushEnabled !== false && categoryAllowed) {
-    const success = await sendPushNotification(user.fcmToken, title, body, {
-      type,
-      notificationId: notification.id,
-      ...data,
-    });
+    const success = await sendPushNotification(
+      user.fcmToken,
+      title,
+      body,
+      { type, notificationId: notification.id, ...data },
+      colorForRole(user.role),
+    );
 
     await prisma.notification.update({
       where: { id: notification.id },
