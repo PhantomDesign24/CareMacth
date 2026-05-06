@@ -130,6 +130,7 @@ interface PatientFormData {
   height: string;
   diagnosis: string[];
   medicalNotes: string;
+  riceProvisionChecked: boolean;
 }
 
 const emptyPatientForm: PatientFormData = {
@@ -146,6 +147,7 @@ const emptyPatientForm: PatientFormData = {
   height: '',
   diagnosis: [],
   medicalNotes: '',
+  riceProvisionChecked: false,
 };
 
 const DIAGNOSIS_CATEGORIES = [
@@ -554,6 +556,7 @@ function GuardianDashboard() {
       height: patient.raw.height != null ? String(patient.raw.height) : '',
       diagnosis: patient.raw.diagnosis ? patient.raw.diagnosis.split(', ').filter(Boolean) : [],
       medicalNotes: patient.raw.medicalNotes || '',
+      riceProvisionChecked: true, // 기존 환자 수정은 이미 동의했다고 가정
     });
     setPatientFormError("");
     setShowPatientModal(true);
@@ -582,6 +585,11 @@ function GuardianDashboard() {
       }
       if (!patientForm.birthDate) {
         setPatientFormError("생년월일을 입력해주세요.");
+        setPatientFormLoading(false);
+        return;
+      }
+      if (!patientForm.riceProvisionChecked) {
+        setPatientFormError("공깃밥 제공 안내 동의에 체크해주세요.");
         setPatientFormLoading(false);
         return;
       }
@@ -2360,6 +2368,31 @@ function GuardianDashboard() {
                   placeholder="투약 중인 약물, 알레르기, 주의사항 등"
                   rows={2} className="input-field resize-none text-sm py-2" maxLength={1000} />
                 <p className="text-[10px] text-gray-400 mt-0.5 text-right">{patientForm.medicalNotes.length}/1000</p>
+              </section>
+
+              {/* 공깃밥 제공 안내 */}
+              <section>
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2 mb-1.5">
+                    <span className="text-orange-500 text-base leading-none mt-0.5">&#127834;</span>
+                    <p className="text-sm font-bold text-orange-800">공깃밥 제공 안내</p>
+                  </div>
+                  <p className="text-xs text-orange-900 leading-relaxed mb-2">
+                    간병사 투입 시 <strong>공깃밥 또는 햇반을 제공</strong>해 주시기 바랍니다.
+                    간병사는 환자 곁에서 장시간 상주하므로 보호자의 작은 배려가 간병의 질로 돌아옵니다.
+                  </p>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={patientForm.riceProvisionChecked}
+                      onChange={(e) => handlePatientFormChange('riceProvisionChecked', e.target.checked)}
+                      className="w-4 h-4 mt-0.5 text-primary-500 border-gray-300 rounded focus:ring-primary-400"
+                    />
+                    <span className="text-xs font-semibold text-orange-900">
+                      네, 이해했습니다. 간병사에게 공깃밥(또는 햇반)을 제공하겠습니다.
+                    </span>
+                  </label>
+                </div>
               </section>
             </div>
 

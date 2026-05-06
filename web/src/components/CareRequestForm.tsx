@@ -49,6 +49,7 @@ interface CareRequestFormData {
 
   // Disclaimer
   disclaimerChecked: boolean;
+  riceProvisionChecked: boolean;
 
   // ── 신규: 환자 상태 / 간병 난이도
   infections: string[];                  // 다중: NONE/VRE/CRE/TB/SCABIES/FLU/ETC
@@ -114,6 +115,7 @@ const initialFormData: CareRequestFormData = {
   preferredNationality: "",
   dailyRate: "",
   disclaimerChecked: false,
+  riceProvisionChecked: false,
   // 신규
   infections: [],
   infectionsEtc: "",
@@ -740,6 +742,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
     const rate = parseInt(form.dailyRate);
     if (!Number.isFinite(rate) || rate <= 0) return "제시 일당은 0원보다 커야 합니다.";
     if (!form.disclaimerChecked) return "의료행위 금지 안내 동의에 체크해주세요.";
+    if (!form.riceProvisionChecked) return "공깃밥 제공 안내 동의에 체크해주세요.";
     return null;
   };
 
@@ -782,6 +785,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
         );
       case 4:
         return form.disclaimerChecked
+          && form.riceProvisionChecked
           && !!form.dailyRate?.trim()
           && parseInt(form.dailyRate) > 0;
       default:
@@ -1656,6 +1660,38 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               </span>
             </label>
           </div>
+
+          {/* 공깃밥 제공 안내 */}
+          <div className="bg-orange-50 border-2 border-orange-200 rounded-2xl p-4 sm:p-6">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="text-orange-500 text-xl mt-0.5">&#127834;</span>
+              <h4 className="text-base font-bold text-orange-800">
+                공깃밥 제공 안내
+              </h4>
+            </div>
+            <div className="text-sm text-orange-900 leading-relaxed space-y-2 mb-5">
+              <p>
+                간병사 투입 시 <strong>공깃밥 또는 햇반을 제공</strong>해 주시기
+                바랍니다.
+              </p>
+              <p className="text-xs text-orange-700">
+                간병사는 환자 곁에서 24시간 또는 장시간 상주하며 식사 시간을
+                별도로 갖기 어렵습니다. 보호자의 작은 배려가 간병의 질로
+                돌아옵니다.
+              </p>
+            </div>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.riceProvisionChecked}
+                onChange={(e) => update("riceProvisionChecked", e.target.checked)}
+                className="w-5 h-5 mt-0.5 text-primary-500 border-gray-300 rounded focus:ring-primary-400"
+              />
+              <span className="text-sm font-semibold text-orange-900">
+                네, 이해했습니다. 간병사에게 공깃밥(또는 햇반)을 제공하겠습니다.
+              </span>
+            </label>
+          </div>
         </div>
       )}
 
@@ -1685,7 +1721,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
         ) : (
           <button
             type="submit"
-            disabled={!form.disclaimerChecked || submitting}
+            disabled={!form.disclaimerChecked || !form.riceProvisionChecked || submitting}
             className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {submitting ? (
