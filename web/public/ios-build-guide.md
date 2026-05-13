@@ -155,8 +155,26 @@ iOS 푸시를 켜려면:
 
 ### Firebase iOS 설정
 
-각 앱 디렉토리에 **`GoogleService-Info.plist`** 가 있어야 합니다. 없으면 Firebase Console 에서 다운로드:
-- Firebase 프로젝트: `carematch-fc707`
+각 앱 디렉토리에 **`GoogleService-Info.plist`** 가 있어야 합니다.
+
+**저장소에 이미 커밋돼있음** — `git pull` 만 하면 자동 동기화:
+- `app-patient/GoogleService-Info.plist` → kr.carematch.patient
+- `app-caregiver/GoogleService-Info.plist` → kr.carematch.giver
+
+직접 다운로드 URL (백업용):
+- 보호자: https://cm.phantomdesign.kr/GoogleService-Info-patient.plist
+- 간병인: https://cm.phantomdesign.kr/GoogleService-Info-giver.plist
+
+curl 로 받기:
+```bash
+curl -O https://cm.phantomdesign.kr/GoogleService-Info-patient.plist
+curl -O https://cm.phantomdesign.kr/GoogleService-Info-giver.plist
+# 각 앱 디렉토리에 GoogleService-Info.plist 라는 이름으로 저장
+mv GoogleService-Info-patient.plist app-patient/GoogleService-Info.plist
+mv GoogleService-Info-giver.plist app-caregiver/GoogleService-Info.plist
+```
+
+원본 Firebase Console: `carematch-fc707`
 - iOS 앱 → 다운로드 → `app-patient/GoogleService-Info.plist`, `app-caregiver/GoogleService-Info.plist` 저장
 
 ---
