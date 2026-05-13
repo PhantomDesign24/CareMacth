@@ -362,9 +362,8 @@ export default function App() {
           </View>
         )}
 
-        {/* 마이페이지 (네이티브) */}
-        {activeTab === 'mypage' ? (
-          <ScrollView style={styles.mypageContainer}>
+        {/* 마이페이지 (네이티브) — display:none 토글, WebView unmount 방지 */}
+        <ScrollView style={[styles.mypageContainer, { display: activeTab === 'mypage' ? 'flex' : 'none' }]}>
             <View style={styles.mypageProfile}>
               <View style={styles.mypageAvatar}>
                 <Ionicons name="person" size={32} color="#fff" />
@@ -468,7 +467,9 @@ export default function App() {
 
             <Text style={styles.mypageVersion}>케어매치 간병인 v1.0.0</Text>
           </ScrollView>
-        ) : (
+
+        {/* 웹뷰 — 항상 mount, 마이페이지일 때만 display:none */}
+        <View style={{ flex: 1, display: activeTab === 'mypage' ? 'none' : 'flex' }}>
           <WebView
             ref={webViewRef}
             source={{ uri: WEB_URL }}
@@ -499,7 +500,7 @@ export default function App() {
             geolocationEnabled
             userAgent={`CareMatch-Caregiver/${Platform.OS}`}
           />
-        )}
+        </View>
 
         {/* 하단 탭바 */}
         <View style={styles.tabBar}>

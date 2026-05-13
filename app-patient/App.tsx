@@ -542,9 +542,9 @@ export default function App() {
         </View>
       )}
 
-      {/* 마이페이지 (네이티브) */}
-      {activeTab === 'mypage' ? (
-        <ScrollView style={styles.mypageContainer}>
+      {/* 마이페이지 (네이티브) — display:none 으로 토글. WebView 도 같은 방식으로 항상 mount 유지
+          → 마이페이지 ↔ 내간병 전환 시 WebView 가 홈으로 리셋되지 않음 */}
+      <ScrollView style={[styles.mypageContainer, { display: activeTab === 'mypage' ? 'flex' : 'none' }]}>
           {/* 프로필 */}
           <View style={styles.mypageProfile}>
             <View style={styles.mypageAvatar}>
@@ -654,9 +654,10 @@ export default function App() {
           </TouchableOpacity>
 
           <Text style={styles.mypageVersion}>케어매치 v1.0.0</Text>
-        </ScrollView>
-      ) : (
-        /* 웹뷰 */
+      </ScrollView>
+
+      {/* 웹뷰 — 항상 mount, 마이페이지일 때만 display:none 으로 숨김 */}
+      <View style={{ flex: 1, display: activeTab === 'mypage' ? 'none' : 'flex' }}>
         <WebView
           ref={webViewRef}
           source={{ uri: WEB_URL }}
@@ -796,7 +797,7 @@ export default function App() {
               : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1 CareMatch-Patient/ios'
           }
         />
-      )}
+      </View>
 
       {/* 결제 진행 중 안내 배너 */}
       {paymentActive && (
@@ -1140,6 +1141,13 @@ const styles = StyleSheet.create({
 
   // 마이페이지
   mypageContainer: { flex: 1, backgroundColor: '#F5F6F8' },
+  // overlay 로 띄울 때 — WebView 위에 풀스크린으로 가림
+  mypageOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 10,
+    backgroundColor: '#F5F6F8',
+  },
   mypageProfile: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF922E',
     padding: 24, paddingTop: 16,
