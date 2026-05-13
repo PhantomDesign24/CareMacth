@@ -123,10 +123,35 @@ npx expo run:ios   # 자동으로 시뮬레이터 실행
 코드에 `PUSH_ENABLED = Platform.OS === 'android'` 가드가 있어 iOS 푸시 비활성화 상태입니다.
 
 iOS 푸시를 켜려면:
-1. **APNs Auth Key** 발급 (Apple Developer → Keys → Apple Push Notifications service)
-2. Firebase Console → 프로젝트 설정 → 클라우드 메시징 → APNs 인증 키 업로드
-3. `app-patient/App.tsx` 와 `app-caregiver/App.tsx` 의 `PUSH_ENABLED` 가드 제거 (검색해서 수정)
-4. `ios.entitlements` 에 `aps-environment: production` (이미 있음)
+
+#### 1단계: APNs Auth Key (.p8) 발급
+**Apple Developer Console — Keys 페이지에서 발급**
+- 발급 페이지: https://developer.apple.com/account/resources/authkeys/list
+- "Create a key (+)" 클릭
+- **Key Name**: `CareMatch APNs` (자유)
+- **Key Services** 에서 **"Apple Push Notifications service (APNs)"** 체크
+- Configure → Continue → Register
+- 다운로드되는 **.p8 파일** (예: `AuthKey_ABC123XYZ.p8`) **딱 한 번만 받을 수 있음** — 반드시 안전한 곳에 백업
+- 표시되는 **Key ID** (예: `ABC123XYZ`) 와 Apple Developer 화면 우상단의 **Team ID** (예: `12ABCD3456`) 함께 메모
+
+> .p8 파일은 분실 시 재발급 불가 (revoke 후 새로 생성). Google Drive / 1Password 같은 안전한 곳에 보관 권장.
+
+#### 2단계: Firebase Console 에 APNs 키 업로드
+- https://console.firebase.google.com → `carematch-fc707` → 프로젝트 설정(톱니바퀴) → **Cloud Messaging** 탭
+- "Apple app configuration" 섹션에서 등록된 iOS 앱 2개 각각:
+  - **APNs Authentication Key** → "Upload" 클릭
+  - .p8 파일 + Key ID + Team ID 입력 → Upload
+- 양쪽 앱 모두 같은 .p8 키 사용 가능 (같은 팀이라면)
+
+#### 3단계: 코드 수정
+- `app-patient/App.tsx` 와 `app-caregiver/App.tsx` 에서 `PUSH_ENABLED = Platform.OS === 'android'` 검색
+- `PUSH_ENABLED = true` 로 변경 (모든 플랫폼 활성화)
+- `ios.entitlements.aps-environment: production` 은 이미 설정됨 (app.json)
+
+#### 4단계: 빌드 + 테스트
+- `npx expo prebuild -p ios --clean`
+- 실기기에서만 푸시 가능 (시뮬레이터는 푸시 안 됨)
+- 어드민에서 본인에게 푸시 발송 → 잠금화면에 알림 도착 확인
 
 ### Firebase iOS 설정
 
