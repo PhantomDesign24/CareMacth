@@ -19,8 +19,10 @@
 
 | 앱 | iOS bundleIdentifier | Android package |
 |---|---|---|
-| 보호자 (`app-patient`) | `kr.carematch.patient` | `kr.carematch.patient` |
-| 간병인 (`app-caregiver`) | `kr.carematch.giver` | `kr.carematch.giver` |
+| 보호자 (`app-patient`) | `kr.phantomdesign.carematch.patient` | `kr.carematch.patient` |
+| 간병인 (`app-caregiver`) | `kr.phantomdesign.carematch.giver` | `kr.carematch.giver` |
+
+> ⚠️ **iOS Bundle ID 는 Android 와 다름** — 기존 `kr.carematch.*` namespace 가 Apple Developer 에서 다른 팀이 점유 중이라 `kr.phantomdesign.carematch.*` 로 변경됨. Android `package` 는 Play Store 등록 그대로 유지.
 
 > 참고: 간병인 앱의 Android `caregiver` 와 `giver` 두 패키지가 Firebase 에 등록돼 있는데, **현재 활성 패키지는 `giver`** (Play Store 등록명 기준).
 
@@ -153,29 +155,29 @@ iOS 푸시를 켜려면:
 - 실기기에서만 푸시 가능 (시뮬레이터는 푸시 안 됨)
 - 어드민에서 본인에게 푸시 발송 → 잠금화면에 알림 도착 확인
 
-### Firebase iOS 설정
+### Firebase iOS 설정 — 신규 plist 필요 (사용자 작업)
 
-각 앱 디렉토리에 **`GoogleService-Info.plist`** 가 있어야 합니다.
+**기존 plist 는 폐기됨** (구 Bundle ID `kr.carematch.*` 용). 신규 Bundle ID 로 Firebase 에서 iOS 앱 재등록 후 새 plist 받아야 함.
 
-**저장소에 이미 커밋돼있음** — `git pull` 만 하면 자동 동기화:
-- `app-patient/GoogleService-Info.plist` → kr.carematch.patient
-- `app-caregiver/GoogleService-Info.plist` → kr.carematch.giver
+#### 사용자 측 (수동 작업)
+1. **Apple Developer Console** → Identifiers → "+" 로 새 App ID 2개 등록:
+   - `kr.phantomdesign.carematch.patient` (Push Notifications capability 체크)
+   - `kr.phantomdesign.carematch.giver` (Push Notifications capability 체크)
+2. **Firebase Console** (`carematch-fc707`) → 앱 추가 → iOS:
+   - Bundle ID `kr.phantomdesign.carematch.patient` → plist 다운로드
+   - Bundle ID `kr.phantomdesign.carematch.giver` → plist 다운로드
+3. 받은 plist 2개를 서버 `/var/www/carematch/` 루트에 업로드 (자동으로 정리됨) **또는** 직접 위치에 둘 수도:
+   - `app-patient/GoogleService-Info.plist`
+   - `app-caregiver/GoogleService-Info.plist`
 
-직접 다운로드 URL (백업용):
-- 보호자: https://cm.phantomdesign.kr/GoogleService-Info-patient.plist
-- 간병인: https://cm.phantomdesign.kr/GoogleService-Info-giver.plist
-
-curl 로 받기:
+#### 검증 (plist 내부 Bundle ID 일치)
 ```bash
-curl -O https://cm.phantomdesign.kr/GoogleService-Info-patient.plist
-curl -O https://cm.phantomdesign.kr/GoogleService-Info-giver.plist
-# 각 앱 디렉토리에 GoogleService-Info.plist 라는 이름으로 저장
-mv GoogleService-Info-patient.plist app-patient/GoogleService-Info.plist
-mv GoogleService-Info-giver.plist app-caregiver/GoogleService-Info.plist
-```
+grep -A1 BUNDLE_ID app-patient/GoogleService-Info.plist
+# → kr.phantomdesign.carematch.patient
 
-원본 Firebase Console: `carematch-fc707`
-- iOS 앱 → 다운로드 → `app-patient/GoogleService-Info.plist`, `app-caregiver/GoogleService-Info.plist` 저장
+grep -A1 BUNDLE_ID app-caregiver/GoogleService-Info.plist
+# → kr.phantomdesign.carematch.giver
+```
 
 ---
 

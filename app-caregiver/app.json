@@ -14,7 +14,7 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "kr.carematch.giver",
+      "bundleIdentifier": "kr.phantomdesign.carematch.giver",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSFaceIDUsageDescription": "생체 인증으로 빠르게 로그인합니다.",
