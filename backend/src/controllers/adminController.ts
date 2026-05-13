@@ -2874,7 +2874,7 @@ export const verifyCertificate = async (req: AuthRequest, res: Response, next: N
       title: '자격증 검증이 완료되었습니다',
       body: `"${certificate.name}" 자격증이 관리자 검증을 통과했습니다. 보호자에게 더 신뢰감을 줄 수 있어요.`,
       data: { url: '/dashboard/caregiver/documents#certificates', certificateId: certId },
-    }).catch(() => {});
+    }).catch((e) => console.error('[verifyCertificate] notify fail:', e?.message || e));
 
     res.json({
       success: true,
@@ -2905,7 +2905,7 @@ export const verifyIdCard = async (req: AuthRequest, res: Response, next: NextFu
       title: '신분증 본인 확인이 완료되었습니다',
       body: '본인 인증이 완료되어 이제 일감에 지원할 수 있습니다. 일감 찾기에서 원하는 공고를 확인해보세요.',
       data: { url: '/find-work' },
-    }).catch(() => {});
+    }).catch((e) => console.error('[verifyIdCard] notify fail:', e?.message || e));
 
     res.json({ success: true, message: '신분증 본인 확인이 완료되었습니다.' });
   } catch (error) {
@@ -2933,7 +2933,7 @@ export const verifyCriminalCheck = async (req: AuthRequest, res: Response, next:
       title: '범죄이력 조회서 검증이 완료되었습니다',
       body: '범죄이력 조회서 검증이 완료되어 보호자에게 안전한 간병인으로 표시됩니다.',
       data: { url: '/dashboard/caregiver/documents#criminal-check' },
-    }).catch(() => {});
+    }).catch((e) => console.error('[verifyCriminalCheck] notify fail:', e?.message || e));
 
     res.json({ success: true, message: '범죄이력 조회서 검증이 완료되었습니다.' });
   } catch (error) {
@@ -2952,19 +2952,17 @@ export const unverifyCertificate = async (req: AuthRequest, res: Response, next:
     if (!certificate) throw new AppError('자격증을 찾을 수 없습니다.', 404);
     if (!certificate.verified) throw new AppError('아직 검증되지 않은 자격증입니다.', 400);
 
-    await prisma.certificate.update({
-      where: { id: certId },
-      data: { verified: false },
-    });
+    await prisma.certificate.update({ where: { id: certId }, data: { verified: false } });
 
-    // 간병인에게 알림 — 자격증 관리 페이지로 직접 이동
+    // 간병인에게 알림 — sendUserNotification 이 notification.create + FCM 발송까지 처리.
+    // 실패해도 상태 변경은 유지. 실패 시 콘솔에 로깅하여 모니터링 가능.
     sendUserNotification({
       userId: certificate.caregiver.userId,
       type: 'SYSTEM',
       title: '자격증 검증이 취소되었습니다',
       body: `관리자에 의해 "${certificate.name}" 자격증의 검증이 취소되었습니다. 서류를 다시 확인해주세요.`,
       data: { url: '/dashboard/caregiver/documents#certificates', certificateId: certId },
-    }).catch(() => {});
+    }).catch((e) => console.error('[unverifyCertificate] notify fail:', e?.message || e));
 
     res.json({ success: true, message: '자격증 검증이 취소되었습니다.' });
   } catch (error) {
@@ -2992,7 +2990,7 @@ export const unverifyIdCard = async (req: AuthRequest, res: Response, next: Next
       title: '신분증 본인 확인이 취소되었습니다',
       body: '관리자에 의해 신분증 본인 확인이 취소되어 일감 지원이 일시 제한됩니다. 신분증을 재등록해주세요.',
       data: { url: '/dashboard/caregiver/documents#id-card' },
-    }).catch(() => {});
+    }).catch((e) => console.error('[unverifyIdCard] notify fail:', e?.message || e));
 
     res.json({ success: true, message: '신분증 본인 확인이 취소되었습니다.' });
   } catch (error) {
@@ -3020,7 +3018,7 @@ export const unverifyCriminalCheck = async (req: AuthRequest, res: Response, nex
       title: '범죄이력 조회서 검증이 취소되었습니다',
       body: '관리자에 의해 범죄이력 조회서의 검증이 취소되었습니다. 범죄이력 조회서를 재제출해주세요.',
       data: { url: '/dashboard/caregiver/documents#criminal-check' },
-    }).catch(() => {});
+    }).catch((e) => console.error('[unverifyCriminalCheck] notify fail:', e?.message || e));
 
     res.json({ success: true, message: '범죄이력 조회서 검증이 취소되었습니다.' });
   } catch (error) {
@@ -3170,7 +3168,14 @@ async function createAndSendBulkPush(args: {
   }
 
   let totalSuccess = 0;
-  if (args.firebase.apps.length && byColor.size > 0) {
+  // Firebase 미초기화면 sendable 알림에 명시적 미발송 사유 기록
+  if (!args.firebase.apps.length && byColor.size > 0) {
+    const sendableIds = Array.from(byColor.values()).flat().map((g) => g.id);
+    await prisma.notification.updateMany({
+      where: { id: { in: sendableIds } },
+      data: { pushSent: false, pushError: 'Firebase 미초기화' },
+    });
+  } else if (args.firebase.apps.length && byColor.size > 0) {
     // sendEach 로 메시지마다 다른 data(notificationId) 주입 — 푸시 탭 시 자동 markRead 가능.
     await Promise.all(
       Array.from(byColor.entries()).map(async ([color, group]) => {

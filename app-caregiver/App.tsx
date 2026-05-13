@@ -124,9 +124,13 @@ export default function App() {
 
   // 푸시 탭 시 적용할 URL 보관 (WebView 가 onLoadEnd 후 적용)
   const [pendingPushUrl, setPendingPushUrl] = useState<string | null>(null);
+  const processedPushIdsRef = useRef<Set<string>>(new Set());
 
   const handlePushResponse = useCallback(async (data: any) => {
     if (!data) return;
+    const notifIdRaw = data.notificationId ? String(data.notificationId) : '';
+    if (notifIdRaw && processedPushIdsRef.current.has(notifIdRaw)) return;
+    if (notifIdRaw) processedPushIdsRef.current.add(notifIdRaw);
     const notifId = data.notificationId ? String(data.notificationId).replace(/[^A-Za-z0-9_-]/g, '') : '';
     if (notifId) {
       let token = userToken;
@@ -144,12 +148,15 @@ export default function App() {
         } catch {}
       }
     }
-    if (data.url) {
-      const url = String(data.url);
+    // 내부 절대 경로만 허용 (open redirect / JS 주입 차단)
+    const rawUrl = data.url;
+    if (typeof rawUrl === 'string' && rawUrl.startsWith('/') && !rawUrl.startsWith('//')) {
       if (loading || !webViewRef.current) {
-        setPendingPushUrl(url);
+        setPendingPushUrl(rawUrl);
       } else {
-        webViewRef.current.injectJavaScript(`window.location.href = '${url}'; true;`);
+        webViewRef.current.injectJavaScript(
+          `try{window.location.href=${JSON.stringify(rawUrl)};}catch(e){} true;`
+        );
       }
     }
   }, [userToken, loading]);
@@ -196,6 +203,15 @@ export default function App() {
       return () => handler.remove();
     }
   }, [canGoBack]);
+
+  // 마이페이지 진입/이탈 시 WebView 에 APP_BACKGROUND / APP_FOREGROUND 알림
+  useEffect(() => {
+    if (!webViewRef.current) return;
+    const msg = activeTab === 'mypage' ? 'APP_BACKGROUND' : 'APP_FOREGROUND';
+    webViewRef.current.injectJavaScript(
+      `try{window.postMessage({type:${JSON.stringify(msg)}},'*');}catch(e){} true;`
+    );
+  }, [activeTab]);
 
   // 탭 클릭 — 같은 경로 재탭 시 스크롤 top, 다른 경로면 즉시 이동
   const handleTabPress = useCallback((tab: Tab) => {

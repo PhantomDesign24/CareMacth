@@ -163,9 +163,14 @@ export default function App() {
 
   // 푸시 탭 시 적용할 URL 을 잠깐 보관 (WebView 가 onLoadEnd 후 적용)
   const [pendingPushUrl, setPendingPushUrl] = useState<string | null>(null);
+  // 이미 처리한 푸시 notificationId 추적 — cold-start + foreground listener 중복 처리 방지
+  const processedPushIdsRef = useRef<Set<string>>(new Set());
 
   const handlePushResponse = useCallback(async (data: any) => {
     if (!data) return;
+    const notifIdRaw = data.notificationId ? String(data.notificationId) : '';
+    if (notifIdRaw && processedPushIdsRef.current.has(notifIdRaw)) return;
+    if (notifIdRaw) processedPushIdsRef.current.add(notifIdRaw);
     // 1) 알림 자동 읽음 처리 — 네이티브 fetch (cold start 에서도 안전)
     const notifId = data.notificationId ? String(data.notificationId).replace(/[^A-Za-z0-9_-]/g, '') : '';
     if (notifId) {
@@ -186,13 +191,15 @@ export default function App() {
         } catch {}
       }
     }
-    // 2) URL 이동 — WebView 준비됐으면 즉시, 아니면 onLoadEnd 까지 대기
-    if (data.url) {
-      const url = String(data.url);
+    // 2) URL 이동 — 내부 절대 경로만 허용 (open redirect / JS 주입 차단)
+    const rawUrl = data.url;
+    if (typeof rawUrl === 'string' && rawUrl.startsWith('/') && !rawUrl.startsWith('//')) {
       if (loading || !webViewRef.current) {
-        setPendingPushUrl(url);
+        setPendingPushUrl(rawUrl);
       } else {
-        webViewRef.current.injectJavaScript(`window.location.href = '${url}'; true;`);
+        webViewRef.current.injectJavaScript(
+          `try{window.location.href=${JSON.stringify(rawUrl)};}catch(e){} true;`
+        );
       }
     }
   }, [userToken, loading]);
@@ -256,6 +263,16 @@ export default function App() {
     });
     return () => sub.remove();
   }, []);
+
+  // 마이페이지 진입/이탈 시 WebView 에 APP_BACKGROUND / APP_FOREGROUND 알림
+  // (웹 쪽에서 폴링 일시 정지/재개에 활용 가능)
+  useEffect(() => {
+    if (!webViewRef.current) return;
+    const msg = activeTab === 'mypage' ? 'APP_BACKGROUND' : 'APP_FOREGROUND';
+    webViewRef.current.injectJavaScript(
+      `try{window.postMessage({type:${JSON.stringify(msg)}},'*');}catch(e){} true;`
+    );
+  }, [activeTab]);
 
   // 탭 클릭 → 웹뷰 URL 변경 (마이페이지는 네이티브)
   // 같은 경로 재탭 시: 스크롤 top + 페이지 reload (route guard / 캐시 stale 회피)

@@ -41,8 +41,8 @@ export default function Header() {
     } catch { setUser(null); }
   }, [pathname]);
 
-  // 모바일 앱(WebView) 에 현재 로그인 상태 동기화 (페이지당 1회).
-  // 앱 재설치/캐시 클리어 후에도 user.fcmToken 이 stale 토큰으로 남아 푸시 실패하던 문제 해결.
+  // 모바일 앱(WebView) 에 현재 로그인 상태 동기화 — sessionStorage 로 중복 전송 차단.
+  // 같은 (token, userId) 조합이면 한 세션 동안 다시 안 보냄 → device-token 재등록 부하 제거.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const rn = (window as any).ReactNativeWebView;
@@ -50,11 +50,14 @@ export default function Header() {
     try {
       const token = localStorage.getItem("cm_access_token");
       const stored = localStorage.getItem("user");
-      if (token && stored) {
-        const u = JSON.parse(stored);
-        rn.postMessage(JSON.stringify({ type: "USER_INFO", token, name: u?.name, email: u?.email }));
-        if (u?.id) rn.postMessage(JSON.stringify({ type: "USER_LOGIN", userId: u.id, role: u.role }));
-      }
+      if (!token || !stored) return;
+      const u = JSON.parse(stored);
+      const fingerprint = `${u?.id || ''}|${token.slice(0, 20)}`;
+      const lastSent = sessionStorage.getItem("cm_app_login_sent");
+      if (lastSent === fingerprint) return; // 이미 보낸 동일 세션
+      rn.postMessage(JSON.stringify({ type: "USER_INFO", token, name: u?.name, email: u?.email }));
+      if (u?.id) rn.postMessage(JSON.stringify({ type: "USER_LOGIN", userId: u.id, role: u.role }));
+      sessionStorage.setItem("cm_app_login_sent", fingerprint);
     } catch {}
   }, []);
 

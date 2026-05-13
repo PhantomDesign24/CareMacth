@@ -26,10 +26,19 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   SYSTEM: { label: "공지", color: "bg-gray-100 text-gray-700" },
 };
 
+// 안전한 내부 경로만 허용 — javascript:, data:, 외부 URL 차단 (open redirect / XSS 방어)
+function safeInternalPath(url: unknown): string | null {
+  if (typeof url !== "string" || url.length === 0) return null;
+  if (!url.startsWith("/")) return null;       // 절대 경로만 허용
+  if (url.startsWith("//")) return null;       // protocol-relative 차단
+  return url;
+}
+
 function typeToHref(n: Notification, role?: string): string | null {
   const d = n.data || {};
-  // 백엔드가 명시한 url 이 있으면 최우선 사용 — 알림별로 정확한 페이지 보장
-  if (typeof d.url === "string" && d.url.length > 0) return d.url;
+  // 백엔드가 명시한 url 이 있으면 최우선 사용. 단 내부 경로 검증 통과 시에만.
+  const safe = safeInternalPath(d.url);
+  if (safe) return safe;
   const isCaregiver = role === "CAREGIVER";
   const isGuardian = role === "GUARDIAN";
   const guardianDash = "/dashboard/guardian";

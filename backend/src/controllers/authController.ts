@@ -363,21 +363,29 @@ export const kakaoAuth = async (req: Request, res: Response, next: NextFunction)
       }
 
       const referralCode = generateReferralCode();
-      user = await prisma.user.create({
-        data: {
-          email: email || `kakao_${id}@carematch.kr`,
-          name: name || '카카오 사용자',
-          phone: phone || `kakao_${id}`,
-          role,
-          authProvider: 'KAKAO',
-          socialId: String(id),
-          referralCode,
-          ...(role === 'GUARDIAN' && { guardian: { create: {} } }),
-          ...(role === 'CAREGIVER' && { caregiver: { create: {} } }),
-          ...(role === 'HOSPITAL' && { guardian: { create: {} } }),
-        },
-        include: { guardian: true, caregiver: true },
-      });
+      try {
+        user = await prisma.user.create({
+          data: {
+            email: email || `kakao_${id}@carematch.kr`,
+            name: name || '카카오 사용자',
+            phone: phone || `kakao_${id}`,
+            role,
+            authProvider: 'KAKAO',
+            socialId: String(id),
+            referralCode,
+            ...(role === 'GUARDIAN' && { guardian: { create: {} } }),
+            ...(role === 'CAREGIVER' && { caregiver: { create: {} } }),
+            ...(role === 'HOSPITAL' && { guardian: { create: {} } }),
+          },
+          include: { guardian: true, caregiver: true },
+        });
+      } catch (e: any) {
+        // race 로 다른 가입수단이 먼저 unique 충돌 발생 → 409 로 정리
+        if (e?.code === 'P2002') {
+          throw new AppError('이미 가입된 계정이 있습니다. 로그인을 시도해주세요.', 409, { code: 'PROVIDER_CONFLICT' });
+        }
+        throw e;
+      }
       // 카카오 자동 가입 분기 — 환영 알림 발송
       await sendWelcomeNotification(user).catch(() => {});
     }
@@ -463,21 +471,28 @@ export const naverAuth = async (req: Request, res: Response, next: NextFunction)
       }
 
       const referralCode = generateReferralCode();
-      user = await prisma.user.create({
-        data: {
-          email: email || `naver_${id}@carematch.kr`,
-          name: name || '네이버 사용자',
-          phone: mobile || `naver_${id}`,
-          role,
-          authProvider: 'NAVER',
-          socialId: String(id),
-          referralCode,
-          ...(role === 'GUARDIAN' && { guardian: { create: {} } }),
-          ...(role === 'CAREGIVER' && { caregiver: { create: {} } }),
-          ...(role === 'HOSPITAL' && { guardian: { create: {} } }),
-        },
-        include: { guardian: true, caregiver: true },
-      });
+      try {
+        user = await prisma.user.create({
+          data: {
+            email: email || `naver_${id}@carematch.kr`,
+            name: name || '네이버 사용자',
+            phone: mobile || `naver_${id}`,
+            role,
+            authProvider: 'NAVER',
+            socialId: String(id),
+            referralCode,
+            ...(role === 'GUARDIAN' && { guardian: { create: {} } }),
+            ...(role === 'CAREGIVER' && { caregiver: { create: {} } }),
+            ...(role === 'HOSPITAL' && { guardian: { create: {} } }),
+          },
+          include: { guardian: true, caregiver: true },
+        });
+      } catch (e: any) {
+        if (e?.code === 'P2002') {
+          throw new AppError('이미 가입된 계정이 있습니다. 로그인을 시도해주세요.', 409, { code: 'PROVIDER_CONFLICT' });
+        }
+        throw e;
+      }
       // 네이버 자동 가입 분기 — 환영 알림 발송
       await sendWelcomeNotification(user).catch(() => {});
     }

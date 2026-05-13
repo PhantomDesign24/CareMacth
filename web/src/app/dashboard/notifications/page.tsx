@@ -27,10 +27,18 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   SYSTEM: { label: "공지", color: "bg-gray-100 text-gray-700" },
 };
 
+function safeInternalPath(url: unknown): string | null {
+  if (typeof url !== "string" || url.length === 0) return null;
+  if (!url.startsWith("/")) return null;
+  if (url.startsWith("//")) return null;
+  return url;
+}
+
 function typeToHref(n: Notification, role?: string): string | null {
   const d = n.data || {};
-  // 백엔드가 명시한 url 이 있으면 최우선 사용
-  if (typeof d.url === "string" && d.url.length > 0) return d.url;
+  // 백엔드가 명시한 url 이 있으면 최우선 — 단 내부 경로만
+  const safe = safeInternalPath(d.url);
+  if (safe) return safe;
   const isCaregiver = role === "CAREGIVER";
   const isGuardian = role === "GUARDIAN";
   const guardianDash = "/dashboard/guardian";
