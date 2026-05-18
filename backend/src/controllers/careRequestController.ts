@@ -12,6 +12,7 @@ import {
   getCancelPenalty,
 } from '../utils/matchingScores';
 import { sendFromTemplate, renderTemplate } from '../services/notificationService';
+import { runAutoMatching, notifyCandidates } from '../services/matchingService';
 
 // POST / - 간병 요청 생성
 export const createCareRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -224,6 +225,17 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
       success: true,
       data: careRequest,
     });
+
+    // 백그라운드로 자동 매칭 + 매칭된 간병인에게 알림 (응답 차단 X)
+    // 매칭 실패해도 careRequest 는 OPEN 상태로 남아 간병인이 직접 일감 검색해서 지원 가능.
+    (async () => {
+      try {
+        await runAutoMatching(careRequest.id);
+        await notifyCandidates(careRequest.id);
+      } catch (e: any) {
+        console.error('[createCareRequest] auto-match/notify fail:', e?.message || e);
+      }
+    })();
   } catch (error) {
     next(error);
   }

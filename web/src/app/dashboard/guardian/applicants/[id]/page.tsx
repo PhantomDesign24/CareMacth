@@ -890,11 +890,16 @@ export default function ApplicantsPage() {
               </div>
 
               <p className="text-xs text-gray-400 mb-2">✓ 표시는 이미 추가된 지역(고정), 다른 지역을 선택해 추가하세요.</p>
+              {(careRequest?.regions || []).includes(expandSido) && (
+                <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+                  현재 <strong>{expandSido}</strong> 전체로 등록돼 있습니다. 특정 구를 추가 선택하면 해당 지역 간병인에게 다시 알림이 발송됩니다.
+                </p>
+              )}
               <div className="flex flex-wrap gap-2 mb-5 max-h-56 overflow-y-auto py-2 px-1">
                 {(KOREA_REGIONS[expandSido] || []).map((sigungu) => {
                   const full = `${expandSido} ${sigungu}`;
-                  const already = (careRequest?.regions || []).includes(full)
-                    || (careRequest?.regions || []).includes(expandSido); // 시·도만 등록된 경우도 포함으로 간주
+                  // 정확히 같은 시·군·구가 이미 등록된 경우만 disabled. 시·도만 등록된 케이스에서도 구 단위 선택 가능.
+                  const already = (careRequest?.regions || []).includes(full);
                   const picked = expandRegions.includes(full);
                   return (
                     <button

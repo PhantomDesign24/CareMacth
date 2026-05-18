@@ -1545,7 +1545,19 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                 type="date"
                 className="input-field"
                 value={form.startDate}
-                onChange={(e) => update("startDate", e.target.value)}
+                min={new Date().toISOString().slice(0, 10)}
+                max={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000 * 2).toISOString().slice(0, 10)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) { update("startDate", ""); return; }
+                  // 사용자가 키보드로 4자리 이상 연도 입력해 이상한 연도(예: 20260)가 들어오는 케이스 방지
+                  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                  if (!m) return;
+                  const year = parseInt(m[1]);
+                  const now = new Date().getFullYear();
+                  if (year < now || year > now + 2) return;
+                  update("startDate", v);
+                }}
               />
             </div>
             <div>
