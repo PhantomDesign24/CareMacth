@@ -6,25 +6,41 @@ import Image from "next/image";
 import { FiArrowLeft, FiSearch, FiCheck, FiHeart, FiAlertCircle, FiActivity, FiShield, FiRefreshCw, FiArrowRight, FiInfo, FiCalendar, FiMapPin } from "react-icons/fi";
 import { DIAGNOSES } from "./diagnoses";
 
-// 케어네이션 precalc 와 동일한 시세표 (2024.06 기준 · 내국인 식대 포함)
-const PRICE_TABLE: Record<string, { min: number; average: number; max: number }> = {
-  "0000": { min: 125000, average: 135000, max: 164000 },
-  "0001": { min: 138000, average: 148000, max: 177000 },
-  "0010": { min: 127000, average: 140000, max: 178000 },
-  "0011": { min: 140000, average: 153000, max: 191000 },
-  "0100": { min: 128000, average: 139000, max: 174000 },
-  "0101": { min: 141000, average: 153000, max: 187000 },
-  "0110": { min: 130000, average: 145000, max: 188000 },
-  "0111": { min: 143000, average: 157000, max: 201000 },
-  "1000": { min: 135000, average: 145000, max: 174000 },
-  "1001": { min: 148000, average: 158000, max: 187000 },
-  "1010": { min: 137000, average: 150000, max: 188000 },
-  "1011": { min: 150000, average: 163000, max: 201000 },
-  "1100": { min: 138000, average: 149000, max: 184000 },
-  "1101": { min: 151000, average: 163000, max: 197000 },
-  "1110": { min: 140000, average: 155000, max: 198000 },
-  "1111": { min: 153000, average: 167000, max: 211000 },
+// CareMatch 산출 룰 — 백엔드에서 동적으로 로드 (admin/settings 에서 변경 가능)
+// fallback 기본값 (네트워크 실패 시)
+type CareFeeRules = {
+  baseLight: number; baseMedium: number; baseHigh: number; baseHighInfection: number;
+  minOffset: number; maxOffset: number;
+  surchargeHeavy: number; surchargeDiaper: number;
+  autoRaiseAmount: number;
 };
+const DEFAULT_RULES: CareFeeRules = {
+  baseLight: 130000, baseMedium: 140000, baseHigh: 160000, baseHighInfection: 180000,
+  minOffset: 10000, maxOffset: 20000,
+  surchargeHeavy: 5000, surchargeDiaper: 5000,
+  autoRaiseAmount: 10000,
+};
+
+function priceFor(opts: {
+  suction: boolean; dementia: boolean; paralysis: boolean; infection: boolean;
+  heavy: boolean; diaper: boolean;
+}, rules: CareFeeRules): { min: number; average: number; max: number; tier: string } {
+  let base: number;
+  let tier: string;
+  if (opts.infection) {
+    base = rules.baseHighInfection;
+    tier = '고위험 (감염성 질환)';
+  } else if (opts.suction || opts.dementia || opts.paralysis) {
+    base = rules.baseHigh;
+    tier = '고위험';
+  } else {
+    base = rules.baseLight;
+    tier = '경증';
+  }
+  const surcharge = (opts.heavy ? rules.surchargeHeavy : 0) + (opts.diaper ? rules.surchargeDiaper : 0);
+  const avg = base + surcharge;
+  return { min: avg - rules.minOffset, average: avg, max: avg + rules.maxOffset, tier };
+}
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -51,11 +67,13 @@ function useCountUp(target: number, duration = 1500) {
 const QUESTIONS = [
   { key: "suction", title: "석션 또는 피딩이 필요한가요?", short: "석션·피딩", desc: "기관 흡인·경관 영양 관리 필요 여부", icon: FiActivity, color: "from-rose-50 to-rose-100", iconColor: "text-rose-500" },
   { key: "dementia", title: "치매·섬망·수면장애가 있나요?", short: "치매·섬망·수면장애", desc: "인지 저하·야간 배회·불면 등", icon: FiAlertCircle, color: "from-amber-50 to-amber-100", iconColor: "text-amber-500" },
-  { key: "paralysis", title: "마비 또는 욕창이 있나요?", short: "마비·욕창", desc: "편마비·하반신마비·압박성 궤양 등", icon: FiHeart, color: "from-violet-50 to-violet-100", iconColor: "text-violet-500" },
+  { key: "paralysis", title: "마비 또는 욕창이 있나요?", short: "마비·욕창", desc: "편마비·하반신마비·압박성 궤양·와상 등", icon: FiHeart, color: "from-violet-50 to-violet-100", iconColor: "text-violet-500" },
   { key: "infection", title: "감염성 질환이 있나요?", short: "감염성 질환", desc: "결핵·MRSA·VRE·CRE 등 격리 필요", icon: FiShield, color: "from-emerald-50 to-emerald-100", iconColor: "text-emerald-500" },
+  { key: "heavy", title: "환자 몸무게가 70kg 이상인가요?", short: "70kg 이상", desc: "체중 가산 (+5,000원)", icon: FiActivity, color: "from-blue-50 to-blue-100", iconColor: "text-blue-500" },
+  { key: "diaper", title: "기저귀 사용이 필요한가요?", short: "기저귀 사용", desc: "배뇨·배변 케어 가산 (+5,000원)", icon: FiAlertCircle, color: "from-pink-50 to-pink-100", iconColor: "text-pink-500" },
 ] as const;
 
-type AnswerKey = "suction" | "dementia" | "paralysis" | "infection";
+type AnswerKey = "suction" | "dementia" | "paralysis" | "infection" | "heavy" | "diaper";
 
 function PriceGraph({ result }: { result: { min: number; average: number; max: number } }) {
   const range = result.max - result.min || 1;
@@ -89,8 +107,16 @@ export default function CareFeeEstimatePage() {
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [diagnosis, setDiagnosis] = useState("");
   const [search, setSearch] = useState("");
-  const [answers, setAnswers] = useState<Record<AnswerKey, boolean | null>>({ suction: null, dementia: null, paralysis: null, infection: null });
+  const [answers, setAnswers] = useState<Record<AnswerKey, boolean | null>>({ suction: null, dementia: null, paralysis: null, infection: null, heavy: null, diaper: null });
   const [expandedDetail, setExpandedDetail] = useState(true);
+  // 백엔드 룰 fetch — 실패 시 fallback (DEFAULT_RULES)
+  const [rules, setRules] = useState<CareFeeRules>(DEFAULT_RULES);
+  useEffect(() => {
+    fetch("/api/public/care-fee-rules")
+      .then((r) => r.json())
+      .then((j) => { if (j?.success && j?.data) setRules(j.data); })
+      .catch(() => {});
+  }, []);
 
   const filteredDiagnoses = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -98,14 +124,21 @@ export default function CareFeeEstimatePage() {
     return DIAGNOSES.filter((d) => d.toLowerCase().includes(q));
   }, [search]);
 
-  const allAnswered = answers.suction !== null && answers.dementia !== null && answers.paralysis !== null && answers.infection !== null;
+  const allAnswered = (Object.values(answers) as (boolean | null)[]).every((v) => v !== null);
   const answeredCount = (Object.values(answers) as (boolean | null)[]).filter((v) => v !== null).length;
+  const totalQuestions = QUESTIONS.length;
 
   const result = useMemo(() => {
     if (!allAnswered) return null;
-    const key = [answers.suction ? "1" : "0", answers.dementia ? "1" : "0", answers.paralysis ? "1" : "0", answers.infection ? "1" : "0"].join("");
-    return PRICE_TABLE[key] || PRICE_TABLE["0000"];
-  }, [answers, allAnswered]);
+    return priceFor({
+      suction: !!answers.suction,
+      dementia: !!answers.dementia,
+      paralysis: !!answers.paralysis,
+      infection: !!answers.infection,
+      heavy: !!answers.heavy,
+      diaper: !!answers.diaper,
+    }, rules);
+  }, [answers, allAnswered, rules]);
 
   const animatedAvg = useCountUp(result?.average || 0, 1500);
 
@@ -113,7 +146,7 @@ export default function CareFeeEstimatePage() {
     setStep(0);
     setDiagnosis("");
     setSearch("");
-    setAnswers({ suction: null, dementia: null, paralysis: null, infection: null });
+    setAnswers({ suction: null, dementia: null, paralysis: null, infection: null, heavy: null, diaper: null });
     setExpandedDetail(true);
   };
 
@@ -282,7 +315,7 @@ export default function CareFeeEstimatePage() {
 
                 <div className="bg-orange-50 border border-orange-200 rounded-2xl p-3 text-center">
                   <p className="text-xs sm:text-sm font-semibold text-orange-900">
-                    환자 상태 <span className="text-primary-600">{answeredCount}/4</span> 답변 완료
+                    환자 상태 <span className="text-primary-600">{answeredCount}/{totalQuestions}</span> 답변 완료
                   </p>
                 </div>
 
@@ -318,7 +351,7 @@ export default function CareFeeEstimatePage() {
                 </div>
 
                 <button type="button" disabled={!allAnswered} onClick={() => setStep(2)} className="w-full py-4 rounded-2xl text-base font-bold text-white shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none" style={{ background: allAnswered ? "linear-gradient(135deg, #FF922E 0%, #FF6B35 100%)" : "#9ca3af" }}>
-                  {allAnswered ? "예상 간병비 계산하기 →" : `${4 - answeredCount}개 답변 남음`}
+                  {allAnswered ? "예상 간병비 계산하기 →" : `${totalQuestions - answeredCount}개 답변 남음`}
                 </button>
               </div>
             )}
@@ -353,6 +386,11 @@ export default function CareFeeEstimatePage() {
                 {/* 메인 결과 카드 */}
                 <div className="bg-white rounded-3xl border border-gray-200 shadow-md overflow-hidden">
                   <div className="px-5 sm:px-7 py-7 sm:py-8 text-center">
+                    {result.tier && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-orange-100 text-orange-600 text-[11px] font-bold mb-3">
+                        {result.tier}
+                      </span>
+                    )}
                     <p className="text-xs sm:text-sm font-semibold text-gray-500 mb-2">하루 예상 간병비</p>
                     <div className="flex items-baseline justify-center gap-1 mb-1">
                       <span className="text-4xl sm:text-5xl font-extrabold text-gray-900 tabular-nums">{fmt(animatedAvg)}</span>

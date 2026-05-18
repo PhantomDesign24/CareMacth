@@ -122,6 +122,17 @@ app.get('/api/public/contact', async (_req, res, next) => {
   }
 });
 
+// 공개: 간병비 산출 룰 (예상 간병비 계산기 + 간병 요청 자동 책정용)
+import { getCareFeeRules } from './utils/careFee';
+app.get('/api/public/care-fee-rules', async (_req, res, next) => {
+  try {
+    const rules = await getCareFeeRules();
+    res.json({ success: true, data: rules });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/guardian', guardianRoutes);

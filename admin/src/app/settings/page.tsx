@@ -299,6 +299,104 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* 간병비 산출 룰 */}
+        <div className="card">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">간병비 산출 룰</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              예상 간병비 페이지(<code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">/care-fee-estimate</code>)와 신규 간병 요청의 자동 책정 일당에 사용됩니다.
+              환자 상태에 따라 등급(경증·중증·고위험·고위험+감염)을 자동 분류한 후 가산을 더해 평균값을 산출합니다.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">경증 base (원)</label>
+              <p className="text-xs text-gray-400 mb-1">부축·식사 도움 정도 (모든 항목 NO)</p>
+              <input type="number" min={0} step={1000}
+                value={settings.careFeeBaseLight ?? 130000}
+                onChange={(e) => handleChange("careFeeBaseLight", Number(e.target.value))}
+                className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">중증 base (원)</label>
+              <p className="text-xs text-gray-400 mb-1">편마비 등 (경증·고위험 제외)</p>
+              <input type="number" min={0} step={1000}
+                value={settings.careFeeBaseMedium ?? 140000}
+                onChange={(e) => handleChange("careFeeBaseMedium", Number(e.target.value))}
+                className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">고위험 base (원)</label>
+              <p className="text-xs text-gray-400 mb-1">치매·암·섬망·욕창·와상·사지/하반신마비·정신질환·투석</p>
+              <input type="number" min={0} step={1000}
+                value={settings.careFeeBaseHigh ?? 160000}
+                onChange={(e) => handleChange("careFeeBaseHigh", Number(e.target.value))}
+                className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">고위험+감염 base (원)</label>
+              <p className="text-xs text-gray-400 mb-1">감염성 질환 (결핵·MRSA·VRE·CRE 등)</p>
+              <input type="number" min={0} step={1000}
+                value={settings.careFeeBaseHighInfection ?? 180000}
+                onChange={(e) => handleChange("careFeeBaseHighInfection", Number(e.target.value))}
+                className="input-field" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 pt-4 border-t border-gray-100">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">최소 offset (원)</label>
+              <p className="text-xs text-gray-400 mb-1">평균 - {(settings.careFeeMinOffset ?? 10000).toLocaleString()} = 최소</p>
+              <input type="number" min={0} step={1000}
+                value={settings.careFeeMinOffset ?? 10000}
+                onChange={(e) => handleChange("careFeeMinOffset", Number(e.target.value))}
+                className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">최대 offset (원)</label>
+              <p className="text-xs text-gray-400 mb-1">평균 + {(settings.careFeeMaxOffset ?? 20000).toLocaleString()} = 최대</p>
+              <input type="number" min={0} step={1000}
+                value={settings.careFeeMaxOffset ?? 20000}
+                onChange={(e) => handleChange("careFeeMaxOffset", Number(e.target.value))}
+                className="input-field" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">70kg+ 가산 (원)</label>
+              <input type="number" min={0} step={1000}
+                value={settings.careFeeSurchargeHeavy ?? 5000}
+                onChange={(e) => handleChange("careFeeSurchargeHeavy", Number(e.target.value))}
+                className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">기저귀 가산 (원)</label>
+              <input type="number" min={0} step={1000}
+                value={settings.careFeeSurchargeDiaper ?? 5000}
+                onChange={(e) => handleChange("careFeeSurchargeDiaper", Number(e.target.value))}
+                className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">자동 인상 폭 (원)</label>
+              <p className="text-xs text-gray-400 mb-1">24h 무지원자 시</p>
+              <input type="number" min={0} step={1000}
+                value={settings.careFeeAutoRaiseAmount ?? 10000}
+                onChange={(e) => handleChange("careFeeAutoRaiseAmount", Number(e.target.value))}
+                className="input-field" />
+            </div>
+          </div>
+
+          <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg text-xs text-orange-900 leading-relaxed">
+            <strong>예시</strong> · 경증 ({(settings.careFeeBaseLight ?? 130000).toLocaleString()}원) +
+            70kg 가산 ({(settings.careFeeSurchargeHeavy ?? 5000).toLocaleString()}원) +
+            기저귀 가산 ({(settings.careFeeSurchargeDiaper ?? 5000).toLocaleString()}원) =
+            평균 <strong>{((settings.careFeeBaseLight ?? 130000) + (settings.careFeeSurchargeHeavy ?? 5000) + (settings.careFeeSurchargeDiaper ?? 5000)).toLocaleString()}원</strong> ·
+            범위 {(((settings.careFeeBaseLight ?? 130000) + (settings.careFeeSurchargeHeavy ?? 5000) + (settings.careFeeSurchargeDiaper ?? 5000)) - (settings.careFeeMinOffset ?? 10000)).toLocaleString()} ~ {(((settings.careFeeBaseLight ?? 130000) + (settings.careFeeSurchargeHeavy ?? 5000) + (settings.careFeeSurchargeDiaper ?? 5000)) + (settings.careFeeMaxOffset ?? 20000)).toLocaleString()}원
+          </div>
+        </div>
+
         <div className="card">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-gray-900">상담사 연결 대표번호</h3>

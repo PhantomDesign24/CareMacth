@@ -1733,7 +1733,29 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
       associationFeeDefault,
       cancellationFee,
       companyPhone,
+      // 간병비 산출 룰
+      careFeeBaseLight,
+      careFeeBaseMedium,
+      careFeeBaseHigh,
+      careFeeBaseHighInfection,
+      careFeeMinOffset,
+      careFeeMaxOffset,
+      careFeeSurchargeHeavy,
+      careFeeSurchargeDiaper,
+      careFeeAutoRaiseAmount,
     } = req.body;
+
+    // 간병비 룰 금액 검증 (모두 0 이상의 정수)
+    const careFeeFields = {
+      careFeeBaseLight, careFeeBaseMedium, careFeeBaseHigh, careFeeBaseHighInfection,
+      careFeeMinOffset, careFeeMaxOffset, careFeeSurchargeHeavy, careFeeSurchargeDiaper,
+      careFeeAutoRaiseAmount,
+    };
+    for (const [k, v] of Object.entries(careFeeFields)) {
+      if (v !== undefined && (!Number.isFinite(Number(v)) || Number(v) < 0)) {
+        throw new AppError(`${k} 는 0 이상의 숫자여야 합니다.`, 400);
+      }
+    }
 
     // 수수료 범위 검증 (0~100%)
     if (individualFeePercent !== undefined) {
@@ -1779,6 +1801,15 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
         ...(associationFeeDefault !== undefined && { associationFeeDefault: parseInt(associationFeeDefault) }),
         ...(cancellationFee !== undefined && { cancellationFee: parseInt(cancellationFee) }),
         ...(companyPhone !== undefined && { companyPhone: companyPhone === '' ? null : String(companyPhone) }),
+        ...(careFeeBaseLight !== undefined && { careFeeBaseLight: parseInt(careFeeBaseLight) }),
+        ...(careFeeBaseMedium !== undefined && { careFeeBaseMedium: parseInt(careFeeBaseMedium) }),
+        ...(careFeeBaseHigh !== undefined && { careFeeBaseHigh: parseInt(careFeeBaseHigh) }),
+        ...(careFeeBaseHighInfection !== undefined && { careFeeBaseHighInfection: parseInt(careFeeBaseHighInfection) }),
+        ...(careFeeMinOffset !== undefined && { careFeeMinOffset: parseInt(careFeeMinOffset) }),
+        ...(careFeeMaxOffset !== undefined && { careFeeMaxOffset: parseInt(careFeeMaxOffset) }),
+        ...(careFeeSurchargeHeavy !== undefined && { careFeeSurchargeHeavy: parseInt(careFeeSurchargeHeavy) }),
+        ...(careFeeSurchargeDiaper !== undefined && { careFeeSurchargeDiaper: parseInt(careFeeSurchargeDiaper) }),
+        ...(careFeeAutoRaiseAmount !== undefined && { careFeeAutoRaiseAmount: parseInt(careFeeAutoRaiseAmount) }),
       },
       create: {
         id: 'default',
@@ -1795,6 +1826,12 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
         companyPhone: companyPhone || null,
       },
     });
+
+    // 캐시 무효화 — 다음 요청부터 새 룰 반영
+    try {
+      const cf = await import('../utils/careFee');
+      cf.invalidateCareFeeCache();
+    } catch {}
 
     res.json({
       success: true,

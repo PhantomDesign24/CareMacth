@@ -915,6 +915,16 @@ export interface PlatformSettings {
   familyFeeFixed?: number;
   referralPoints?: number;
   badgeThreshold?: number;
+  // 간병비 산출 룰
+  careFeeBaseLight?: number;
+  careFeeBaseMedium?: number;
+  careFeeBaseHigh?: number;
+  careFeeBaseHighInfection?: number;
+  careFeeMinOffset?: number;
+  careFeeMaxOffset?: number;
+  careFeeSurchargeHeavy?: number;
+  careFeeSurchargeDiaper?: number;
+  careFeeAutoRaiseAmount?: number;
   [key: string]: unknown;
 }
 
