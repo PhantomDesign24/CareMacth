@@ -206,6 +206,7 @@ function GuardianDashboard() {
   // Cancel contract modal state
   const [cancelContractId, setCancelContractId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelReasonCategory, setCancelReasonCategory] = useState<"DISCHARGE" | "ICU_TRANSFER" | "OTHER">("OTHER");
   const [cancelLoading, setCancelLoading] = useState(false);
 
   // 환불 모달
@@ -633,10 +634,11 @@ function GuardianDashboard() {
     }
     setCancelLoading(true);
     try {
-      await contractAPI.cancel(cancelContractId, cancelReason.trim());
-      alert("계약이 취소되었습니다.");
+      const res = await contractAPI.cancel(cancelContractId, cancelReason.trim(), cancelReasonCategory);
+      alert((res as { message?: string })?.message || "취소 요청이 접수되었습니다. 관리자 검토 후 환불 처리됩니다.");
       setCancelContractId(null);
       setCancelReason("");
+      setCancelReasonCategory("OTHER");
       await fetchData();
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'response' in err) {
@@ -2038,17 +2040,55 @@ function GuardianDashboard() {
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
                 <ul className="space-y-1.5">
                   <li>- 진행 기간에 따라 일할 계산으로 환불됩니다</li>
+                  <li>- <strong>퇴원·중환자실 이동이 아닌 일방 취소</strong>는 1일치 위약금이 차감됩니다</li>
+                  <li>- 환불 금액은 관리자 검토 후 확정되어 입금됩니다</li>
                   <li>- 간병인에게 취소 알림이 발송됩니다</li>
                 </ul>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  취소 사유 <span className="text-red-500">*</span>
+                  취소 사유 분류 <span className="text-red-500">*</span>
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { value: "DISCHARGE", label: "환자 퇴원", desc: "위약금 면제" },
+                    { value: "ICU_TRANSFER", label: "중환자실 이동", desc: "위약금 면제" },
+                    { value: "OTHER", label: "기타 사유", desc: "1일치 위약금 차감" },
+                  ].map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        cancelReasonCategory === opt.value
+                          ? "border-rose-400 bg-rose-50"
+                          : "border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="cancelReasonCategory"
+                        value={opt.value}
+                        checked={cancelReasonCategory === opt.value}
+                        onChange={() => setCancelReasonCategory(opt.value as "DISCHARGE" | "ICU_TRANSFER" | "OTHER")}
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">{opt.label}</div>
+                        <div className={`text-xs mt-0.5 ${opt.value === "OTHER" ? "text-rose-600" : "text-emerald-600"}`}>
+                          {opt.desc}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  상세 사유 <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
-                  placeholder="취소 사유를 입력해주세요"
+                  placeholder="취소 사유를 자세히 입력해주세요"
                   rows={3}
                   className="input-field resize-none"
                   maxLength={500}
@@ -2061,6 +2101,7 @@ function GuardianDashboard() {
                 onClick={() => {
                   setCancelContractId(null);
                   setCancelReason("");
+                  setCancelReasonCategory("OTHER");
                 }}
                 disabled={cancelLoading}
                 className="btn-secondary flex-1"

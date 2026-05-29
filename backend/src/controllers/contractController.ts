@@ -216,6 +216,17 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
       if (gTpl && gTpl.enabled) {
         notifData.push({ userId: guardian.userId, type: gTpl.type, title: gTpl.title, body: gTpl.body, data: { contractId: newContract.id } as any });
       }
+      // 간병사에게 자가배상책임보험 안내 (매칭 성사 시 1회) — 어드민 알림 템플릿(INSURANCE_NOTICE_CAREGIVER)에서 본문 편집 가능
+      const insTpl = await renderTemplate('INSURANCE_NOTICE_CAREGIVER', {});
+      if (insTpl && insTpl.enabled) {
+        notifData.push({
+          userId: caregiver.userId,
+          type: insTpl.type,
+          title: insTpl.title,
+          body: insTpl.body,
+          data: { url: '/dashboard/caregiver?tab=settings', contractId: newContract.id } as any,
+        });
+      }
       if (notifData.length > 0) {
         await tx.notification.createMany({ data: notifData });
       }
@@ -315,11 +326,20 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
     }
 
     const { id } = req.params;
-    const { reason } = req.body;
+    const { reason, cancelReasonCategory } = req.body as {
+      reason?: string;
+      cancelReasonCategory?: 'DISCHARGE' | 'ICU_TRANSFER' | 'OTHER';
+    };
 
     if (!reason || reason.trim().length === 0) {
       throw new AppError('취소 사유를 입력해주세요.', 400);
     }
+
+    // 보호자 취소 시 사유 카테고리는 위약금 면제 판단용. 미입력시 OTHER 로 간주(=위약금 적용).
+    const normalizedCategory: 'DISCHARGE' | 'ICU_TRANSFER' | 'OTHER' | null =
+      cancelReasonCategory === 'DISCHARGE' || cancelReasonCategory === 'ICU_TRANSFER' || cancelReasonCategory === 'OTHER'
+        ? cancelReasonCategory
+        : null;
 
     const contract = await prisma.contract.findUnique({
       where: { id },
@@ -372,6 +392,15 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
     const usedAmount = contract.dailyRate * usedDays;
     const proportionRemaining = totalDays > 0 ? remainingDays / totalDays : 0;
 
+    // ── 위약금 산정 ──
+    // 보호자 취소 + 사유가 DISCHARGE/ICU_TRANSFER 가 아닌 경우(=OTHER 또는 미지정) → 1일치 위약금 차감
+    // 간병인 취소나 관리자 강제 취소는 위약금 없음
+    const penaltyApplies =
+      isGuardianCancel && (normalizedCategory === null || normalizedCategory === 'OTHER');
+    const penaltyAmount = penaltyApplies ? contract.dailyRate : 0;
+    // 보호자 취소는 카드든 무통장이든 관리자 검토 큐로 보냄 (자동 환불 X) — 관리자가 위약금/금액 확인 후 승인
+    const forceManualReview = isGuardianCancel;
+
     // 간병인 정산: 단일 calculateEarning 으로 통일 — 정액 수수료는 사용일수만큼 곱
     const earningCalc = calculateEarning({
       amount: usedAmount,
@@ -394,7 +423,11 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
         cancelledAt: now,
         cancelledBy: req.user!.id,
         cancellationReason: reason || `${cancelledByLabel} 요청에 의한 취소`,
-        cancellationPolicy: `총 ${totalDays}일 중 ${usedDays}일 사용`,
+        cancellationPolicy: penaltyApplies
+          ? `총 ${totalDays}일 중 ${usedDays}일 사용 + 위약금 1일치(${penaltyAmount.toLocaleString()}원) 차감`
+          : `총 ${totalDays}일 중 ${usedDays}일 사용`,
+        cancelReasonCategory: isGuardianCancel ? (normalizedCategory || 'OTHER') : null,
+        penaltyAmount: penaltyAmount > 0 ? penaltyAmount : null,
       },
     });
     if (claim.count === 0) {
@@ -428,9 +461,15 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
       tossError?: string;
     };
     const plans: RefundPlan[] = [];
+    // 위약금은 가장 큰 결제 한 건에서만 차감 (분산 시 부분환불 복잡도 증가). 첫 결제(가장 오래된)에 적용.
+    let penaltyRemaining = penaltyAmount;
     for (const p of activePayments) {
       const remainingPayable = Math.max(0, p.totalAmount - (p.refundAmount || 0));
-      const grossRefund = Math.round(p.totalAmount * proportionRemaining);
+      let grossRefund = Math.round(p.totalAmount * proportionRemaining);
+      // 이번 결제에 적용할 위약금 (남은 위약금 중 결제 환불액 한도 내)
+      const penaltyOnThis = Math.min(penaltyRemaining, grossRefund);
+      grossRefund -= penaltyOnThis;
+      penaltyRemaining -= penaltyOnThis;
       const cashRefund = Math.min(grossRefund, remainingPayable);
       const pointsRefund = Math.round((p.pointsUsed || 0) * proportionRemaining);
 
@@ -444,7 +483,11 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
       };
 
       if (cashRefund > 0) {
-        if (p.method === 'CARD' && p.tossPaymentKey) {
+        if (forceManualReview) {
+          // 보호자 취소 — 카드든 무통장이든 관리자 검토 큐로. 관리자가 위약금 차감액 확인 후 승인.
+          plan.manualNeeded = true;
+        } else if (p.method === 'CARD' && p.tossPaymentKey) {
+          // 간병인/관리자 강제 취소 — 카드는 즉시 자동 환불
           try {
             const secretKey = config.toss.secretKey;
             const encodedKey = Buffer.from(`${secretKey}:`).toString('base64');
@@ -784,12 +827,16 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
         netEarning,
         cancelledBy: isCaregiverCancel ? 'CAREGIVER' : 'GUARDIAN',
         penaltyWarning,
+        penaltyAmount,
+        cancelReasonCategory: isGuardianCancel ? (normalizedCategory || 'OTHER') : null,
       },
       message: finalizeFailed
         ? '계약은 취소됐지만 후속 처리 중 오류가 발생했습니다. 관리자가 수동 동기화 합니다.'
         : (isCaregiverCancel
             ? `계약이 취소되었습니다. 패널티가 부과되었습니다.`
-            : `계약이 취소되었습니다. ${usedDays}일 사용, ${refundAmount.toLocaleString()}원 환불${pointsRefund > 0 ? ` + ${pointsRefund.toLocaleString()}P 복구` : ''}${manualPendingCount > 0 ? ` (관리자 수동 처리 ${manualPendingCount}건 대기)` : ' 예정'}`),
+            : forceManualReview
+                ? `취소 요청이 접수되었습니다. ${penaltyAmount > 0 ? `위약금 1일치(${penaltyAmount.toLocaleString()}원) 차감 후 ` : ''}관리자 검토 후 환불 처리됩니다.`
+                : `계약이 취소되었습니다. ${usedDays}일 사용, ${refundAmount.toLocaleString()}원 환불${pointsRefund > 0 ? ` + ${pointsRefund.toLocaleString()}P 복구` : ''}${manualPendingCount > 0 ? ` (관리자 수동 처리 ${manualPendingCount}건 대기)` : ' 예정'}`),
     });
   } catch (error) {
     next(error);

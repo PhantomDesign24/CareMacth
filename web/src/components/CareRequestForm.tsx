@@ -528,12 +528,67 @@ function RadioWithEtc({ label, options, value, etcValue, onChange, onEtcChange, 
   );
 }
 
+// 자동 책정 룰 (백엔드와 동일 — /api/public/care-fee-rules 로 동적 로드)
+type CareFeeRules = {
+  baseLight: number; baseMedium: number; baseHigh: number; baseHighInfection: number;
+  minOffset: number; maxOffset: number;
+  surchargeHeavy: number; surchargeDiaper: number;
+};
+const DEFAULT_FEE_RULES: CareFeeRules = {
+  baseLight: 130000, baseMedium: 140000, baseHigh: 160000, baseHighInfection: 180000,
+  minOffset: 10000, maxOffset: 20000,
+  surchargeHeavy: 5000, surchargeDiaper: 5000,
+};
+
+// 환자 폼 상태 → 자동 책정 입력으로 변환
+function deriveFeeInput(form: CareRequestFormData) {
+  return {
+    suction: form.needsSuction === 'YES',
+    dementia: !!form.hasDementia,
+    paralysis: form.hasBedsore === 'YES' || form.paralysisStatus === 'FULL' || form.paralysisStatus === 'HEMI',
+    infection: !!form.hasInfection,
+    heavy: parseFloat(form.patientWeight) >= 70,
+    diaper: form.toiletStatus === 'DIAPER',
+  };
+}
+
+function calculateFee(form: CareRequestFormData, rules: CareFeeRules): { min: number; average: number; max: number; tier: string } {
+  const i = deriveFeeInput(form);
+  let base: number;
+  let tier: string;
+  if (i.infection) {
+    base = rules.baseHighInfection;
+    tier = '고위험 (감염성 질환)';
+  } else if (i.suction || i.dementia || i.paralysis) {
+    base = rules.baseHigh;
+    tier = '고위험';
+  } else {
+    base = rules.baseLight;
+    tier = '경증';
+  }
+  const surcharge = (i.heavy ? rules.surchargeHeavy : 0) + (i.diaper ? rules.surchargeDiaper : 0);
+  const avg = base + surcharge;
+  return { min: avg - rules.minOffset, average: avg, max: avg + rules.maxOffset, tier };
+}
+
 export default function CareRequestForm({ onSubmit, submitting = false }: Props) {
   const [form, setForm] = useState<CareRequestFormData>(initialFormData);
   const [step, setStep] = useState(1);
   const [diagSearch, setDiagSearch] = useState("");
   const [savedPatients, setSavedPatients] = useState<SavedPatient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
+  const [feeRules, setFeeRules] = useState<CareFeeRules>(DEFAULT_FEE_RULES);
+
+  // 백엔드에서 산출 룰 로드 (어드민이 수정한 값 반영)
+  useEffect(() => {
+    fetch("/api/public/care-fee-rules")
+      .then((r) => r.json())
+      .then((j) => { if (j?.success && j?.data) setFeeRules(j.data); })
+      .catch(() => {});
+  }, []);
+
+  // 환자 상태 기반 자동 책정 — step 진입 시마다 재계산
+  const autoFee = React.useMemo(() => calculateFee(form, feeRules), [form, feeRules]);
 
   const totalSteps = 4;
 
@@ -737,10 +792,11 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
       const dur = parseInt(form.duration);
       if (!Number.isFinite(dur) || dur <= 0) return "간병 기간은 1 이상이어야 합니다.";
     }
-    // Step 4 - 제시 일당 / 동의
-    if (!form.dailyRate?.trim()) return "제시 일당을 입력해주세요.";
-    const rate = parseInt(form.dailyRate);
-    if (!Number.isFinite(rate) || rate <= 0) return "제시 일당은 0원보다 커야 합니다.";
+    // Step 4 - 제시 일당 / 동의 — 빈 값이면 자동 책정값 사용
+    if (form.dailyRate?.trim()) {
+      const rate = parseInt(form.dailyRate);
+      if (!Number.isFinite(rate) || rate <= 0) return "제시 일당은 0원보다 커야 합니다.";
+    }
     if (!form.disclaimerChecked) return "의료행위 금지 안내 동의에 체크해주세요.";
     return null;
   };
@@ -754,7 +810,11 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
       alert(err);
       return;
     }
-    onSubmit?.(form);
+    // dailyRate 빈 값이면 자동 책정값으로 채워서 제출
+    const finalForm = form.dailyRate?.trim()
+      ? form
+      : { ...form, dailyRate: String(autoFee.average) };
+    onSubmit?.(finalForm);
   };
 
   const canProceed = () => {
@@ -783,9 +843,9 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
           form.duration
         );
       case 4:
+        // 일당 빈 값이면 자동 책정값 사용 → 제출 가능
         return form.disclaimerChecked
-          && !!form.dailyRate?.trim()
-          && parseInt(form.dailyRate) > 0;
+          && (!form.dailyRate?.trim() || parseInt(form.dailyRate) > 0);
       default:
         return false;
     }
@@ -1596,22 +1656,54 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
         <div className="space-y-6">
           <h3 className="text-xl font-bold text-gray-900">선호 사항 및 확인</h3>
 
+          {/* 자동 책정된 일당 안내 카드 */}
+          <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-orange-500 text-lg">💡</span>
+              <h4 className="text-sm font-bold text-orange-900">환자 상태 기반 자동 책정 일당</h4>
+              <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full bg-orange-500 text-white text-[10px] font-bold">
+                {autoFee.tier}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1 mb-2">
+              <span className="text-3xl font-extrabold text-orange-600 tabular-nums">{autoFee.average.toLocaleString("ko-KR")}</span>
+              <span className="text-base font-bold text-orange-700">원 / 일</span>
+            </div>
+            <p className="text-[11px] text-orange-700">
+              범위 <strong>{autoFee.min.toLocaleString("ko-KR")} ~ {autoFee.max.toLocaleString("ko-KR")}원</strong> · 환자 상태(석션·치매·마비·감염 + 70kg+·기저귀)에 따라 산출됨. 필요 시 아래에서 직접 조정 가능합니다.
+            </p>
+          </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              제시 일당 (원) <span className="text-red-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-sm font-medium text-gray-700">
+                제시 일당 (원) <span className="text-red-500">*</span>
+              </label>
+              {form.dailyRate && parseInt(form.dailyRate) !== autoFee.average && (
+                <button
+                  type="button"
+                  onClick={() => update("dailyRate", String(autoFee.average))}
+                  className="text-[11px] text-orange-600 hover:text-orange-700 underline"
+                >
+                  자동값({autoFee.average.toLocaleString("ko-KR")}원)으로 되돌리기
+                </button>
+              )}
+            </div>
             <div className="relative">
               <input
                 type="number"
                 className="input-field pr-8"
-                placeholder="예: 150000"
+                placeholder={String(autoFee.average)}
                 min="0"
-                value={form.dailyRate}
+                value={form.dailyRate || String(autoFee.average)}
                 onChange={(e) => update("dailyRate", e.target.value)}
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">원</span>
             </div>
-            <p className="mt-1 text-xs text-gray-400">간병인에게 제시할 하루 금액. 간병인이 다른 금액을 역제안할 수 있습니다.</p>
+            {form.dailyRate && parseInt(form.dailyRate) > 0 && parseInt(form.dailyRate) < autoFee.min && (
+              <p className="mt-1 text-xs text-red-500">⚠ 자동 책정 최소 금액({autoFee.min.toLocaleString("ko-KR")}원) 미만입니다. 매칭률이 크게 떨어질 수 있습니다.</p>
+            )}
+            <p className="mt-1 text-xs text-gray-400">간병인에게 제시할 하루 금액. 지원자가 없을 시 보호자가 직접 인상하거나 지역을 확대할 수 있습니다.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

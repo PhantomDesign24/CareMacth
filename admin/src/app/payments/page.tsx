@@ -53,6 +53,9 @@ interface RefundRequest {
   refundRejectReason: string | null;
   method: string;
   paidAt: string | null;
+  penaltyAmount?: number | null;
+  cancelReasonCategory?: "DISCHARGE" | "ICU_TRANSFER" | "OTHER" | null;
+  contractCancellationReason?: string | null;
 }
 
 interface MidSettlementContract {
@@ -158,6 +161,9 @@ export default function PaymentsPage() {
   const [refundActionLoading, setRefundActionLoading] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<RefundRequest | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  // 환불 승인 모달 (금액 수정 가능)
+  const [approveTarget, setApproveTarget] = useState<RefundRequest | null>(null);
+  const [approveAmount, setApproveAmount] = useState<string>("");
 
   const fetchRefundRequests = useCallback(async () => {
     setRefundLoading(true);
@@ -171,11 +177,31 @@ export default function PaymentsPage() {
     }
   }, [refundStatusFilter]);
 
-  const handleApproveRefund = async (id: string) => {
-    if (!confirm("환불을 승인하고 즉시 처리하시겠습니까?\n(Toss 환불 + 계약/정산 연동이 함께 실행됩니다)")) return;
+  const openApproveModal = (r: RefundRequest) => {
+    setApproveTarget(r);
+    setApproveAmount(String(r.refundRequestAmount ?? r.totalAmount));
+  };
+
+  const handleApproveRefund = async () => {
+    if (!approveTarget) return;
+    const n = parseInt(approveAmount.replace(/[^0-9]/g, ""), 10);
+    if (!Number.isFinite(n) || n <= 0) {
+      alert("환불 금액은 1원 이상의 정수여야 합니다.");
+      return;
+    }
+    const maxAllowed = approveTarget.totalAmount;
+    if (n > maxAllowed) {
+      alert(`환불 금액이 결제 금액(${maxAllowed.toLocaleString()}원)을 초과할 수 없습니다.`);
+      return;
+    }
     setRefundActionLoading(true);
     try {
-      await apiRequest(`/admin/payments/${id}/refund-approve`, { method: "POST" });
+      await apiRequest(`/admin/payments/${approveTarget.id}/refund-approve`, {
+        method: "POST",
+        body: { finalAmount: n },
+      });
+      setApproveTarget(null);
+      setApproveAmount("");
       await fetchRefundRequests();
     } catch (err: any) {
       alert(err?.message || "환불 승인 실패");
@@ -943,10 +969,22 @@ export default function PaymentsPage() {
                       <div className="text-xs text-gray-500">{r.caregiverName || "-"}</div>
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <div className="text-xs text-gray-500">{r.totalAmount.toLocaleString()}원</div>
-                      <div className="font-bold text-red-600">{(r.refundRequestAmount ?? r.totalAmount).toLocaleString()}원</div>
+                      <div className="text-xs text-gray-500">결제 {r.totalAmount.toLocaleString()}원</div>
+                      <div className="font-bold text-red-600">권장 {(r.refundRequestAmount ?? r.totalAmount).toLocaleString()}원</div>
+                      {(r.penaltyAmount ?? 0) > 0 && (
+                        <div className="text-[10px] text-amber-700 mt-0.5 bg-amber-50 px-1 rounded">위약금 -{(r.penaltyAmount || 0).toLocaleString()}</div>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-xs text-gray-700 max-w-[240px]">
+                      {r.cancelReasonCategory && (
+                        <div className={`inline-block text-[10px] px-1.5 py-0.5 rounded mr-1 mb-1 ${
+                          r.cancelReasonCategory === 'OTHER'
+                            ? 'bg-rose-50 text-rose-700'
+                            : 'bg-emerald-50 text-emerald-700'
+                        }`}>
+                          {r.cancelReasonCategory === 'DISCHARGE' ? '퇴원' : r.cancelReasonCategory === 'ICU_TRANSFER' ? '중환자실' : '기타'}
+                        </div>
+                      )}
                       {r.refundRequestReason || "-"}
                       {r.refundRejectReason && (
                         <div className="text-xs text-red-600 mt-1">거절 사유: {r.refundRejectReason}</div>
@@ -960,10 +998,10 @@ export default function PaymentsPage() {
                         <div className="flex gap-1 justify-center">
                           <button
                             disabled={refundActionLoading}
-                            onClick={() => handleApproveRefund(r.id)}
+                            onClick={() => openApproveModal(r)}
                             className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
                           >
-                            승인
+                            검토·승인
                           </button>
                           <button
                             disabled={refundActionLoading}
@@ -1019,6 +1057,73 @@ export default function PaymentsPage() {
                 className="flex-1 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50"
               >
                 {refundActionLoading ? "처리 중..." : "거절 처리"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 환불 승인 모달 (금액 수정 가능) */}
+      {approveTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => !refundActionLoading && setApproveTarget(null)}>
+          <div className="bg-white rounded-xl max-w-lg w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-3">환불 승인 — 금액 확인</h3>
+            <div className="space-y-3 text-sm">
+              <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
+                <div className="flex justify-between"><span className="text-gray-500">보호자</span><span className="font-medium">{approveTarget.guardianName || "-"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">결제 금액</span><span>{approveTarget.totalAmount.toLocaleString()}원</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">결제 수단</span><span>{({ CARD: "카드", BANK_TRANSFER: "무통장", DIRECT: "직접결제" } as any)[approveTarget.method] || approveTarget.method}</span></div>
+                {approveTarget.cancelReasonCategory && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">취소 사유 분류</span>
+                    <span className={approveTarget.cancelReasonCategory === 'OTHER' ? 'text-rose-600' : 'text-emerald-600'}>
+                      {approveTarget.cancelReasonCategory === 'DISCHARGE' ? '퇴원 (위약금 면제)' : approveTarget.cancelReasonCategory === 'ICU_TRANSFER' ? '중환자실 이동 (위약금 면제)' : '기타 (위약금 적용)'}
+                    </span>
+                  </div>
+                )}
+                {(approveTarget.penaltyAmount ?? 0) > 0 && (
+                  <div className="flex justify-between text-amber-700">
+                    <span>위약금 (1일치)</span><span>-{(approveTarget.penaltyAmount || 0).toLocaleString()}원</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t pt-1.5 mt-1.5">
+                  <span className="text-gray-500">시스템 권장 환불액</span>
+                  <span className="font-bold text-red-600">{(approveTarget.refundRequestAmount ?? approveTarget.totalAmount).toLocaleString()}원</span>
+                </div>
+              </div>
+              {approveTarget.refundRequestReason && (
+                <div className="bg-blue-50 rounded-lg p-3 text-xs text-gray-700">
+                  <div className="font-medium text-blue-700 mb-1">취소·환불 사유</div>
+                  {approveTarget.refundRequestReason}
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium mb-1 text-gray-700">최종 환불 금액 <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={approveAmount}
+                  onChange={(e) => setApproveAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="환불 금액 (원)"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+                <p className="text-[11px] text-gray-500 mt-1">권장액과 다르면 직접 수정 가능. 결제 금액({approveTarget.totalAmount.toLocaleString()}원) 이내.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => { setApproveTarget(null); setApproveAmount(""); }}
+                disabled={refundActionLoading}
+                className="flex-1 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleApproveRefund}
+                disabled={refundActionLoading || !approveAmount}
+                className="flex-1 py-2 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 disabled:opacity-50"
+              >
+                {refundActionLoading ? "처리 중..." : "승인 · 환불 실행"}
               </button>
             </div>
           </div>

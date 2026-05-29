@@ -8,7 +8,6 @@ import {
   FiChevronDown,
   FiCheck,
   FiArrowRight,
-  FiMessageCircle,
 } from "react-icons/fi";
 import {
   FaYoutube,
@@ -41,6 +40,7 @@ export default function HomePage() {
       <HomeBannerSection />
       <PremiumFeaturesSection />
       <CareFieldsSection />
+      <FeaturedReviewsSection />
       <WhyCareMatchSection />
       <CareEducationSection />
       <AppDownloadSection />
@@ -148,20 +148,6 @@ function HeroSection() {
       highlight: "6단계 고객만족 시스템",
       desc: "체계적인 관리로 최상의 간병 서비스를 제공합니다",
     },
-    {
-      type: "image" as const,
-      src: "/img/main/main_bg03.png",
-      title: "케어매치 AI",
-      highlight: "토탈 케어 플랫폼 3.0",
-      desc: "AI 기술과 전문 케어코디가 함께합니다",
-    },
-    {
-      type: "image" as const,
-      src: "/img/main/main_bg04.png",
-      title: "걱정없고 존중받는",
-      highlight: "노후는 행복한 삶입니다",
-      desc: "케어매치와 함께 편안한 간병을 시작하세요",
-    },
   ];
 
   useEffect(() => {
@@ -187,12 +173,12 @@ function HeroSection() {
               muted
               loop
               playsInline
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover object-top"
             >
               <source src={s.src} type="video/mp4" />
             </video>
           ) : (
-            <img src={s.src} alt="" className="w-full h-full object-cover" />
+            <img src={s.src} alt="" className="w-full h-full object-cover object-top" />
           )}
           <div className="absolute inset-0 bg-black/30" />
         </div>
@@ -670,7 +656,7 @@ function CareFeeEstimateSection() {
               <div className="grid grid-cols-3 gap-1 text-center">
                 <div className="bg-gray-50 rounded-lg py-1.5">
                   <div className="text-[9px] text-gray-400">최소</div>
-                  <div className="text-[11px] font-bold text-gray-700">125,000원</div>
+                  <div className="text-[11px] font-bold text-gray-700">125,000원</div>{/* avg-10000 */}
                 </div>
                 <div className="bg-orange-50 rounded-lg py-1.5 ring-1 ring-orange-200">
                   <div className="text-[9px] text-orange-500">평균</div>
@@ -944,6 +930,53 @@ function CareFieldsSection() {
 /* ------------------------------------------------------------------ */
 /*  Why CareMatch Section (7 Reasons)                                  */
 /* ------------------------------------------------------------------ */
+// 메인 노출 간병 후기 — 관리자가 isFeatured=true 토글한 후기만 표시
+function FeaturedReviewsSection() {
+  const [reviews, setReviews] = useState<Array<{
+    id: string; rating: number; comment: string | null; wouldRehire: boolean;
+    createdAt: string; guardianName: string; caregiverName: string; caregiverImage: string | null;
+  }>>([]);
+  useEffect(() => {
+    fetch("/api/public/featured-reviews")
+      .then((r) => r.json())
+      .then((j) => { if (j?.success && Array.isArray(j.data)) setReviews(j.data); })
+      .catch(() => {});
+  }, []);
+  if (reviews.length === 0) return null;
+  return (
+    <section className="py-12 md:py-16 bg-white">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-10">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+            보호자가 직접 남긴 <span className="text-primary-500">간병 후기</span>
+          </h2>
+          <p className="mt-2 text-sm text-gray-500">실제 매칭 완료 후 작성된 진짜 후기입니다.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {reviews.slice(0, 6).map((r) => (
+            <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-amber-500">{"★".repeat(Math.round(r.rating))}</span>
+                <span className="text-xs text-gray-500">{r.rating.toFixed(1)}</span>
+                {r.wouldRehire && (
+                  <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold">재고용 의사</span>
+                )}
+              </div>
+              <p className="text-sm text-gray-800 leading-relaxed line-clamp-4 mb-3">{r.comment || "—"}</p>
+              <div className="flex items-center gap-2 pt-3 border-t border-gray-100 text-xs">
+                <span className="text-gray-500">{r.guardianName}</span>
+                <span className="text-gray-300">→</span>
+                <span className="font-medium text-gray-700">{r.caregiverName} 간병사</span>
+                <span className="ml-auto text-gray-400 text-[10px]">{new Date(r.createdAt).toLocaleDateString("ko-KR")}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function WhyCareMatchSection() {
   const reasons = [
     {
@@ -1180,15 +1213,15 @@ function ConsultationSection() {
           </a>
         </div>
 
-        {/* Online Q&A Button */}
-        <Link
-          href="/community"
+        {/* 전화 상담 버튼 */}
+        <a
+          href={`tel:${SITE.phone}`}
           className="inline-flex items-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-primary-500 text-white font-bold rounded-2xl text-sm sm:text-base
                      hover:bg-primary-600 transition-all duration-200 shadow-xl shadow-primary-500/30"
         >
-          <FiMessageCircle className="w-5 h-5" />
-          온라인 상담 문의
-        </Link>
+          <FiPhone className="w-5 h-5" />
+          전화 상담 {SITE.phone}
+        </a>
       </div>
     </section>
   );

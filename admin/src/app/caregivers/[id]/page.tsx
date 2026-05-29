@@ -26,6 +26,15 @@ import {
 
 // ─── Helpers ───────────────────────────────────────────
 
+// 인증 라우트(/api/files/private/...) 는 img/a 태그가 헤더 못 보내므로 ?token= 동봉
+function withAuthToken(url: string | null | undefined): string {
+  if (!url) return "";
+  if (!url.startsWith("/api/files/private/")) return url;
+  if (typeof window === "undefined") return url;
+  const token = localStorage.getItem("token");
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+}
+
 function genderLabel(gender: string | null | undefined): string {
   if (!gender) return "";
   switch (gender) {
@@ -476,7 +485,7 @@ export default function CaregiverDetailPage() {
           {/* Avatar */}
           {data.user.profileImage ? (
             <img
-              src={data.user.profileImage}
+              src={withAuthToken(data.user.profileImage)}
               alt={data.user.name}
               className="h-24 w-24 rounded-2xl object-cover"
             />
@@ -583,16 +592,32 @@ export default function CaregiverDetailPage() {
 
           {/* Actions */}
           <div className="flex flex-col gap-2 lg:items-end">
-            {data.status === "PENDING" && (
-              <>
-                <button onClick={handleApprove} disabled={actionLoading} className="btn-primary">
-                  승인
-                </button>
-                <button onClick={handleReject} disabled={actionLoading} className="btn-danger">
-                  거절
-                </button>
-              </>
-            )}
+            {data.status === "PENDING" && (() => {
+              const missing: string[] = [];
+              if (!data.identityVerified || !data.idCardImage) missing.push("신분증 본인확인");
+              if (data.hasCriminalRecord === null || data.hasCriminalRecord === undefined) missing.push("범죄이력 자가신고");
+              const canApprove = missing.length === 0;
+              return (
+                <>
+                  <button
+                    onClick={handleApprove}
+                    disabled={actionLoading || !canApprove}
+                    className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={canApprove ? "" : `필요: ${missing.join(", ")}`}
+                  >
+                    승인
+                  </button>
+                  {!canApprove && (
+                    <p className="text-xs text-amber-600 text-right">
+                      ⚠ 승인 전 필요: <strong>{missing.join(", ")}</strong>
+                    </p>
+                  )}
+                  <button onClick={handleReject} disabled={actionLoading} className="btn-danger">
+                    거절
+                  </button>
+                </>
+              );
+            })()}
             {data.status === "APPROVED" && (
               <button onClick={handleToggleBadge} disabled={actionLoading} className="btn-primary">
                 {data.hasBadge ? "뱃지 회수" : "뱃지 부여"}
@@ -680,7 +705,7 @@ export default function CaregiverDetailPage() {
                       <span className="badge-yellow">미인증</span>
                     )}
                     {cert.imageUrl && (
-                      <a href={cert.imageUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm">
+                      <a href={withAuthToken(cert.imageUrl)} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm">
                         보기
                       </a>
                     )}
@@ -762,10 +787,10 @@ export default function CaregiverDetailPage() {
                         {cert.imageUrl ? (
                           <button
                             type="button"
-                            onClick={() => setImageModalUrl(cert.imageUrl)}
+                            onClick={() => setImageModalUrl(withAuthToken(cert.imageUrl))}
                             className="h-16 w-16 flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border border-gray-200 hover:opacity-80 transition-opacity"
                           >
-                            <img src={cert.imageUrl} alt={cert.name} className="h-full w-full object-cover" />
+                            <img src={withAuthToken(cert.imageUrl)} alt={cert.name} className="h-full w-full object-cover" />
                           </button>
                         ) : (
                           <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg bg-blue-50">
@@ -792,7 +817,7 @@ export default function CaregiverDetailPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         {cert.imageUrl && (
-                          <a href={cert.imageUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm">
+                          <a href={withAuthToken(cert.imageUrl)} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm">
                             원본 보기
                           </a>
                         )}
@@ -827,10 +852,10 @@ export default function CaregiverDetailPage() {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                   <button
                     type="button"
-                    onClick={() => setImageModalUrl(data.idCardImage!)}
+                    onClick={() => setImageModalUrl(withAuthToken(data.idCardImage!))}
                     className="h-32 w-full max-w-[12rem] flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border border-gray-200 hover:opacity-80 transition-opacity sm:w-48"
                   >
-                    <img src={data.idCardImage} alt="신분증" className="h-full w-full object-cover" />
+                    <img src={withAuthToken(data.idCardImage)} alt="신분증" className="h-full w-full object-cover" />
                   </button>
                   <div>
                     <p className="text-sm text-gray-700">신분증이 등록되어 있습니다.</p>
@@ -838,7 +863,7 @@ export default function CaregiverDetailPage() {
                       {data.identityVerified ? "본인 확인 완료" : "본인 확인 미완료"}
                     </p>
                     <div className="mt-2 flex gap-2">
-                      <a href={data.idCardImage} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm inline-block">
+                      <a href={withAuthToken(data.idCardImage)} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm inline-block">
                         원본 보기
                       </a>
                       {!data.identityVerified ? (
@@ -878,10 +903,10 @@ export default function CaregiverDetailPage() {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                   <button
                     type="button"
-                    onClick={() => setImageModalUrl(data.criminalCheckDoc!)}
+                    onClick={() => setImageModalUrl(withAuthToken(data.criminalCheckDoc!))}
                     className="h-32 w-full max-w-[12rem] flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border border-gray-200 hover:opacity-80 transition-opacity sm:w-48"
                   >
-                    <img src={data.criminalCheckDoc} alt="범죄이력 조회서" className="h-full w-full object-cover" />
+                    <img src={withAuthToken(data.criminalCheckDoc)} alt="범죄이력 조회서" className="h-full w-full object-cover" />
                   </button>
                   <div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -901,7 +926,7 @@ export default function CaregiverDetailPage() {
                       </div>
                     </div>
                     <div className="mt-3 flex gap-2">
-                      <a href={data.criminalCheckDoc} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm inline-block">
+                      <a href={withAuthToken(data.criminalCheckDoc)} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm inline-block">
                         원본 보기
                       </a>
                       {!data.criminalCheckDone ? (

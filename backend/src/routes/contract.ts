@@ -35,11 +35,13 @@ router.get('/:id', authorize('GUARDIAN', 'CAREGIVER', 'ADMIN'), contractControll
 // PUT /:id/cancel - 계약 취소 (보호자/간병인/관리자)
 router.put('/:id/cancel', authorize('GUARDIAN', 'CAREGIVER', 'ADMIN'), [
   body('reason').notEmpty().trim().isLength({ min: 1, max: 500 }).withMessage('취소 사유를 입력해주세요. (1~500자)'),
+  body('cancelReasonCategory').optional().isIn(['DISCHARGE', 'ICU_TRANSFER', 'OTHER']).withMessage('취소 사유 카테고리가 올바르지 않습니다.'),
 ], contractController.cancelContract);
 
 // POST /:id/cancel - 계약 취소 (POST 방식도 지원)
 router.post('/:id/cancel', authorize('GUARDIAN', 'CAREGIVER', 'ADMIN'), [
   body('reason').notEmpty().trim().isLength({ min: 1, max: 500 }).withMessage('취소 사유를 입력해주세요. (1~500자)'),
+  body('cancelReasonCategory').optional().isIn(['DISCHARGE', 'ICU_TRANSFER', 'OTHER']).withMessage('취소 사유 카테고리가 올바르지 않습니다.'),
 ], contractController.cancelContract);
 
 // POST /:id/extend - 연장 요청 (보호자만)

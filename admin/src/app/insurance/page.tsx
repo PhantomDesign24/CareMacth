@@ -240,7 +240,14 @@ export default function InsuranceAdminPage() {
                         )}
                         {r.documentUrl && (
                           <a
-                            href={`${API_HOST}${r.documentUrl}`}
+                            href={(() => {
+                              const u = r.documentUrl;
+                              if (u.startsWith("/api/files/private/") && typeof window !== "undefined") {
+                                const t = localStorage.getItem("token");
+                                return t ? `${API_HOST}${u}?token=${encodeURIComponent(t)}` : `${API_HOST}${u}`;
+                              }
+                              return `${API_HOST}${u}`;
+                            })()}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"

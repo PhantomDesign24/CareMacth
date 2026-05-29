@@ -372,6 +372,13 @@ enum ApplicationStatus {
   CANCELLED // 취소됨
 }
 
+// 보호자 계약 취소 사유 카테고리 — 위약금 면제 여부 판단용
+enum CancelReasonCategory {
+  DISCHARGE     // 환자 퇴원 — 위약금 면제
+  ICU_TRANSFER  // 중환자실 이동 — 위약금 면제
+  OTHER         // 기타 (1일치 위약금 차감)
+}
+
 model CareApplication {
   id              String            @id @default(uuid())
   careRequestId   String
@@ -442,10 +449,12 @@ model Contract {
   corporateName    String? // 간병인 사용 법인명 (이 계약건에서 파견된 업체명, PDF 간병일지용)
 
   // 취소 정책
-  cancellationPolicy String?
-  cancelledAt        DateTime?
-  cancelledBy        String? // userId
-  cancellationReason String?
+  cancellationPolicy   String?
+  cancelledAt          DateTime?
+  cancelledBy          String? // userId
+  cancellationReason   String?
+  cancelReasonCategory CancelReasonCategory? // 보호자 취소 시 사유 분류 (위약금 면제 여부 결정)
+  penaltyAmount        Int? // 1일치 위약금 (취소 시 계산되어 환불액에서 차감, OTHER 사유만 적용)
 
   payments       Payment[]
   careRecords    CareRecord[]
@@ -658,6 +667,7 @@ model Review {
   comment     String?
   wouldRehire Boolean   @default(false) // 재고용 의사
   isHidden    Boolean   @default(false) // 관리자 가림 처리
+  isFeatured  Boolean   @default(false) // 메인 페이지 노출 (관리자 선정)
 
   createdAt DateTime @default(now())
 
@@ -967,6 +977,9 @@ model PlatformConfig {
   careFeeSurchargeHeavy    Int @default(5000)   // 몸무게 70kg 이상 가산
   careFeeSurchargeDiaper   Int @default(5000)   // 기저귀 사용 가산
   careFeeAutoRaiseAmount   Int @default(10000)  // 24시간 무지원자 시 자동 인상 폭
+
+  // 평균 간병 기간 (예상 간병비 산출 페이지 표시용) — 소수점 1자리(예: 6.2)
+  careFeeAvgDays           Float @default(6.2) // 단위: 일
 
   updatedAt DateTime @updatedAt
 }

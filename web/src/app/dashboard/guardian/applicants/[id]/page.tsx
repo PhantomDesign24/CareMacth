@@ -116,9 +116,10 @@ export default function ApplicantsPage() {
     );
   }, [reviewsModalCaregiver]);
 
-  // 금액 인상 모달 상태
+  // 금액 인상 모달 상태 — 인상 폭(원) 을 4단계 프리셋으로 선택
   const [showRaiseModal, setShowRaiseModal] = useState(false);
-  const [newDailyRate, setNewDailyRate] = useState("");
+  const [raiseAmount, setRaiseAmount] = useState<number | null>(null);
+  const RAISE_PRESETS = [5000, 10000, 15000, 20000];
   const [showExpandRegionModal, setShowExpandRegionModal] = useState(false);
   const [expandRegions, setExpandRegions] = useState<string[]>([]);
   const [expandSido, setExpandSido] = useState<string>("");
@@ -216,17 +217,18 @@ export default function ApplicantsPage() {
   };
 
   const handleRaiseRate = async () => {
-    const rate = parseInt(newDailyRate);
-    if (!rate || rate <= (careRequest?.dailyRate || 0)) {
-      alert(`새 일당은 현재 일당(${(careRequest?.dailyRate || 0).toLocaleString()}원)보다 높아야 합니다.`);
+    const current = careRequest?.dailyRate || 0;
+    if (!raiseAmount || raiseAmount <= 0) {
+      alert("인상 금액을 선택해주세요.");
       return;
     }
+    const rate = current + raiseAmount;
     setRaisingRate(true);
     try {
       await careRequestAPI.raiseRate(careRequestId, rate);
-      alert("금액이 인상되었습니다. 간병인들에게 알림이 발송되었습니다.");
+      alert(`일당이 ${current.toLocaleString()}원 → ${rate.toLocaleString()}원으로 인상되었습니다. 간병인들에게 알림이 발송되었습니다.`);
       setShowRaiseModal(false);
-      setNewDailyRate("");
+      setRaiseAmount(null);
       await fetchData();
     } catch (err: any) {
       const message =
@@ -469,7 +471,7 @@ export default function ApplicantsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setNewDailyRate("");
+                    setRaiseAmount(null);
                     setShowRaiseModal(true);
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors"
@@ -976,33 +978,44 @@ export default function ApplicantsPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    새 일당 (원)
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    인상 금액 선택
                   </label>
-                  <input
-                    type="number"
-                    value={newDailyRate}
-                    onChange={(e) => setNewDailyRate(e.target.value)}
-                    placeholder={`${((careRequest?.dailyRate || 0) + 10000).toLocaleString()}원 이상`}
-                    min={(careRequest?.dailyRate || 0) + 1}
-                    className="input-field"
-                  />
-                  {newDailyRate && parseInt(newDailyRate) > (careRequest?.dailyRate || 0) && (
-                    <p className="text-sm text-green-600 mt-1">
-                      +{(parseInt(newDailyRate) - (careRequest?.dailyRate || 0)).toLocaleString()}원 인상
-                    </p>
-                  )}
-                  {newDailyRate && parseInt(newDailyRate) <= (careRequest?.dailyRate || 0) && (
-                    <p className="text-sm text-red-500 mt-1">
-                      현재 일당보다 높은 금액을 입력해주세요.
-                    </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {RAISE_PRESETS.map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        onClick={() => setRaiseAmount(amount)}
+                        className={`py-3 rounded-lg border-2 text-sm font-bold transition-colors ${
+                          raiseAmount === amount
+                            ? "border-amber-500 bg-amber-50 text-amber-700"
+                            : "border-gray-200 bg-white text-gray-700 hover:border-amber-300"
+                        }`}
+                      >
+                        +{amount.toLocaleString()}원
+                      </button>
+                    ))}
+                  </div>
+                  {raiseAmount && (
+                    <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">인상 후 일당</span>
+                        <span className="font-bold text-amber-700">
+                          {((careRequest?.dailyRate || 0) + raiseAmount).toLocaleString()}원
+                        </span>
+                      </div>
+                      <div className="text-xs text-emerald-600 text-right mt-0.5">
+                        +{raiseAmount.toLocaleString()}원 인상
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
               <div className="flex gap-3 mt-6">
                 <button
                   type="button"
-                  onClick={() => setShowRaiseModal(false)}
+                  onClick={() => { setShowRaiseModal(false); setRaiseAmount(null); }}
                   disabled={raisingRate}
                   className="btn-secondary flex-1 text-sm"
                 >
@@ -1011,11 +1024,7 @@ export default function ApplicantsPage() {
                 <button
                   type="button"
                   onClick={handleRaiseRate}
-                  disabled={
-                    raisingRate ||
-                    !newDailyRate ||
-                    parseInt(newDailyRate) <= (careRequest?.dailyRate || 0)
-                  }
+                  disabled={raisingRate || !raiseAmount}
                   className="flex-1 text-sm px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-medium rounded-lg transition-colors"
                 >
                   {raisingRate ? "처리 중..." : "재공고"}

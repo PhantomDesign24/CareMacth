@@ -279,3 +279,70 @@ export const adminGetHiddenReviews = async (req: AuthRequest, res: Response, nex
     next(error);
   }
 };
+
+// GET /admin/reviews - 모든 리뷰 (관리용)
+export const adminGetAllReviews = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const onlyVisible = req.query.visible === 'true';
+    const reviews = await prisma.review.findMany({
+      where: onlyVisible ? { isHidden: false } : {},
+      include: {
+        guardian: { include: { user: { select: { name: true } } } },
+        caregiver: { include: { user: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    res.json({ success: true, data: reviews });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /admin/reviews/:id/feature - 메인 노출 토글
+export const adminToggleReviewFeatured = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { isFeatured } = req.body;
+    const review = await prisma.review.findUnique({ where: { id } });
+    if (!review) throw new AppError('리뷰를 찾을 수 없습니다.', 404);
+    if (review.isHidden && isFeatured) {
+      throw new AppError('숨김 처리된 리뷰는 메인 노출할 수 없습니다.', 400);
+    }
+    await prisma.review.update({
+      where: { id },
+      data: { isFeatured: !!isFeatured },
+    });
+    res.json({ success: true, message: isFeatured ? '메인 노출로 설정되었습니다.' : '메인 노출이 해제되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /public/featured-reviews - 메인 페이지용 노출 리뷰 (인증 불필요)
+export const getPublicFeaturedReviews = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const reviews = await prisma.review.findMany({
+      where: { isFeatured: true, isHidden: false },
+      include: {
+        guardian: { include: { user: { select: { name: true } } } },
+        caregiver: { include: { user: { select: { name: true, profileImage: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+    });
+    const sanitized = reviews.map((r) => ({
+      id: r.id,
+      rating: r.rating,
+      comment: r.comment,
+      wouldRehire: r.wouldRehire,
+      createdAt: r.createdAt,
+      guardianName: r.guardian?.user?.name?.[0] ? `${r.guardian.user.name[0]}**` : '익명',
+      caregiverName: r.caregiver?.user?.name || '간병사',
+      caregiverImage: r.caregiver?.user?.profileImage || null,
+    }));
+    res.json({ success: true, data: sanitized });
+  } catch (error) {
+    next(error);
+  }
+};

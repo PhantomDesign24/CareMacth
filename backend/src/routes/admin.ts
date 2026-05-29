@@ -94,6 +94,8 @@ router.post('/reviews/:id/hide', reportController.adminHideReview);
 
 // 숨김 처리된 리뷰 목록
 router.get('/reviews/hidden', reportController.adminGetHiddenReviews);
+router.get('/reviews', reportController.adminGetAllReviews);
+router.put('/reviews/:id/feature', reportController.adminToggleReviewFeatured);
 
 // 보험서류 신청 관리
 import * as insuranceController from '../controllers/insuranceController';

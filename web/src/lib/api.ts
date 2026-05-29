@@ -344,8 +344,8 @@ export const notificationAPI = {
 
 export const contractAPI = {
   get: (id: string) => api.get(`/contracts/${id}`),
-  cancel: (id: string, reason: string) =>
-    api.post(`/contracts/${id}/cancel`, { reason }),
+  cancel: (id: string, reason: string, cancelReasonCategory?: "DISCHARGE" | "ICU_TRANSFER" | "OTHER") =>
+    api.post(`/contracts/${id}/cancel`, { reason, ...(cancelReasonCategory && { cancelReasonCategory }) }),
   updateCorporateName: (id: string, corporateName: string) =>
     api.patch(`/contracts/${id}/corporate-name`, { corporateName }),
   sign: (id: string, signature: string) =>

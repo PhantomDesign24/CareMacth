@@ -1024,6 +1024,8 @@ async function executeRefund(
 export const approveRefundRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
+    // 관리자가 권장액을 검토 후 최종 환불액을 수정할 수 있도록 body.finalAmount 허용
+    const { finalAmount: rawFinalAmount } = (req.body || {}) as { finalAmount?: number | string };
     const payment = await prisma.payment.findUnique({
       where: { id },
       include: {
@@ -1035,20 +1037,30 @@ export const approveRefundRequest = async (req: AuthRequest, res: Response, next
     if (payment.refundRequestStatus !== 'PENDING') {
       throw new AppError('처리 대기 중인 환불 요청이 아닙니다.', 400);
     }
-    // 잔액 재검증: refundRequestAmount 가 잔여 환불 가능액을 초과하지 않아야 함
+    // 잔액 재검증: 최종 환불액이 잔여 환불 가능액을 초과하지 않아야 함
     const existingRefunded = payment.refundAmount || 0;
     const remainingPayable = Math.max(0, payment.totalAmount - existingRefunded);
     if (remainingPayable <= 0) {
       throw new AppError('이미 전액 환불된 결제입니다.', 400);
     }
-    const requestedAmount = payment.refundRequestAmount ?? remainingPayable;
-    if (requestedAmount > remainingPayable) {
+    // 우선순위: body.finalAmount(관리자 수정) → payment.refundRequestAmount(요청 시 권장액) → 잔여 전액
+    let resolvedAmount: number;
+    if (rawFinalAmount !== undefined && rawFinalAmount !== null && rawFinalAmount !== '') {
+      const n = parsePositiveInt(rawFinalAmount);
+      if (n === null) {
+        throw new AppError('환불 금액은 1원 이상의 정수여야 합니다.', 400);
+      }
+      resolvedAmount = n;
+    } else {
+      resolvedAmount = payment.refundRequestAmount ?? remainingPayable;
+    }
+    if (resolvedAmount > remainingPayable) {
       throw new AppError(
-        `환불 요청 금액(${requestedAmount.toLocaleString()}원)이 잔여 환불 가능액(${remainingPayable.toLocaleString()}원)을 초과했습니다.`,
+        `환불 금액(${resolvedAmount.toLocaleString()}원)이 잔여 환불 가능액(${remainingPayable.toLocaleString()}원)을 초과했습니다.`,
         400,
       );
     }
-    const refundAmount = requestedAmount;
+    const refundAmount = resolvedAmount;
     const reason = payment.refundRequestReason || '환불 요청 승인';
 
     // 트랜지션 락: refundReviewedAt=null 인 PENDING 만 클레임 (1회만 통과)
@@ -1387,6 +1399,7 @@ export const getRefundRequests = async (req: AuthRequest, res: Response, next: N
       },
       orderBy: { refundRequestedAt: 'desc' },
     });
+    // 계약별 위약금/사유 카테고리 정보 첨부 (Prisma include 로 cancelReasonCategory/penaltyAmount 함께 로드됨)
     res.json({
       success: true,
       data: payments.map((p) => {
@@ -1417,6 +1430,10 @@ export const getRefundRequests = async (req: AuthRequest, res: Response, next: N
           paidAt: p.paidAt,
           offlinePending: isOfflinePending,
           stage,
+          // 위약금/사유 카테고리 정보 (보호자 일방 취소 시에만 채워짐)
+          penaltyAmount: p.contract?.penaltyAmount ?? null,
+          cancelReasonCategory: p.contract?.cancelReasonCategory ?? null,
+          contractCancellationReason: p.contract?.cancellationReason ?? null,
         };
       }),
     });

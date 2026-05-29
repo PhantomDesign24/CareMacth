@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { FiArrowLeft, FiSearch, FiCheck, FiHeart, FiAlertCircle, FiActivity, FiShield, FiRefreshCw, FiArrowRight, FiInfo, FiCalendar, FiMapPin } from "react-icons/fi";
 import { DIAGNOSES } from "./diagnoses";
+import { getDiagnosisHint, getDiagnosisDurationHint } from "./diagnosisMapping";
 
 // CareMatch 산출 룰 — 백엔드에서 동적으로 로드 (admin/settings 에서 변경 가능)
 // fallback 기본값 (네트워크 실패 시)
@@ -12,27 +13,33 @@ type CareFeeRules = {
   baseLight: number; baseMedium: number; baseHigh: number; baseHighInfection: number;
   minOffset: number; maxOffset: number;
   surchargeHeavy: number; surchargeDiaper: number;
-  autoRaiseAmount: number;
+  avgDays: number;
 };
 const DEFAULT_RULES: CareFeeRules = {
   baseLight: 130000, baseMedium: 140000, baseHigh: 160000, baseHighInfection: 180000,
   minOffset: 10000, maxOffset: 20000,
   surchargeHeavy: 5000, surchargeDiaper: 5000,
-  autoRaiseAmount: 10000,
+  avgDays: 6.2,
 };
 
 function priceFor(opts: {
   suction: boolean; dementia: boolean; paralysis: boolean; infection: boolean;
   heavy: boolean; diaper: boolean;
+  diagnosis?: string;
 }, rules: CareFeeRules): { min: number; average: number; max: number; tier: string } {
   let base: number;
   let tier: string;
+  // 진단명 강제 분류 (우선순위: 감염 > 진단명 hint > 문항 응답)
+  const hint = getDiagnosisHint(opts.diagnosis);
   if (opts.infection) {
     base = rules.baseHighInfection;
     tier = '고위험 (감염성 질환)';
-  } else if (opts.suction || opts.dementia || opts.paralysis) {
+  } else if (hint.forceTier === 'HIGH' || opts.suction || opts.dementia || opts.paralysis) {
     base = rules.baseHigh;
-    tier = '고위험';
+    tier = hint.forceTier === 'HIGH' ? `고위험 (${hint.reason})` : '고위험';
+  } else if (hint.forceTier === 'MEDIUM') {
+    base = rules.baseMedium;
+    tier = `중증 (${hint.reason})`;
   } else {
     base = rules.baseLight;
     tier = '경증';
@@ -76,12 +83,11 @@ const QUESTIONS = [
 type AnswerKey = "suction" | "dementia" | "paralysis" | "infection" | "heavy" | "diaper";
 
 function PriceGraph({ result }: { result: { min: number; average: number; max: number } }) {
-  const range = result.max - result.min || 1;
-  const avgPos = ((result.average - result.min) / range) * 100;
+  // 평균은 항상 중앙(50%)으로 시각 일관성 유지 — 라벨 정렬(min: 왼쪽, avg: 가운데, max: 오른쪽)과 일치
   return (
     <div className="relative">
       <div className="relative h-3 rounded-full bg-gradient-to-r from-amber-100 via-orange-200 to-amber-100">
-        <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${avgPos}%`, transform: `translate(-50%, -50%)` }}>
+        <div className="absolute top-1/2 left-1/2" style={{ transform: 'translate(-50%, -50%)' }}>
           <div className="w-5 h-5 rounded-full bg-white border-[3px] border-orange-500 shadow-md" />
         </div>
       </div>
@@ -137,8 +143,9 @@ export default function CareFeeEstimatePage() {
       infection: !!answers.infection,
       heavy: !!answers.heavy,
       diaper: !!answers.diaper,
+      diagnosis, // 진단명 hint 반영 (다리 골절·정신질환)
     }, rules);
-  }, [answers, allAnswered, rules]);
+  }, [answers, allAnswered, rules, diagnosis]);
 
   const animatedAvg = useCountUp(result?.average || 0, 1500);
 
@@ -177,7 +184,7 @@ export default function CareFeeEstimatePage() {
               </span>
             </h1>
             <p className="text-sm sm:text-base text-gray-600 leading-relaxed mb-5 lg:mb-7">
-              진단명과 환자 상태 4가지만 입력하면<br className="hidden sm:block" />
+              진단명과 환자 상태 6가지만 입력하면<br className="hidden sm:block" />
               하루 예상 간병비를 즉시 확인할 수 있습니다.
             </p>
 
@@ -196,7 +203,7 @@ export default function CareFeeEstimatePage() {
             {/* 특징 3개 */}
             <div className="grid grid-cols-3 gap-2">
               {[
-                { icon: "⚡", title: "30초", desc: "간단한 4문항" },
+                { icon: "⚡", title: "30초", desc: "간단한 6문항" },
                 { icon: "💰", title: "정확한 시세", desc: "실시간 데이터" },
                 { icon: "🛡️", title: "무료", desc: "회원가입 불필요" },
               ].map((item) => (
@@ -299,7 +306,7 @@ export default function CareFeeEstimatePage() {
               </div>
             )}
 
-            {/* Step 1: 4문항 */}
+            {/* Step 1: 6문항 */}
             {step === 1 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 px-4 py-3 shadow-sm">
@@ -396,7 +403,6 @@ export default function CareFeeEstimatePage() {
                       <span className="text-4xl sm:text-5xl font-extrabold text-gray-900 tabular-nums">{fmt(animatedAvg)}</span>
                       <span className="text-2xl font-bold text-gray-700">원</span>
                     </div>
-                    <p className="text-[11px] text-rose-500 font-medium">( 내국인 식대 포함 기준 )</p>
                   </div>
 
                   <div className="px-5 sm:px-7 pb-7">
@@ -430,13 +436,22 @@ export default function CareFeeEstimatePage() {
                           <circle cx="24" cy="35" r="2.5" fill="#FF922E" />
                           <circle cx="32" cy="35" r="2" fill="#93C5FD" />
                         </svg>
-                        <div>
-                          <div className="leading-none">
-                            <span className="text-3xl font-extrabold text-gray-900 tabular-nums">6.2</span>
-                            <span className="text-lg font-bold text-gray-700 ml-0.5">일</span>
-                          </div>
-                          <div className="text-[10px] text-gray-400 mt-1">전체 평균</div>
-                        </div>
+                        {(() => {
+                          const durHint = getDiagnosisDurationHint(diagnosis, rules.avgDays);
+                          const days = durHint.days ?? rules.avgDays;
+                          const isCategory = durHint.days !== null;
+                          return (
+                            <div>
+                              <div className="leading-none">
+                                <span className="text-3xl font-extrabold text-gray-900 tabular-nums">{days.toFixed(1)}</span>
+                                <span className="text-lg font-bold text-gray-700 ml-0.5">일</span>
+                              </div>
+                              <div className="text-[10px] text-gray-400 mt-1">
+                                {isCategory ? durHint.reason : '전체 평균'}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -482,7 +497,7 @@ export default function CareFeeEstimatePage() {
                 <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-4 flex items-start gap-2.5">
                   <FiInfo className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                   <div className="text-[11px] sm:text-xs text-blue-900 leading-relaxed">
-                    <strong>참고 사항</strong> · 실제 매칭 단가는 간병사 경력·지역·일정에 따라 달라질 수 있으며, 2024.06 시장 시세 기반 예상치입니다.
+                    <strong>참고 사항</strong> · 실제 매칭 단가는 간병사 경력·지역·일정에 따라 달라질 수 있으며, 2026.01 시장 시세 기반 예상치입니다.
                   </div>
                 </div>
 

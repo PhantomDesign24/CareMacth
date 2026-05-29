@@ -1742,18 +1742,24 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
       careFeeMaxOffset,
       careFeeSurchargeHeavy,
       careFeeSurchargeDiaper,
-      careFeeAutoRaiseAmount,
+      careFeeAvgDays,
     } = req.body;
 
     // 간병비 룰 금액 검증 (모두 0 이상의 정수)
     const careFeeFields = {
       careFeeBaseLight, careFeeBaseMedium, careFeeBaseHigh, careFeeBaseHighInfection,
       careFeeMinOffset, careFeeMaxOffset, careFeeSurchargeHeavy, careFeeSurchargeDiaper,
-      careFeeAutoRaiseAmount,
     };
     for (const [k, v] of Object.entries(careFeeFields)) {
       if (v !== undefined && (!Number.isFinite(Number(v)) || Number(v) < 0)) {
         throw new AppError(`${k} 는 0 이상의 숫자여야 합니다.`, 400);
+      }
+    }
+    // 평균 간병 기간 검증 (0.1~365.0 일)
+    if (careFeeAvgDays !== undefined) {
+      const v = Number(careFeeAvgDays);
+      if (!Number.isFinite(v) || v < 0.1 || v > 365) {
+        throw new AppError('평균 간병 기간은 0.1~365일 사이여야 합니다.', 400);
       }
     }
 
@@ -1809,7 +1815,7 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
         ...(careFeeMaxOffset !== undefined && { careFeeMaxOffset: parseInt(careFeeMaxOffset) }),
         ...(careFeeSurchargeHeavy !== undefined && { careFeeSurchargeHeavy: parseInt(careFeeSurchargeHeavy) }),
         ...(careFeeSurchargeDiaper !== undefined && { careFeeSurchargeDiaper: parseInt(careFeeSurchargeDiaper) }),
-        ...(careFeeAutoRaiseAmount !== undefined && { careFeeAutoRaiseAmount: parseInt(careFeeAutoRaiseAmount) }),
+        ...(careFeeAvgDays !== undefined && { careFeeAvgDays: parseFloat(careFeeAvgDays) }),
       },
       create: {
         id: 'default',
@@ -3942,6 +3948,7 @@ const DEFAULT_TEMPLATES = [
   { key: 'APPLICATION_ACCEPTED', type: 'APPLICATION', name: '지원 수락', title: '지원 수락됨', body: '{patientName} 환자 간병 지원이 수락되었습니다.', description: '변수: {patientName}' },
   { key: 'APPLICATION_REJECTED', type: 'APPLICATION', name: '지원 미선택', title: '지원 미선택', body: '이번 공고는 다른 간병사가 선정되었습니다.', description: '' },
   { key: 'CONTRACT_CREATED', type: 'CONTRACT', name: '계약 성사', title: '매칭 완료', body: '{caregiverName}님과 매칭되었습니다. 기간: {startDate} ~ {endDate}', description: '변수: {caregiverName}, {startDate}, {endDate}' },
+  { key: 'INSURANCE_NOTICE_CAREGIVER', type: 'SYSTEM', name: '자가배상책임보험 안내 (간병사)', title: '자가배상책임보험 가입 안내', body: '매칭이 확정되었습니다. 안전한 간병을 위해 자가배상책임보험 가입을 권장드립니다. 보험 미가입 상태에서 발생한 손해에 대해 케어매치는 책임지지 않습니다. 자세한 안내는 마이페이지에서 확인해주세요.', description: '매칭 성사 시 간병사에게 1회 자동 발송. 변수 없음.' },
   { key: 'EXTENSION_REMINDER_3D', type: 'EXTENSION', name: '연장 3일 전 알림', title: '간병 종료 3일 전', body: '{patientName} 환자 간병이 3일 뒤 종료됩니다. 연장을 원하시면 마이페이지에서 요청해주세요.', description: '변수: {patientName}' },
   { key: 'EXTENSION_REMINDER_1D', type: 'EXTENSION', name: '연장 1일 전 알림', title: '간병 종료 1일 전', body: '{patientName} 환자 간병이 내일 종료됩니다.', description: '변수: {patientName}' },
   { key: 'PAYMENT_COMPLETED', type: 'PAYMENT', name: '결제 완료', title: '결제 완료', body: '{amount}원 결제가 완료되었습니다.', description: '변수: {amount}' },

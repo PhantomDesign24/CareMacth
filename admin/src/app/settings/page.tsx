@@ -363,7 +363,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">70kg+ 가산 (원)</label>
               <input type="number" min={0} step={1000}
@@ -379,12 +379,12 @@ export default function SettingsPage() {
                 className="input-field" />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">자동 인상 폭 (원)</label>
-              <p className="text-xs text-gray-400 mb-1">24h 무지원자 시</p>
-              <input type="number" min={0} step={1000}
-                value={settings.careFeeAutoRaiseAmount ?? 10000}
-                onChange={(e) => handleChange("careFeeAutoRaiseAmount", Number(e.target.value))}
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">평균 간병 기간 (일)</label>
+              <input type="number" min={0.1} step={0.1}
+                value={settings.careFeeAvgDays ?? 6.2}
+                onChange={(e) => handleChange("careFeeAvgDays", Number(e.target.value))}
                 className="input-field" />
+              <p className="mt-1 text-xs text-gray-500">예상 간병비 산출 페이지의 &quot;평균 간병 기간&quot; 표시값 (소수점 1자리)</p>
             </div>
           </div>
 

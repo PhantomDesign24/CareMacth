@@ -264,12 +264,16 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
         whereClause.status = status;
       }
     } else if (req.user!.role === 'CAREGIVER') {
-      // 간병인: OPEN 상태 일감만 (미승인 간병인은 차단)
+      // 간병인: 지원 가능한 상태(OPEN/MATCHING) 일감 — 명시적 status 가 없으면 둘 다 노출
       const me = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
       if (!me || me.status !== 'APPROVED') {
         throw new AppError('승인된 간병인만 일감을 조회할 수 있습니다.', 403);
       }
-      whereClause.status = status || 'OPEN';
+      if (status) {
+        whereClause.status = status;
+      } else {
+        whereClause.status = { in: ['OPEN', 'MATCHING'] };
+      }
     } else if (req.user!.role === 'ADMIN') {
       if (status) {
         whereClause.status = status;
@@ -833,16 +837,18 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
       if (ongoingContracts > 0) {
         throw new AppError('현재 진행 중인 계약이 있어 새로운 지원을 할 수 없습니다.', 400);
       }
-      // 다른 요청에 PENDING/ACCEPTED 지원이 있으면 동시 지원 차단
-      const activeApplications = await prisma.careApplication.count({
+      // 동시 지원 허용 (인드라이브 방식): 여러 요청에 동시에 PENDING 지원 가능
+      // 보호자가 선택해서 수락(ACCEPTED)되는 순간 다른 PENDING 지원은 자동 CANCELLED 처리됨 (contractController.createContract)
+      // 단 이미 ACCEPTED(수락 받음) 상태가 있으면 차단 — 수락 받은 일감 진행이 우선
+      const acceptedApplications = await prisma.careApplication.count({
         where: {
           caregiverId: caregiver.id,
-          status: { in: ['PENDING', 'ACCEPTED'] },
+          status: 'ACCEPTED',
           careRequestId: { not: careRequestId },
         },
       });
-      if (activeApplications > 0) {
-        throw new AppError('이미 다른 간병 요청에 지원 중입니다. 먼저 해당 지원을 정리해주세요.', 409);
+      if (acceptedApplications > 0) {
+        throw new AppError('이미 다른 간병 요청에서 수락 받았습니다. 해당 계약 처리 후 다시 지원해주세요.', 409);
       }
     }
 
@@ -947,7 +953,8 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
 
     if (guardian) {
       // 보호자에게 새 지원자 알림 (템플릿 기반)
-      const patientName = caregiver.user?.name || '간병인';
+      // 템플릿 본문: "{{patientName}} 환자 공고에 새 간병인이 지원했습니다"
+      const patientName = careRequest.patient?.name || '등록 환자';
       await sendFromTemplate({
         userId: guardian.userId,
         key: 'APPLICATION_GUARDIAN_NEW',

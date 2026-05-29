@@ -421,6 +421,30 @@ export default function CaregiversPage() {
         <p className="mt-1 text-sm text-gray-500">간병인 승인, 인증, 블랙리스트 관리를 수행합니다.</p>
       </div>
 
+      {/* 통계 카드 — 현재 검색 결과 기준 */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="card py-3">
+          <p className="text-xs text-gray-500">전체</p>
+          <p className="text-xl font-bold text-gray-900 mt-1">{totalItems.toLocaleString()}</p>
+        </div>
+        <div className="card py-3 border-l-4 border-amber-400">
+          <p className="text-xs text-gray-500">승인 대기</p>
+          <p className="text-xl font-bold text-amber-600 mt-1">{caregivers.filter((c) => c.status === "PENDING").length.toLocaleString()}</p>
+        </div>
+        <div className="card py-3 border-l-4 border-emerald-400">
+          <p className="text-xs text-gray-500">활동 중</p>
+          <p className="text-xl font-bold text-emerald-600 mt-1">{caregivers.filter((c) => c.status === "APPROVED").length.toLocaleString()}</p>
+        </div>
+        <div className="card py-3 border-l-4 border-red-400">
+          <p className="text-xs text-gray-500">정지/거절</p>
+          <p className="text-xl font-bold text-red-600 mt-1">{caregivers.filter((c) => c.status === "REJECTED" || c.status === "BLACKLISTED").length.toLocaleString()}</p>
+        </div>
+        <div className="card py-3 border-l-4 border-yellow-400">
+          <p className="text-xs text-gray-500">우수 뱃지</p>
+          <p className="text-xl font-bold text-yellow-600 mt-1">{caregivers.filter((c) => c.hasBadge).length.toLocaleString()}</p>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="card space-y-3">
         {/* 검색 + 기본 필터 */}

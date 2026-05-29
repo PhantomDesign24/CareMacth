@@ -924,7 +924,7 @@ export interface PlatformSettings {
   careFeeMaxOffset?: number;
   careFeeSurchargeHeavy?: number;
   careFeeSurchargeDiaper?: number;
-  careFeeAutoRaiseAmount?: number;
+  careFeeAvgDays?: number;
   [key: string]: unknown;
 }
 

@@ -207,12 +207,81 @@ grep -A1 BUNDLE_ID app-caregiver/GoogleService-Info.plist
 
 ## 6. 빌드 후 검증 시나리오
 
+### 기본 흐름
+
 1. 시뮬레이터/실기기에서 앱 실행
 2. **로그인 흐름** — 이메일/카카오/네이버 로그인 → WebView 안 dashboard 진입
 3. **탭 전환** — 홈 / 간병요청(보호자) 또는 일감(간병인) / 내간병 / 마이페이지 — 마이페이지 ↔ 다른 탭 전환 시 홈으로 리셋 안 되는지
 4. **푸시 알림** (iOS 푸시 활성화 후) — 알림 트레이 탭 → 정확한 URL 로 이동 + 자동 markRead
 5. **카메라/사진/위치 권한** — 첫 사용 시 권한 요청 팝업
-6. **결제** (보호자 앱 전용) — 토스/카카오페이 WebView 내부 흐름
+
+### iOS 실기기 필수 체크리스트 (코드 점검만으로는 검증 불가한 항목)
+
+코드는 Android/iOS 공용으로 작성돼있지만, 다음 항목은 **iOS 실기기에서만** 정상 동작 확인이 가능합니다. 시뮬레이터로는 일부만 검증되며 실제 카드앱/푸시는 실기기 필수.
+
+#### A. 결제 흐름 (보호자 앱)
+- [ ] **카드 결제** — 결제 시작 → 카드사 앱 호출 (`shinhan-sr-ansimclick://`, `mpocket.online.ansimclick://` 등 custom scheme) → 인증 완료 → 자동으로 WebView 복귀
+- [ ] **카카오페이** — `kakaopay://` scheme 호출 → 카카오톡 앱 진입 → 결제 완료 → WebView 복귀
+- [ ] **토스페이먼츠 결제창** — https 라 WebView 안에서 그대로 열려야 함 (외부 Safari 로 빠지면 안 됨)
+- [ ] **결제 완료 후 successUrl 도달** — `/payment/success` 경로 진입 확인
+- [ ] **결제 실패시 failUrl** — `/payment/fail` 정상 표시
+- [ ] **결제창 중도 종료** — `app://close` 또는 뒤로가기로 WebView 복귀 OK
+- [ ] **하단 탭바 숨김** — 결제 도메인 진입 시 `paymentActive` 로 탭바 사라지는지
+
+> Android 에선 `intent://` URL 로 카드앱이 호출되지만 iOS 는 custom scheme(`kakaopay://`, `kb-acp://` 등) 직접 호출. 코드의 `appSchemes` 배열 (`App.tsx:737-746`) 이 iOS 카드앱 호출 처리.
+
+#### B. 푸시 알림 (APNs Key 등록 후만)
+- [ ] **APNs Auth Key 발급 + Firebase Console 업로드** — 4-1단계 완료
+- [ ] **`PUSH_ENABLED = true` 로 변경** 후 재빌드 — 4-3단계
+- [ ] **앱 첫 실행 시 푸시 권한 팝업** — "알림을 허용하시겠습니까?"
+- [ ] **FCM 토큰 백엔드 등록** — 어드민 → 사용자 상세에서 token 등록 확인
+- [ ] **포그라운드 알림** — 앱 켜진 상태에서 어드민 발송 → 알림 도착
+- [ ] **백그라운드 알림** — 홈으로 빠진 상태 → 잠금화면 알림
+- [ ] **알림 탭 → 딥링크** — 매칭/계약/결제 알림 탭 시 해당 화면으로 이동
+- [ ] **markRead 자동 처리** — 알림 탭 후 어드민에서 읽음 처리 반영
+
+#### C. WebView 권한 & 네이티브 연동
+- [ ] **카메라 권한 팝업** — `NSCameraUsageDescription` 메시지 한글 표시
+- [ ] **사진 권한** — `NSPhotoLibraryUsageDescription`
+- [ ] **위치 권한** — `NSLocationWhenInUseUsageDescription` (간병 요청 주소 입력)
+- [ ] **신분증 업로드** (간병인 앱) — 카메라 → 촬영 → WebView 폼 제출
+- [ ] **자격증 업로드** (간병인 앱) — 사진 라이브러리 선택
+- [ ] **FaceID/TouchID** — 가입/로그인 인증 시 (`NSFaceIDUsageDescription`)
+
+#### D. 네비게이션·UX
+- [ ] **뒤로가기 제스처** — `allowsBackForwardNavigationGestures` 정상 동작 (왼쪽 끝 스와이프)
+- [ ] **Pull-to-Refresh** — 메인 화면 당겨서 새로고침
+- [ ] **딥링크 (Universal Links)** — 카톡으로 받은 링크 클릭 시 앱에서 열리는지
+- [ ] **소셜 로그인 복귀** — 카카오톡 / 네이버 앱 인증 → 다시 WebView 로 복귀
+- [ ] **앱 백그라운드 → 포그라운드** — 세션 유지 (localStorage 토큰 유지)
+- [ ] **iPhone 노치 안전 영역** — 상단 상태바와 콘텐츠가 안 겹침
+- [ ] **iPad 가로/세로 회전** — 레이아웃 깨짐 없음 (지원 대상이면)
+
+#### E. Firebase / Bundle ID 매칭
+- [ ] **GoogleService-Info.plist 의 BUNDLE_ID** — iOS Bundle ID 와 정확히 일치 (`kr.phantomdesign.carematch.patient`/`giver`)
+- [ ] **Firebase Crashlytics 수집 시작** (활성화한 경우) — Firebase Console 에서 실기기 식별
+- [ ] **앱 첫 실행 후 5분** — Firebase Console → Cloud Messaging 에 "iOS 등록 토큰" 1+ 표시
+
+#### F. App Store 심사 대비
+- [ ] **결제 (보호자 앱)** — Apple In-App Purchase 가 아닌 외부 결제(토스) 라 거절 위험 → "서비스 결제(실물 간병 서비스)" 로 신청 필요 (가이드라인 3.1.5 적용)
+- [ ] **권한 사용 사유 (Info.plist)** — 모든 권한에 한국어 명확한 설명 (예: "간병사 자격증 사진 등록을 위해 카메라를 사용합니다.")
+- [ ] **테스트 계정 제공** — 심사용 보호자/간병인 계정 + 결제 가능한 테스트 카드 정보
+- [ ] **앱 스크린샷 6.7" / 5.5"** 두 사이즈
+
+### 시뮬레이터로 검증 가능한 것 / 불가능한 것
+
+| 항목 | 시뮬레이터 | 실기기 |
+|------|----------|--------|
+| UI 레이아웃, 네비게이션 | ✅ | ✅ |
+| WebView 로딩, 로그인 | ✅ | ✅ |
+| 권한 팝업 표시 | ✅ | ✅ |
+| 카메라/마이크 | ❌ (가짜 데이터만) | ✅ |
+| 카드앱 custom scheme 호출 | ❌ (카드앱 미설치) | ✅ |
+| 카카오톡/네이버 앱 인증 | ❌ | ✅ |
+| FCM 푸시 알림 | ❌ (시뮬레이터는 푸시 불가) | ✅ |
+| Apple Pay, FaceID | ❌ | ✅ |
+
+→ **실기기 1대로 최소 1회 전체 흐름 끝까지 검증** 후 App Store 제출 권장.
 
 ---
 

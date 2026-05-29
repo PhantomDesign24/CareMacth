@@ -17,7 +17,7 @@ export type CareFeeRules = {
   maxOffset: number;
   surchargeHeavy: number;
   surchargeDiaper: number;
-  autoRaiseAmount: number;
+  avgDays: number;
 };
 
 const DEFAULT_RULES: CareFeeRules = {
@@ -29,7 +29,7 @@ const DEFAULT_RULES: CareFeeRules = {
   maxOffset: 20000,
   surchargeHeavy: 5000,
   surchargeDiaper: 5000,
-  autoRaiseAmount: 10000,
+  avgDays: 6.2,
 };
 
 let cached: { rules: CareFeeRules; loadedAt: number } | null = null;
@@ -52,7 +52,7 @@ export async function getCareFeeRules(): Promise<CareFeeRules> {
       maxOffset: (cfg as any).careFeeMaxOffset ?? DEFAULT_RULES.maxOffset,
       surchargeHeavy: (cfg as any).careFeeSurchargeHeavy ?? DEFAULT_RULES.surchargeHeavy,
       surchargeDiaper: (cfg as any).careFeeSurchargeDiaper ?? DEFAULT_RULES.surchargeDiaper,
-      autoRaiseAmount: (cfg as any).careFeeAutoRaiseAmount ?? DEFAULT_RULES.autoRaiseAmount,
+      avgDays: (cfg as any).careFeeAvgDays ?? DEFAULT_RULES.avgDays,
     };
     cached = { rules, loadedAt: Date.now() };
     return rules;

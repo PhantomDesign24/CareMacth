@@ -96,6 +96,7 @@ interface OpenRequest {
   id: string;
   patientName: string;
   patientAge: number;
+  patientAgeIsBucket: boolean;
   patientGender: string;
   careType: string;
   location: string;
@@ -229,7 +230,8 @@ function CaregiverDashboard() {
         caregiverAPI.getEarnings().catch(() => ({ data: { data: [] } })),
         caregiverAPI.getPenalties().catch(() => ({ data: { data: [] } })),
         // 미승인 간병인은 일감 조회 불가 (403) — 빈 배열로 graceful 처리
-        careRequestAPI.list({ status: "open" }).catch(() => ({ data: { data: { careRequests: [] } } })),
+        // status 미지정 → 백엔드가 OPEN+MATCHING 모두 반환 (지원 가능한 일감)
+        careRequestAPI.list({}).catch(() => ({ data: { data: { careRequests: [] } } })),
         caregiverAPI.getActivity().catch(() => ({ data: { data: {} } })),
         caregiverAPI.getMyApplications().catch(() => ({ data: { data: [] } })),
       ]);
@@ -372,7 +374,8 @@ function CaregiverDashboard() {
       // 이미 지원한 요청은 목록에서 제외
       const filteredList = reqList.filter((r: any) => !activeAppIds.has(r.id));
       setOpenRequests(filteredList.map((r: any) => {
-        // 생년월일로 나이 계산
+        // 간병인 view: 개인정보 보호로 백엔드가 birthDate 대신 ageBucket(10세 단위)만 전달.
+        // birthDate 가 있으면(관리자 등) 정확 계산, 없으면 ageBucket 사용.
         let age = 0;
         if (r.patient?.birthDate) {
           const b = new Date(r.patient.birthDate);
@@ -380,6 +383,8 @@ function CaregiverDashboard() {
           age = now.getFullYear() - b.getFullYear();
           const m = now.getMonth() - b.getMonth();
           if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+        } else if (typeof r.patient?.ageBucket === 'number') {
+          age = r.patient.ageBucket;
         }
         // 긴급 판단: 시작일이 3일 이내
         const daysUntilStart = r.startDate
@@ -389,6 +394,7 @@ function CaregiverDashboard() {
           id: r.id,
           patientName: r.patient?.name || '-',
           patientAge: age,
+          patientAgeIsBucket: !r.patient?.birthDate && typeof r.patient?.ageBucket === 'number',
           patientGender: r.patient?.gender === 'F' ? '여' : '남',
           careType: r.careType === 'INDIVIDUAL' ? '1:1' : '가족',
           location: r.location === 'HOSPITAL' ? '병원' : '자택',
@@ -1076,7 +1082,11 @@ function CaregiverDashboard() {
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                         <div>
                           <span className="text-gray-400 text-xs">환자</span>
-                          <p className="text-gray-700 font-medium">{req.patientAge}세 {req.patientGender}</p>
+                          <p className="text-gray-700 font-medium">
+                            {req.patientAge > 0
+                              ? `${req.patientAge}${req.patientAgeIsBucket ? '대' : '세'} ${req.patientGender}`
+                              : req.patientGender}
+                          </p>
                         </div>
                         <div>
                           <span className="text-gray-400 text-xs">거동 상태</span>

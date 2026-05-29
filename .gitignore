@@ -54,3 +54,8 @@ firebase-service-account.json
 backend/uploads/*
 !backend/uploads/.gitkeep
 .codex
+*.p8
+*.p8.zip
+AuthKey_*
+_obsolete_plist/
+배경.png

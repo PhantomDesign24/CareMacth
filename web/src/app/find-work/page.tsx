@@ -120,7 +120,8 @@ export default function FindWorkPage() {
     setLoading(true);
     setError("");
     try {
-      const params: Record<string, unknown> = { status: "OPEN", page, limit: 20 };
+      // status 미지정 → 백엔드가 지원 가능한 OPEN+MATCHING 둘 다 반환
+      const params: Record<string, unknown> = { page, limit: 20 };
       if (regionKey) {
         params.regions = regionKey;
       }
@@ -191,10 +192,8 @@ export default function FindWorkPage() {
       fetchRequests();
     } catch (err: unknown) {
       const raw = (err as any)?.response?.data?.message || "";
-      let message = "지원 중 오류가 발생했습니다.";
-      if (raw.includes("이미 지원")) message = "이미 지원한 요청입니다.";
-      else if (raw.includes("승인된")) message = "관리자 승인 대기 중입니다.";
-      else if (raw.includes("진행 중")) message = "진행 중인 간병이 있습니다.";
+      // 백엔드 메시지를 그대로 노출 (사용자가 정확한 원인을 알 수 있도록)
+      const message = raw && raw.length > 0 ? raw : "지원 중 오류가 발생했습니다.";
       setApplyError(message);
     } finally {
       setAcceptingId(null);
@@ -232,8 +231,8 @@ export default function FindWorkPage() {
       fetchRequests();
     } catch (err: unknown) {
       const raw = (err as any)?.response?.data?.message || "";
-      let message = "제안 중 오류가 발생했습니다.";
-      if (raw.includes("이미 지원")) message = "이미 지원한 요청입니다.";
+      // 백엔드가 명확한 사유 메시지를 주면 그대로 노출 (예: "현재 진행 중인 계약이 있어...", "다른 요청에 이미 지원...")
+      const message = raw && raw.length > 0 ? raw : "제안 중 오류가 발생했습니다.";
       setApplyError(message);
     } finally {
       setApplying(false);
