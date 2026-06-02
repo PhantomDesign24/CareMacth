@@ -68,6 +68,105 @@ export default function LoginPage() {
     }
   };
 
+  // 백엔드 /auth/* 응답 공통 후처리 (kakao/naver 콜백과 동일 규칙)
+  const handleSocialAuthResult = (data: any, provider: string) => {
+    if (!data.success) {
+      if (data.code === "PROVIDER_CONFLICT") {
+        setError(data.message || "이미 다른 방식으로 가입된 계정입니다. 해당 방식으로 로그인해주세요.");
+        return;
+      }
+      setError(data.message || `${provider} 로그인 처리에 실패했습니다.`);
+      return;
+    }
+    // 기존 사용자 → 토큰 저장 후 대시보드
+    if (data.data.access_token) {
+      localStorage.setItem("cm_access_token", data.data.access_token);
+      if (data.data.refresh_token) localStorage.setItem("cm_refresh_token", data.data.refresh_token);
+      localStorage.setItem("user", JSON.stringify(data.data.user));
+      localStorage.setItem("cm_user", JSON.stringify(data.data.user));
+      notifyAppLogin(data.data.user, data.data.access_token);
+      const role = data.data.user.role;
+      if (role === "GUARDIAN" || role === "ADMIN") window.location.href = "/dashboard/guardian";
+      else if (role === "CAREGIVER") window.location.href = "/dashboard/caregiver";
+      else window.location.href = "/";
+      return;
+    }
+    // 신규 사용자 → 가입 페이지로 프리필
+    if (data.data.isNew) {
+      try {
+        sessionStorage.setItem("cm_signup_payload", JSON.stringify({
+          provider,
+          signupToken: data.data.signupToken || "",
+          email: data.data.email || "",
+          name: data.data.name || "",
+          phone: data.data.phone || "",
+          ts: Date.now(),
+        }));
+      } catch {}
+      router.replace(`/auth/register?social=${provider}`);
+      return;
+    }
+    setError("알 수 없는 응답입니다.");
+  };
+
+  // Apple JS SDK 동적 로드
+  const loadAppleSDK = (): Promise<any> =>
+    new Promise((resolve, reject) => {
+      const w = window as any;
+      if (w.AppleID?.auth) return resolve(w.AppleID);
+      const existing = document.getElementById("apple-signin-sdk");
+      if (existing) {
+        existing.addEventListener("load", () => resolve((window as any).AppleID));
+        existing.addEventListener("error", reject);
+        return;
+      }
+      const s = document.createElement("script");
+      s.id = "apple-signin-sdk";
+      s.src = "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
+      s.async = true;
+      s.onload = () => resolve((window as any).AppleID);
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+
+  const handleAppleLogin = async () => {
+    setError("");
+    const clientId = process.env.NEXT_PUBLIC_APPLE_CLIENT_ID || "";
+    if (!clientId) {
+      setError("NEXT_PUBLIC_APPLE_CLIENT_ID 환경변수가 설정되지 않았습니다.");
+      return;
+    }
+    try {
+      const AppleID = await loadAppleSDK();
+      AppleID.auth.init({
+        clientId,
+        scope: "name email",
+        redirectURI: `${window.location.origin}/auth/login`,
+        usePopup: true,
+      });
+      const result = await AppleID.auth.signIn();
+      const identityToken = result?.authorization?.id_token;
+      if (!identityToken) {
+        setError("애플 인증 토큰을 받지 못했습니다.");
+        return;
+      }
+      // 애플은 최초 1회만 이름 제공 → 합쳐서 전달
+      const u = result?.user;
+      const name = u?.name ? `${u.name.lastName || ""}${u.name.firstName || ""}`.trim() || undefined : undefined;
+      const res = await fetch("/api/auth/apple", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identityToken, name }),
+      });
+      const data = await res.json();
+      handleSocialAuthResult(data, "apple");
+    } catch (err: any) {
+      // 사용자가 팝업을 닫은 경우(popup_closed) 는 조용히 무시
+      if (err?.error === "popup_closed_by_user" || err?.error === "user_cancelled_authorize") return;
+      setError("애플 로그인에 실패했습니다. 다시 시도해주세요.");
+    }
+  };
+
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 py-12 px-4">
       <div className="w-full max-w-md">
@@ -232,6 +331,18 @@ export default function LoginPage() {
                 <path d="M16.273 12.845L7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727z" />
               </svg>
               네이버로 로그인
+            </button>
+
+            <button
+              type="button"
+              onClick={handleAppleLogin}
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl font-medium transition-colors text-sm text-white hover:opacity-90"
+              style={{ backgroundColor: "#000000" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                <path d="M17.05 12.04c-.03-2.6 2.12-3.85 2.22-3.91-1.21-1.77-3.1-2.01-3.77-2.04-1.6-.16-3.13.94-3.94.94-.81 0-2.07-.92-3.4-.89-1.75.03-3.36 1.02-4.26 2.58-1.82 3.16-.47 7.84 1.3 10.41.86 1.26 1.89 2.67 3.24 2.62 1.3-.05 1.79-.84 3.36-.84 1.57 0 2.01.84 3.39.81 1.4-.02 2.29-1.28 3.15-2.55.99-1.46 1.4-2.87 1.42-2.94-.03-.01-2.72-1.04-2.75-4.13zM14.53 4.42c.72-.87 1.2-2.08 1.07-3.29-1.03.04-2.28.69-3.02 1.56-.66.77-1.24 2-1.08 3.18 1.15.09 2.32-.58 3.03-1.45z" />
+              </svg>
+              Apple로 로그인
             </button>
           </div>
         </div>

@@ -23,6 +23,7 @@ enum AuthProvider {
   LOCAL
   KAKAO
   NAVER
+  APPLE
 }
 
 enum CaregiverStatus {

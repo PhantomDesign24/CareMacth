@@ -49,6 +49,12 @@ router.post('/kakao', [authLimiter], authController.kakaoAuth);
 // 네이버 간편가입/로그인 (accessToken 또는 code 지원)
 router.post('/naver', [authLimiter], authController.naverAuth);
 
+// 애플 로그인 (identityToken 검증) — iOS App Store 가이드라인 4.8 대응
+router.post('/apple', [
+  authLimiter,
+  body('identityToken').notEmpty().withMessage('identityToken이 필요합니다.'),
+], authController.appleAuth);
+
 // 소셜 가입 마무리 (역할 + 부가정보 + signupToken)
 router.post('/social/complete', [
   authLimiter,

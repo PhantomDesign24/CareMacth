@@ -10,6 +10,10 @@ import { AuthRequest } from '../middlewares/auth';
 import { generateReferralCode } from '../utils/generateCode';
 import { sendEmail, emailPasswordReset } from '../services/emailService';
 import { sendToAdmins, sendFromTemplate } from '../services/notificationService';
+import { jwtVerify, createRemoteJWKSet } from 'jose';
+
+// Apple 공개키 셋 (자동 캐싱/갱신) — identity token 서명 검증용
+const APPLE_JWKS = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
 
 const generateToken = (user: { id: string; email: string; role: string; tokenVersion?: number }) => {
   return jwt.sign(
@@ -37,7 +41,7 @@ const tokenPair = (user: { id: string; email: string; role: string; tokenVersion
 async function detectCrossProviderConflict(args: {
   email?: string | null;
   phone?: string | null;
-  ignoreProvider: 'KAKAO' | 'NAVER';
+  ignoreProvider: 'KAKAO' | 'NAVER' | 'APPLE';
 }): Promise<{ provider: string; message: string } | null> {
   const { email, phone, ignoreProvider } = args;
   const orConditions: any[] = [];
@@ -50,7 +54,7 @@ async function detectCrossProviderConflict(args: {
   });
   if (!existing) return null;
   if (existing.authProvider === ignoreProvider) return null;
-  const providerLabelMap: Record<string, string> = { LOCAL: '이메일/비밀번호', KAKAO: '카카오', NAVER: '네이버' };
+  const providerLabelMap: Record<string, string> = { LOCAL: '이메일/비밀번호', KAKAO: '카카오', NAVER: '네이버', APPLE: '애플' };
   const label = providerLabelMap[existing.authProvider] || existing.authProvider;
   return {
     provider: existing.authProvider,
@@ -62,7 +66,7 @@ async function detectCrossProviderConflict(args: {
 type SocialSignupPayload = {
   type: 'social_signup';
   jti: string;
-  provider: 'KAKAO' | 'NAVER';
+  provider: 'KAKAO' | 'NAVER' | 'APPLE';
   socialId: string;
   email?: string;
   name?: string;
@@ -499,6 +503,115 @@ export const naverAuth = async (req: Request, res: Response, next: NextFunction)
 
     const tokens = tokenPair(user);
 
+    res.json({
+      success: true,
+      data: { user: { ...user, password: undefined }, ...tokens, isNew: false },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /auth/apple - 애플 로그인 (iOS App Store 가이드라인 4.8 필수)
+// 입력: { identityToken, name?, role? }
+//  - identityToken: 애플이 발급한 JWT(id_token). Apple JWKS(RS256)로 서명·iss·aud 검증
+//  - name: 애플은 최초 1회만 이름 제공 → 클라이언트가 보관했다가 전달 (이후엔 없음)
+//  - role: 신규 가입 시 GUARDIAN/CAREGIVER/HOSPITAL. 없으면 isNew 응답으로 가입 분기
+export const appleAuth = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { identityToken, name: nameFromClient, role } = req.body;
+    if (!identityToken) {
+      throw new AppError('identityToken이 필요합니다.', 400);
+    }
+
+    // Services ID(웹) — 애플 토큰의 aud 와 일치해야 함. 네이티브 추가 시 Bundle ID 도 허용.
+    const audiences = [
+      process.env.APPLE_CLIENT_ID,                 // 웹 Services ID (예: kr.phantomdesign.carematch.web)
+      process.env.APPLE_BUNDLE_ID_PATIENT,         // iOS 보호자 Bundle ID (네이티브 로그인 대비)
+      process.env.APPLE_BUNDLE_ID_GIVER,           // iOS 간병인 Bundle ID
+    ].filter(Boolean) as string[];
+    if (audiences.length === 0) {
+      throw new AppError('APPLE_CLIENT_ID 환경변수가 설정되지 않았습니다.', 500);
+    }
+
+    // 애플 identity token 검증 (서명 + 발급자 + 대상)
+    let payload: any;
+    try {
+      const verified = await jwtVerify(identityToken, APPLE_JWKS, {
+        issuer: 'https://appleid.apple.com',
+        audience: audiences,
+      });
+      payload = verified.payload;
+    } catch (e: any) {
+      throw new AppError('유효하지 않은 애플 인증 토큰입니다.', 401);
+    }
+
+    const appleSub = String(payload.sub || '');
+    const email = typeof payload.email === 'string' ? payload.email : undefined;
+    if (!appleSub) {
+      throw new AppError('애플 사용자 식별자를 확인할 수 없습니다.', 400);
+    }
+
+    let user = await prisma.user.findFirst({
+      where: { socialId: appleSub, authProvider: 'APPLE' },
+      include: { guardian: true, caregiver: true },
+    });
+
+    if (!user) {
+      const conflict = await detectCrossProviderConflict({ email, ignoreProvider: 'APPLE' });
+      if (conflict) {
+        throw new AppError(conflict.message, 409, { code: 'PROVIDER_CONFLICT', provider: conflict.provider });
+      }
+      if (!role) {
+        const signupToken = issueSocialSignupToken({
+          provider: 'APPLE',
+          socialId: appleSub,
+          email,
+          name: nameFromClient,
+        });
+        return res.json({
+          success: true,
+          data: { isNew: true, signupToken, socialId: appleSub, email, name: nameFromClient },
+        });
+      }
+
+      if (!['GUARDIAN', 'CAREGIVER', 'HOSPITAL'].includes(role)) {
+        throw new AppError('가입 유형이 올바르지 않습니다.', 400);
+      }
+
+      const referralCode = generateReferralCode();
+      try {
+        user = await prisma.user.create({
+          data: {
+            // 애플은 이메일을 숨길 수 있어(private relay) 없을 수도 있음 → placeholder
+            email: email || `apple_${appleSub.slice(0, 16)}@privaterelay.carematch.kr`,
+            name: nameFromClient || '애플 사용자',
+            phone: `apple_${appleSub.slice(0, 20)}`,
+            role,
+            authProvider: 'APPLE',
+            socialId: appleSub,
+            referralCode,
+            ...(role === 'GUARDIAN' && { guardian: { create: {} } }),
+            ...(role === 'CAREGIVER' && { caregiver: { create: {} } }),
+            ...(role === 'HOSPITAL' && { guardian: { create: {} } }),
+          },
+          include: { guardian: true, caregiver: true },
+        });
+      } catch (e: any) {
+        if (e?.code === 'P2002') {
+          throw new AppError('이미 가입된 계정이 있습니다. 로그인을 시도해주세요.', 409, { code: 'PROVIDER_CONFLICT' });
+        }
+        throw e;
+      }
+      await sendWelcomeNotification(user).catch(() => {});
+    }
+
+    const tokens = tokenPair(user);
     res.json({
       success: true,
       data: { user: { ...user, password: undefined }, ...tokens, isNew: false },
