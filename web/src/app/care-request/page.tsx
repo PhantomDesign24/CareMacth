@@ -166,6 +166,27 @@ export default function CareRequestPage() {
         ? (data.locationAddress || data.locationName || '주소 미입력')
         : ([data.locationName, data.locationAddress].filter(Boolean).join(' ') || '주소 미입력');
 
+      // 지역은 더 이상 사용자가 선택하지 않음 → 주소에서 시/도·시군구 자동 도출하여 매칭에 사용.
+      // 시/도 정규화(서울특별시→서울, 경기도→경기 등) 후 [시/도, "시/도 시군구"] 형태로 구성.
+      const deriveRegions = (addr: string): string[] => {
+        const tokens = (addr || '').trim().split(/\s+/).filter(Boolean);
+        if (tokens.length === 0) return [];
+        const sidoRaw = tokens[0];
+        const sido = sidoRaw
+          .replace(/특별자치시$|특별자치도$|특별시$|광역시$|특별자치$/,'')
+          .replace(/도$/,'')
+          .replace(/^서울$/,'서울');
+        const sidoNorm = sido || sidoRaw;
+        const out = new Set<string>();
+        out.add(sidoNorm);
+        if (tokens[1]) out.add(`${sidoNorm} ${tokens[1]}`);
+        return Array.from(out);
+      };
+      // 주소검색(Daum)이 채워둔 form.regions(예: "서울 강남구")가 가장 정확 → 우선 사용,
+      // 없으면 주소 텍스트에서 도출한 값으로 보완. 둘을 합쳐 매칭 정확도 확보.
+      const formRegions: string[] = Array.isArray(data.regions) ? data.regions.filter(Boolean) : [];
+      const mergedRegions = Array.from(new Set([...formRegions, ...deriveRegions(address)]));
+
       const requestPayload: Record<string, unknown> = {
         patientId,
         careType: careTypeMap[data.careType] || 'INDIVIDUAL',
@@ -173,8 +194,8 @@ export default function CareRequestPage() {
         location: locationMap[data.locationType] || 'HOSPITAL',
         hospitalName,
         address,
-        region: Array.isArray(data.regions) && data.regions.length > 0 ? data.regions[0] : undefined,
-        regions: Array.isArray(data.regions) ? data.regions : [],
+        region: mergedRegions[0] || undefined,
+        regions: mergedRegions,
         startDate: data.startDate || new Date().toISOString(),
         endDate: data.duration ? undefined : undefined,
         durationDays: data.duration ? parseInt(data.duration) * (data.durationUnit === 'months' || data.durationUnit === '개월' ? 30 : data.durationUnit === 'weeks' || data.durationUnit === '주' ? 7 : 1) : undefined,

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authAPI, setTokens, notifyAppLogin } from "@/lib/api";
@@ -8,15 +8,71 @@ import { AxiosError } from "axios";
 
 type Role = "guardian" | "caregiver" | "hospital" | "";
 
+// 생년월일 셀렉트 — value 는 'YYYY-MM-DD' 문자열 (documents 페이지와 동일 UI)
+function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [y, m, d] = (value || "").split("-");
+  const year = y || "";
+  const month = m || "";
+  const day = d || "";
+
+  const currentYear = new Date().getFullYear();
+  const years = useMemo(() => {
+    const arr: string[] = [];
+    for (let yy = currentYear; yy >= currentYear - 100; yy--) arr.push(String(yy));
+    return arr;
+  }, [currentYear]);
+  const months = useMemo(() => Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")), []);
+  const daysInMonth = useMemo(() => {
+    if (!year || !month) return 31;
+    return new Date(Number(year), Number(month), 0).getDate();
+  }, [year, month]);
+  const days = useMemo(
+    () => Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0")),
+    [daysInMonth],
+  );
+
+  const update = (ny: string, nm: string, nd: string) => {
+    if (!ny || !nm || !nd) { onChange(""); return; }
+    const maxDay = new Date(Number(ny), Number(nm), 0).getDate();
+    const safeDay = Math.min(Number(nd), maxDay);
+    onChange(`${ny}-${nm}-${String(safeDay).padStart(2, "0")}`);
+  };
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <select className="input-field" value={year} onChange={(e) => update(e.target.value, month, day)}>
+        <option value="">년</option>
+        {years.map((yy) => <option key={yy} value={yy}>{yy}</option>)}
+      </select>
+      <select className="input-field" value={month} onChange={(e) => update(year, e.target.value, day)}>
+        <option value="">월</option>
+        {months.map((mm) => <option key={mm} value={mm}>{Number(mm)}</option>)}
+      </select>
+      <select className="input-field" value={day} onChange={(e) => update(year, month, e.target.value)}>
+        <option value="">일</option>
+        {days.map((dd) => <option key={dd} value={dd}>{Number(dd)}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function RegisterPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   // 소셜 가입 모드 — signupToken 은 URL 미사용, sessionStorage('cm_signup_payload') 만 신뢰
-  const social = searchParams.get("social"); // 'kakao' | 'naver' | null
+  const social = searchParams.get("social"); // 'kakao' | 'naver' | 'apple' | null
   const [signupToken, setSignupToken] = useState("");
   const [signupPrefill, setSignupPrefill] = useState<{ email?: string; name?: string; phone?: string }>({});
-  const isSocialMode = !!signupToken && (social === "kakao" || social === "naver");
+  const isSocialMode = !!signupToken && (social === "kakao" || social === "naver" || social === "apple");
+  // 소셜 배너 라벨/스타일 (카카오/네이버/애플)
+  const socialLabel = social === "kakao" ? "카카오" : social === "apple" ? "Apple" : "네이버";
+  const socialBannerStyle =
+    social === "kakao"
+      ? { backgroundColor: "#FFF9D6", borderColor: "#F5DC00", color: "#191919" }
+      : social === "apple"
+        ? { backgroundColor: "#F2F2F2", borderColor: "#000000", color: "#111111" }
+        : { backgroundColor: "#E8F8EE", borderColor: "#03C75A", color: "#0A4F2C" };
 
   const [role, setRole] = useState<Role>("");
   const [step, setStep] = useState(1); // 1 = role select, 2 = form
@@ -36,7 +92,7 @@ function RegisterPageInner() {
 
   // 소셜 모드: sessionStorage 에서 signupToken/프리필 로드 (URL 미사용)
   useEffect(() => {
-    if (social !== 'kakao' && social !== 'naver') return;
+    if (social !== 'kakao' && social !== 'naver' && social !== 'apple') return;
     try {
       const raw = sessionStorage.getItem('cm_signup_payload');
       if (!raw) return;
@@ -286,6 +342,77 @@ function RegisterPageInner() {
     window.location.href = url;
   };
 
+  // 애플 가입 시작 — JS SDK 팝업으로 id_token 획득 → /auth/apple → 신규면 가입 모드 진입
+  const startAppleSignup = async () => {
+    const clientId = process.env.NEXT_PUBLIC_APPLE_CLIENT_ID || "";
+    if (!clientId) {
+      setErrorMessage("NEXT_PUBLIC_APPLE_CLIENT_ID 환경변수가 설정되지 않았습니다.");
+      return;
+    }
+    try {
+      const AppleID = await new Promise<any>((resolve, reject) => {
+        const w = window as any;
+        if (w.AppleID?.auth) return resolve(w.AppleID);
+        const ex = document.getElementById("apple-signin-sdk");
+        if (ex) { ex.addEventListener("load", () => resolve((window as any).AppleID)); ex.addEventListener("error", reject); return; }
+        const s = document.createElement("script");
+        s.id = "apple-signin-sdk";
+        s.src = "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
+        s.async = true;
+        s.onload = () => resolve((window as any).AppleID);
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+      AppleID.auth.init({ clientId, scope: "name email", redirectURI: `${window.location.origin}/auth/login`, usePopup: true });
+      const result = await AppleID.auth.signIn();
+      const identityToken = result?.authorization?.id_token;
+      if (!identityToken) { setErrorMessage("애플 인증 토큰을 받지 못했습니다."); return; }
+      const u = result?.user;
+      const appleName = u?.name ? `${u.name.lastName || ""}${u.name.firstName || ""}`.trim() || undefined : undefined;
+      const res = await fetch("/api/auth/apple", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identityToken, name: appleName }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        if (data.code === "PROVIDER_CONFLICT") { setErrorMessage(data.message || "이미 다른 방식으로 가입된 계정입니다."); return; }
+        setErrorMessage(data.message || "애플 로그인 처리에 실패했습니다.");
+        return;
+      }
+      // 기존 사용자 → 바로 로그인
+      if (data.data.access_token) {
+        setTokens(data.data.access_token, data.data.refresh_token || "");
+        if (data.data.user) {
+          localStorage.setItem("user", JSON.stringify(data.data.user));
+          localStorage.setItem("cm_user", JSON.stringify(data.data.user));
+          notifyAppLogin(data.data.user, data.data.access_token);
+        }
+        const r = data.data.user?.role;
+        window.location.href = r === "CAREGIVER" ? "/dashboard/caregiver" : "/dashboard/guardian";
+        return;
+      }
+      // 신규 → 가입 모드 진입 (payload 저장 후 ?social=apple)
+      if (data.data.isNew) {
+        try {
+          sessionStorage.setItem("cm_signup_payload", JSON.stringify({
+            provider: "apple",
+            signupToken: data.data.signupToken || "",
+            email: data.data.email || "",
+            name: data.data.name || appleName || "",
+            phone: "",
+            ts: Date.now(),
+          }));
+        } catch {}
+        router.replace("/auth/register?social=apple");
+        return;
+      }
+    } catch (err: any) {
+      if (err?.error === "popup_closed_by_user" || err?.error === "user_cancelled_authorize") return;
+      setErrorMessage("애플 로그인에 실패했습니다. 다시 시도해주세요.");
+    }
+  };
+
   // Step 1: Role selection
   if (step === 1) {
     return (
@@ -294,20 +421,9 @@ function RegisterPageInner() {
           {isSocialMode && (
             <div
               className="mb-6 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm"
-              style={
-                social === 'kakao'
-                  ? { backgroundColor: '#FFF9D6', borderColor: '#F5DC00', color: '#191919' }
-                  : { backgroundColor: '#E8F8EE', borderColor: '#03C75A', color: '#0A4F2C' }
-              }
+              style={socialBannerStyle}
             >
-              {social === 'kakao' ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="#191919"><path d="M12 3C6.48 3 2 6.58 2 10.94c0 2.8 1.87 5.27 4.68 6.67-.2.77-.74 2.8-.85 3.24-.13.55.2.54.43.39.17-.12 2.77-1.88 3.89-2.65.59.09 1.2.13 1.85.13 5.52 0 10-3.58 10-7.78S17.52 3 12 3z" /></svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="#03C75A"><path d="M16.273 12.845 7.376 0H0v24h7.726V11.156L16.624 24H24V0h-7.727z" /></svg>
-              )}
-              <span className="font-semibold">
-                {social === 'kakao' ? '카카오' : '네이버'} 계정으로 가입 진행 중
-              </span>
+              <span className="font-semibold">{socialLabel} 계정으로 가입 진행 중</span>
             </div>
           )}
           <div className="text-center mb-8">
@@ -340,6 +456,17 @@ function RegisterPageInner() {
                     <path d="M16.273 12.845 7.376 0H0v24h7.726V11.156L16.624 24H24V0h-7.727z" />
                   </svg>
                   네이버로 빠른 가입
+                </button>
+                <button
+                  type="button"
+                  onClick={startAppleSignup}
+                  className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl font-medium transition-colors text-sm text-white hover:opacity-90"
+                  style={{ backgroundColor: "#000000" }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                    <path d="M17.05 12.04c-.03-2.6 2.12-3.85 2.22-3.91-1.21-1.77-3.1-2.01-3.77-2.04-1.6-.16-3.13.94-3.94.94-.81 0-2.07-.92-3.4-.89-1.75.03-3.36 1.02-4.26 2.58-1.82 3.16-.47 7.84 1.3 10.41.86 1.26 1.89 2.67 3.24 2.62 1.3-.05 1.79-.84 3.36-.84 1.57 0 2.01.84 3.39.81 1.4-.02 2.29-1.28 3.15-2.55.99-1.46 1.4-2.87 1.42-2.94-.03-.01-2.72-1.04-2.75-4.13zM14.53 4.42c.72-.87 1.2-2.08 1.07-3.29-1.03.04-2.28.69-3.02 1.56-.66.77-1.24 2-1.08 3.18 1.15.09 2.32-.58 3.03-1.45z" />
+                  </svg>
+                  Apple로 빠른 가입
                 </button>
               </div>
 
@@ -396,20 +523,9 @@ function RegisterPageInner() {
         {isSocialMode && (
           <div
             className="mb-6 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm"
-            style={
-              social === 'kakao'
-                ? { backgroundColor: '#FFF9D6', borderColor: '#F5DC00', color: '#191919' }
-                : { backgroundColor: '#E8F8EE', borderColor: '#03C75A', color: '#0A4F2C' }
-            }
+            style={socialBannerStyle}
           >
-            {social === 'kakao' ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="#191919"><path d="M12 3C6.48 3 2 6.58 2 10.94c0 2.8 1.87 5.27 4.68 6.67-.2.77-.74 2.8-.85 3.24-.13.55.2.54.43.39.17-.12 2.77-1.88 3.89-2.65.59.09 1.2.13 1.85.13 5.52 0 10-3.58 10-7.78S17.52 3 12 3z" /></svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="#03C75A"><path d="M16.273 12.845 7.376 0H0v24h7.726V11.156L16.624 24H24V0h-7.727z" /></svg>
-            )}
-            <span className="font-semibold">
-              {social === 'kakao' ? '카카오' : '네이버'} 계정으로 가입 진행 중
-            </span>
+            <span className="font-semibold">{socialLabel} 계정으로 가입 진행 중</span>
           </div>
         )}
         {/* Back button & header */}
@@ -443,7 +559,7 @@ function RegisterPageInner() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {isSocialMode && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
-                {social === 'kakao' ? '카카오' : '네이버'} 계정으로 가입합니다. 비밀번호 없이 다음에도 같은 계정으로 로그인할 수 있습니다.
+                {socialLabel} 계정으로 가입합니다. 비밀번호 없이 다음에도 같은 계정으로 로그인할 수 있습니다.
               </div>
             )}
 
@@ -577,13 +693,7 @@ function RegisterPageInner() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">생년월일 *</label>
-                    <input
-                      type="date"
-                      className="input-field"
-                      value={birthDate}
-                      onChange={(e) => setBirthDate(e.target.value)}
-                      required
-                    />
+                    <BirthDateSelect value={birthDate} onChange={setBirthDate} />
                     {getFieldError("birth_date")}
                   </div>
                   <div>

@@ -574,6 +574,7 @@ function calculateFee(form: CareRequestFormData, rules: CareFeeRules): { min: nu
 export default function CareRequestForm({ onSubmit, submitting = false }: Props) {
   const [form, setForm] = useState<CareRequestFormData>(initialFormData);
   const [step, setStep] = useState(1);
+  const [stepError, setStepError] = useState<string>(""); // 다음 단계 막힐 때 사유 표시
   const [diagSearch, setDiagSearch] = useState("");
   const [savedPatients, setSavedPatients] = useState<SavedPatient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
@@ -755,100 +756,65 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
     });
   };
 
-  const validateAll = (): string | null => {
-    // Step 1 - 환자 정보
-    if (!form.patientName?.trim()) return "환자 이름을 입력해주세요.";
-    if (!form.patientAge?.trim()) return "환자 나이를 입력해주세요.";
-    if (!form.patientGender) return "환자 성별을 선택해주세요.";
-    if (!form.consciousness) return "환자 의식상태를 선택해주세요.";
-    if (!form.mobility) return "환자 거동상태를 선택해주세요.";
-    if (form.hasDementia && !form.dementiaLevel) return "치매 정도를 선택해주세요.";
-    if (form.hasInfection && !form.infectionDetails?.trim()) return "감염 세부사항을 입력해주세요.";
-    if (!form.hospitalizationReason) return "입원 사유를 선택해주세요.";
-    if (form.hospitalizationReason === 'ETC' && !form.hospitalizationReasonEtc?.trim()) {
-      return "입원 사유의 기타 내용을 입력해주세요.";
+  // 단계별 검증 — 막혔을 때 "어느 항목" 때문인지 구체 메시지 반환 (null = 통과)
+  const validateStep = (s: number): string | null => {
+    if (s === 1) {
+      if (!form.patientName?.trim()) return "환자 이름을 입력해주세요.";
+      if (!form.patientAge?.trim()) return "환자 나이를 입력해주세요.";
+      if (!form.patientGender) return "환자 성별을 선택해주세요.";
+      if (!form.consciousness) return "환자 의식상태를 선택해주세요.";
+      if (!form.mobility) return "환자 거동상태를 선택해주세요.";
+      if (form.hasDementia && !form.dementiaLevel) return "치매 정도를 선택해주세요.";
+      if (form.hasInfection && !form.infectionDetails?.trim()) return "감염 세부사항을 입력해주세요.";
+      if (!form.hospitalizationReason) return "입원 사유를 선택해주세요.";
+      if (form.hospitalizationReason === 'ETC' && !form.hospitalizationReasonEtc?.trim()) return "입원 사유의 기타 내용을 입력해주세요.";
+      if (form.diagnosis.includes("기타(직접입력)") && !form.diagnosisEtc?.trim()) return "기타 진단명을 직접 입력해주세요.";
+      return null;
     }
-    if (form.diagnosis.includes("기타(직접입력)") && !form.diagnosisEtc?.trim()) {
-      return "기타 진단명을 직접 입력해주세요.";
+    if (s === 2) {
+      if (!form.careType) return "간병 유형을 선택해주세요.";
+      if (!form.careSchedule) return "간병 스케줄을 선택해주세요.";
+      if (form.careSchedule === "hourly" && (!form.hourlyStart || !form.hourlyEnd)) return "시간제 간병의 시작/종료 시간을 입력해주세요.";
+      return null;
     }
-    // Step 2 - 간병 유형
-    if (!form.careType) return "간병 유형을 선택해주세요.";
-    if (!form.careSchedule) return "간병 스케줄을 선택해주세요.";
-    if (form.careSchedule === "hourly" && (!form.hourlyStart || !form.hourlyEnd)) {
-      return "시간제 간병의 시작/종료 시간을 입력해주세요.";
-    }
-    // Step 3 - 장소·일정 (locationType은 careType에서 파생)
-    if (!form.locationName?.trim()) return "장소명을 입력해주세요.";
-    if (!form.regions || form.regions.length === 0) return "지역을 한 곳 이상 선택해주세요.";
-    if (!form.startDate) return "시작일을 선택해주세요.";
-    {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+    if (s === 3) {
+      // 지역은 더 이상 선택받지 않음 — 병원/자택 주소 기반으로 매칭됨
+      if (!form.locationName?.trim()) return "장소명(병원명 또는 주소)을 입력해주세요.";
+      if (!form.startDate) return "시작일을 선택해주세요.";
+      const today = new Date(); today.setHours(0, 0, 0, 0);
       const start = new Date(form.startDate);
       if (!isNaN(start.getTime()) && start < today) return "시작일은 오늘 이후여야 합니다.";
-    }
-    if (!form.duration?.trim()) return "간병 기간을 입력해주세요.";
-    {
+      if (!form.duration?.trim()) return "간병 기간을 입력해주세요.";
       const dur = parseInt(form.duration);
       if (!Number.isFinite(dur) || dur <= 0) return "간병 기간은 1 이상이어야 합니다.";
+      return null;
     }
-    // Step 4 - 제시 일당 / 동의 — 빈 값이면 자동 책정값 사용
-    if (form.dailyRate?.trim()) {
-      const rate = parseInt(form.dailyRate);
-      if (!Number.isFinite(rate) || rate <= 0) return "제시 일당은 0원보다 커야 합니다.";
+    if (s === 4) {
+      if (!form.disclaimerChecked) return "의료행위 금지 안내 동의에 체크해주세요.";
+      return null;
     }
-    if (!form.disclaimerChecked) return "의료행위 금지 안내 동의에 체크해주세요.";
     return null;
+  };
+
+  const validateAll = (): string | null =>
+    validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4);
+
+  // 다음 단계로 — 막히면 사유를 화면에 표시 (버튼 비활성화 대신)
+  const goNext = () => {
+    const err = validateStep(step);
+    if (err) { setStepError(err); return; }
+    setStepError("");
+    setStep(step + 1);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // 중복 제출 방지: 이미 제출 중이면 무시
     if (submitting) return;
     const err = validateAll();
-    if (err) {
-      alert(err);
-      return;
-    }
-    // dailyRate 빈 값이면 자동 책정값으로 채워서 제출
-    const finalForm = form.dailyRate?.trim()
-      ? form
-      : { ...form, dailyRate: String(autoFee.average) };
+    if (err) { setStepError(err); alert(err); return; }
+    // 제시 일당 입력 제거 — 항상 환자 상태 기반 자동 책정값으로 제출
+    const finalForm = { ...form, dailyRate: String(autoFee.average) };
     onSubmit?.(finalForm);
-  };
-
-  const canProceed = () => {
-    switch (step) {
-      case 1:
-        return (
-          form.patientName &&
-          form.patientAge &&
-          form.patientGender &&
-          form.consciousness &&
-          form.mobility &&
-          form.hospitalizationReason &&
-          (form.hospitalizationReason !== 'ETC' || !!form.hospitalizationReasonEtc?.trim()) &&
-          (!form.hasDementia || !!form.dementiaLevel) &&
-          (!form.hasInfection || !!form.infectionDetails?.trim()) &&
-          (!form.diagnosis.includes("기타(직접입력)") || !!form.diagnosisEtc?.trim())
-        );
-      case 2:
-        return form.careType && form.careSchedule
-          && (form.careSchedule !== "hourly" || (!!form.hourlyStart && !!form.hourlyEnd));
-      case 3:
-        return (
-          form.locationName &&
-          form.regions.length > 0 &&
-          form.startDate &&
-          form.duration
-        );
-      case 4:
-        // 일당 빈 값이면 자동 책정값 사용 → 제출 가능
-        return form.disclaimerChecked
-          && (!form.dailyRate?.trim() || parseInt(form.dailyRate) > 0);
-      default:
-        return false;
-    }
   };
 
   const stepLabels = [
@@ -1549,51 +1515,9 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              지역 <span className="text-red-500">*</span>
-              {form.regions.length > 0 && (
-                <span className="ml-2 text-xs text-primary-500 font-normal">
-                  {form.regions.join(", ")} 선택됨
-                </span>
-              )}
-            </label>
-            <div className="grid grid-cols-6 sm:grid-cols-9 gap-1.5">
-              {REGION_OPTIONS.map((r) => {
-                const active = form.regions.includes(r);
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() =>
-                      update(
-                        "regions",
-                        active
-                          ? form.regions.filter((x) => x !== r)
-                          : [...form.regions, r]
-                      )
-                    }
-                    className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border transition-all ${
-                      active
-                        ? "border-primary-400 bg-primary-50 shadow-sm"
-                        : "border-gray-200 bg-white hover:border-primary-300"
-                    }`}
-                  >
-                    <div
-                      className="w-8 h-[30px] bg-no-repeat bg-center"
-                      style={{
-                        backgroundImage: `url('${REGION_MAP_IMGS[r]}')`,
-                        backgroundSize: "100% 200%",
-                        backgroundPosition: active ? "center bottom" : "center top",
-                      }}
-                    />
-                    <span className={`text-[10px] font-bold leading-none ${active ? "text-primary-600" : "text-gray-600"}`}>
-                      {r}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="flex items-start gap-2 rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-xs text-blue-700">
+            <span className="mt-0.5">📍</span>
+            <span>지역은 따로 선택하지 않아도 됩니다. 입력하신 <strong>병원/자택 주소</strong>를 기준으로 가까운 지역을 희망하는 간병사님들께 매칭 알림이 발송됩니다.</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -1674,36 +1598,9 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             </p>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                제시 일당 (원) <span className="text-red-500">*</span>
-              </label>
-              {form.dailyRate && parseInt(form.dailyRate) !== autoFee.average && (
-                <button
-                  type="button"
-                  onClick={() => update("dailyRate", String(autoFee.average))}
-                  className="text-[11px] text-orange-600 hover:text-orange-700 underline"
-                >
-                  자동값({autoFee.average.toLocaleString("ko-KR")}원)으로 되돌리기
-                </button>
-              )}
-            </div>
-            <div className="relative">
-              <input
-                type="number"
-                className="input-field pr-8"
-                placeholder={String(autoFee.average)}
-                min="0"
-                value={form.dailyRate || String(autoFee.average)}
-                onChange={(e) => update("dailyRate", e.target.value)}
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">원</span>
-            </div>
-            {form.dailyRate && parseInt(form.dailyRate) > 0 && parseInt(form.dailyRate) < autoFee.min && (
-              <p className="mt-1 text-xs text-red-500">⚠ 자동 책정 최소 금액({autoFee.min.toLocaleString("ko-KR")}원) 미만입니다. 매칭률이 크게 떨어질 수 있습니다.</p>
-            )}
-            <p className="mt-1 text-xs text-gray-400">간병인에게 제시할 하루 금액. 지원자가 없을 시 보호자가 직접 인상하거나 지역을 확대할 수 있습니다.</p>
+          <div className="flex items-start gap-2 rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-xs text-gray-600">
+            <span className="mt-0.5">ℹ️</span>
+            <span>위 <strong>자동 책정 일당({autoFee.average.toLocaleString("ko-KR")}원)</strong>으로 간병사님께 공고됩니다. 지원자가 없을 경우 매칭 화면에서 금액을 인상해 재공고하실 수 있습니다.</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1791,12 +1688,20 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
         </div>
       )}
 
+      {/* 단계 진행 막힘 사유 안내 */}
+      {stepError && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          <span className="mt-0.5">⚠</span>
+          <span>{stepError}</span>
+        </div>
+      )}
+
       {/* Navigation buttons */}
       <div className="flex items-center justify-between pt-6 border-t border-gray-100">
         {step > 1 ? (
           <button
             type="button"
-            onClick={() => setStep(step - 1)}
+            onClick={() => { setStepError(""); setStep(step - 1); }}
             className="btn-secondary"
           >
             이전 단계
@@ -1808,8 +1713,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
         {step < totalSteps ? (
           <button
             type="button"
-            onClick={() => setStep(step + 1)}
-            disabled={!canProceed()}
+            onClick={goNext}
             className="btn-primary"
           >
             다음 단계
