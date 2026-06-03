@@ -7,7 +7,7 @@ import { AuthRequest } from '../middlewares/auth';
 import { logAdminAction } from '../services/auditLog';
 import { config } from '../config';
 import { generateOrderId } from '../utils/generateCode';
-import { calculateEarning } from '../utils/earning';
+import { calculateEarning, computeAssociationDeduction } from '../utils/earning';
 import { sendEmail, emailPaymentCompleted } from '../services/emailService';
 import { sendFromTemplate, renderTemplate, sendToAdmins } from '../services/notificationService';
 
@@ -272,13 +272,18 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
           // (careRequest.durationDays 는 원본 요청 일수라 사용하지 않음)
           const settleDays = extension?.additionalDays
             ?? Math.max(1, Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000));
+          // 직접결제(DIRECT)는 플랫폼이 지급 주체가 아니므로 원천징수(3.3%) 미적용 → taxRate 0
           const calc = calculateEarning({
             amount,
             platformFeePercent: contract.platformFee,
             platformFeeFixed: (contract as any).platformFeeFixed || 0,
             durationDays: settleDays,
-            taxRate: contract.taxRate,
+            taxRate: method === 'DIRECT' ? 0 : contract.taxRate,
           });
+          // 협회비 미납 간병사 → 첫 정산에서 협회비 차감
+          const assocRaw = await computeAssociationDeduction(tx, contract.caregiverId);
+          const associationFeeDeducted = Math.min(assocRaw, calc.netAmount);
+          const finalNet = Math.max(0, calc.netAmount - associationFeeDeducted);
           await tx.earning.create({
             data: {
               caregiverId: contract.caregiverId,
@@ -286,9 +291,22 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
               amount: calc.amount,
               platformFee: calc.platformFee,
               taxAmount: calc.taxAmount,
-              netAmount: calc.netAmount,
+              associationFeeDeducted,
+              netAmount: finalNet,
             },
           });
+          if (associationFeeDeducted > 0) {
+            const nowA = new Date();
+            await tx.caregiver.update({
+              where: { id: contract.caregiverId },
+              data: { associationPaidAt: nowA },
+            });
+            await tx.associationFeePayment.upsert({
+              where: { caregiverId_year_month: { caregiverId: contract.caregiverId, year: nowA.getFullYear(), month: nowA.getMonth() + 1 } },
+              update: { paid: true, paidAt: nowA, amount: associationFeeDeducted, note: '첫 정산 자동 차감' },
+              create: { caregiverId: contract.caregiverId, year: nowA.getFullYear(), month: nowA.getMonth() + 1, amount: associationFeeDeducted, paid: true, paidAt: nowA, note: '첫 정산 자동 차감' },
+            });
+          }
         }
 
         // 즉시 완료 + 연장: endDate 갱신 + extension CONFIRMED

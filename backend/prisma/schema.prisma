@@ -603,7 +603,8 @@ model Earning {
   amount      Int // 정산 금액
   platformFee Int // 플랫폼 수수료
   taxAmount   Int // 세액 (3.3%)
-  netAmount   Int // 실수령액
+  associationFeeDeducted Int @default(0) // 첫 정산 시 차감한 협회비(미납 간병사)
+  netAmount   Int // 실수령액 (= amount - platformFee - taxAmount - associationFeeDeducted)
   paidAt      DateTime?
   isPaid      Boolean   @default(false)
 

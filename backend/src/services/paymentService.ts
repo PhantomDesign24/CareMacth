@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { config } from '../config';
-import { calculateEarning } from '../utils/earning';
+import { calculateEarning, computeAssociationDeduction } from '../utils/earning';
 import { prisma } from '../app';
 
 const TOSS_API_URL = 'https://api.tosspayments.com/v1';
@@ -102,6 +102,10 @@ export async function settleEarning(contractId: string) {
 
   // 2단계: release 성공 후에 Earning + Payment 상태를 트랜잭션으로 일괄 처리
   const earning = await prisma.$transaction(async (tx) => {
+    // 협회비 미납 간병사 → 첫 정산에서 협회비 차감 (실수령액에서 제외)
+    const assocRaw = await computeAssociationDeduction(tx, contract.caregiverId);
+    const associationFeeDeducted = Math.min(assocRaw, calc.netAmount);
+    const finalNet = Math.max(0, calc.netAmount - associationFeeDeducted);
     const createdEarning = await tx.earning.create({
       data: {
         caregiverId: contract.caregiverId,
@@ -109,9 +113,23 @@ export async function settleEarning(contractId: string) {
         amount: calc.amount,
         platformFee: calc.platformFee,
         taxAmount: calc.taxAmount,
-        netAmount: calc.netAmount,
+        associationFeeDeducted,
+        netAmount: finalNet,
       },
     });
+    // 협회비를 정산에서 차감했으면 납부 처리 마킹 (재차감 방지 + 관리자에 납부 표시)
+    if (associationFeeDeducted > 0) {
+      const now = new Date();
+      await tx.caregiver.update({
+        where: { id: contract.caregiverId },
+        data: { associationPaidAt: now },
+      });
+      await tx.associationFeePayment.upsert({
+        where: { caregiverId_year_month: { caregiverId: contract.caregiverId, year: now.getFullYear(), month: now.getMonth() + 1 } },
+        update: { paid: true, paidAt: now, amount: associationFeeDeducted, note: '첫 정산 자동 차감' },
+        create: { caregiverId: contract.caregiverId, year: now.getFullYear(), month: now.getMonth() + 1, amount: associationFeeDeducted, paid: true, paidAt: now, note: '첫 정산 자동 차감' },
+      });
+    }
     // release 성공한 ESCROW → COMPLETED + paidAt
     for (const p of releasedPayments) {
       await tx.payment.update({

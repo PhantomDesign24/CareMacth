@@ -38,6 +38,7 @@ interface Earnings {
   totalGross: number;        // 총 매출(수수료·세금 차감 전)
   totalPlatformFee: number;
   totalTax: number;
+  totalAssociationFee: number; // 누적 협회비 차감
   totalNetAmount: number;
   recent: EarningItem[];     // 최근 정산 내역
   additionalFees: AdditionalFeeSummary;
@@ -212,7 +213,7 @@ function CaregiverDashboard() {
   const [summary, setSummary] = useState<CaregiverSummary | null>(null);
   const [earnings, setEarnings] = useState<Earnings>({
     thisMonth: 0, lastMonth: 0, total: 0, pending: 0,
-    totalGross: 0, totalPlatformFee: 0, totalTax: 0, totalNetAmount: 0,
+    totalGross: 0, totalPlatformFee: 0, totalTax: 0, totalAssociationFee: 0, totalNetAmount: 0,
     recent: [],
     additionalFees: { totalAmount: 0, totalNetAmount: 0, unpaidAmount: 0, pendingCount: 0, approvedCount: 0 },
   });
@@ -284,6 +285,7 @@ function CaregiverDashboard() {
         totalGross: earningSummary.totalAmount || 0,
         totalPlatformFee: earningSummary.totalPlatformFee || 0,
         totalTax: earningSummary.totalTax || 0,
+        totalAssociationFee: earningSummary.totalAssociationFee || 0,
         totalNetAmount: earningSummary.totalNetAmount || 0,
         recent: earningsList.slice(0, 10).map((e: any) => ({
           id: e.id,
@@ -949,6 +951,17 @@ function CaregiverDashboard() {
                       -{earnings.totalTax.toLocaleString()}원
                     </span>
                   </div>
+                  {earnings.totalAssociationFee > 0 && (
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        <span className="text-sm text-gray-700">협회비 (첫 정산 차감)</span>
+                      </div>
+                      <span className="text-sm font-semibold text-amber-600 tabular-nums">
+                        -{earnings.totalAssociationFee.toLocaleString()}원
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between px-4 py-3 bg-emerald-50/40">
                     <div className="flex items-center gap-2">
                       <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />

@@ -32,3 +32,24 @@ export function calculateEarning(input: EarningCalcInput): EarningCalcResult {
   const netAmount = Math.max(0, amount - platformFee - taxAmount);
   return { amount, platformFee, taxAmount, netAmount };
 }
+
+// 협회비 미납 간병사의 "첫 정산" 시 차감할 협회비 금액 계산.
+//  - associationPaidAt 이 이미 찍혀있으면(납부 처리됨) 0
+//  - 이미 정산에서 차감한 이력(associationFeeDeducted>0)이 있으면 재차감 방지 0
+//  - 그 외엔 caregiver.associationFee(0이면 PlatformConfig.associationFeeDefault) 반환
+// tx: prisma 트랜잭션 클라이언트 (Earning 생성과 같은 트랜잭션에서 호출해야 원자성 보장)
+export async function computeAssociationDeduction(tx: any, caregiverId: string): Promise<number> {
+  const cg = await tx.caregiver.findUnique({
+    where: { id: caregiverId },
+    select: { associationFee: true, associationPaidAt: true },
+  });
+  if (!cg || cg.associationPaidAt) return 0;
+  const prior = await tx.earning.findFirst({
+    where: { caregiverId, associationFeeDeducted: { gt: 0 } },
+    select: { id: true },
+  });
+  if (prior) return 0;
+  const cfg = await tx.platformConfig.findFirst({ select: { associationFeeDefault: true } });
+  const fee = cg.associationFee && cg.associationFee > 0 ? cg.associationFee : (cfg?.associationFeeDefault ?? 120000);
+  return Math.max(0, fee);
+}
