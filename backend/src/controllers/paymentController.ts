@@ -171,9 +171,9 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       throw new AppError('결제 금액이 올바르지 않습니다.', 400);
     }
 
-    // VAT 별도 계산 — 공급가액(amount) 기준 10%. amount/11 은 총액 기준이라 9.09% 가 되어 과소 청구.
-    // 테스트 모드는 VAT 제외하고 정확히 100원으로 결제
-    const vatAmount = testMode === true ? 0 : Math.round(amount * 0.1);
+    // VAT 별도 계산 — 카드결제만 공급가액(amount) 기준 10% 부과.
+    // 무통장입금(BANK_TRANSFER)·직접결제(DIRECT)·테스트모드는 VAT 미부과(0원).
+    const vatAmount = (testMode === true || method !== 'CARD') ? 0 : Math.round(amount * 0.1);
     const totalAmount = amount + vatAmount;
 
     if (totalAmount <= 0 && amount > 0) {

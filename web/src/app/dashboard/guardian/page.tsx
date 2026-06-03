@@ -387,7 +387,8 @@ function GuardianDashboard() {
         let statusLabel: string;
         if (isVirtual) {
           statusLabel = formatCareStatus(crStatus);
-        } else if ((c.status === 'ACTIVE' || c.status === 'EXTENDED') && !isPaid && !isEscrow) {
+        } else if ((c.status === 'ACTIVE' || c.status === 'EXTENDED' || c.status === 'PENDING_SIGNATURE') && !isPaid && !isEscrow) {
+          // 매칭 직후 PENDING_SIGNATURE(결제 전) 계약도 결제 대기로 표시
           statusLabel = '결제 대기';
         } else if ((c.status === 'ACTIVE' || c.status === 'EXTENDED') && isEscrow) {
           statusLabel = '에스크로 보관중';
@@ -1026,8 +1027,8 @@ function GuardianDashboard() {
                             ⏱ 간병인 서명 대기 중
                           </span>
                         )}
-                        {/* 결제 대기 중이면 결제 버튼 최우선 표시 */}
-                        {!care.isVirtual && (care.contractStatus === 'ACTIVE' || care.contractStatus === 'EXTENDED') && !care.isPaid && (
+                        {/* 결제 대기 중이면 결제 버튼 최우선 표시 (매칭 직후 PENDING_SIGNATURE 포함) */}
+                        {!care.isVirtual && (care.contractStatus === 'ACTIVE' || care.contractStatus === 'EXTENDED' || care.contractStatus === 'PENDING_SIGNATURE') && !care.isPaid && (
                           <Link
                             href={`/dashboard/guardian/payment/${care.id}`}
                             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors"

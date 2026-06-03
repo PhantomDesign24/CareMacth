@@ -125,8 +125,9 @@ export default function PaymentPage() {
   }, [fetchContract]);
 
   // Calculated amounts
+  // VAT: 카드결제만 간병비(공급가)의 10% 부과. 무통장/직접결제는 VAT 미부과(백엔드와 동일).
   const serviceAmount = contract?.totalAmount || 0;
-  const vatAmount = Math.round(serviceAmount / 11);
+  const vatAmount = method === "CARD" ? Math.round(serviceAmount * 0.1) : 0;
   const totalBeforeDiscount = serviceAmount + vatAmount;
   const clampedPoints = Math.min(pointsUsed, pointsAvailable, totalBeforeDiscount);
   const finalAmount = totalBeforeDiscount - clampedPoints;
@@ -414,12 +415,14 @@ export default function PaymentPage() {
                   {formatMoney(serviceAmount)}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600">VAT (별도)</span>
-                <span className="text-gray-900">
-                  {formatMoney(vatAmount)}
-                </span>
-              </div>
+              {vatAmount > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">VAT (별도, 카드결제 10%)</span>
+                  <span className="text-gray-900">
+                    {formatMoney(vatAmount)}
+                  </span>
+                </div>
+              )}
               {clampedPoints > 0 && (
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">포인트 할인</span>

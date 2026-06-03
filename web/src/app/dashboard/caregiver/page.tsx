@@ -1218,6 +1218,13 @@ function CaregiverDashboard() {
                           {patient.name || '-'} 환자
                         </h4>
                         <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-500">
+                          {/* 간병 금액(일당) — 역제안 시 내 제안가, 아니면 보호자 제시 일당 */}
+                          {(() => {
+                            const amount = (app.isAccepted === false && app.proposedRate) ? app.proposedRate : cr.dailyRate;
+                            return amount ? (
+                              <span className="font-semibold text-gray-900">간병 금액: {Number(amount).toLocaleString()}원/일</span>
+                            ) : null;
+                          })()}
                           <span>간병 유형: {cr.careType === 'INDIVIDUAL' ? '1:1' : cr.careType === 'FAMILY' ? '가족' : '-'}</span>
                           <span>장소: {cr.location === 'HOSPITAL' ? '병원' : '자택'}{cr.hospitalName ? ` · ${cr.hospitalName}` : ''}</span>
                           <span>시작일: {cr.startDate ? formatDate(cr.startDate) : '-'}</span>
@@ -1828,7 +1835,7 @@ function CaregiverDashboard() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-1">역제안 하기</h3>
             <p className="text-sm text-gray-500 mb-4">
-              {proposalTarget.patientName}님 간병 요청에 다른 일당을 제안합니다.
+              {userName} 간병사님, 이 간병 요청에 다른 일당을 제안합니다.
             </p>
             <div className="space-y-3">
               <div className="bg-gray-50 rounded-xl px-4 py-3 text-sm">
@@ -1848,6 +1855,8 @@ function CaregiverDashboard() {
                   value={proposedRate}
                   onChange={(e) => setProposedRate(e.target.value)}
                   placeholder="예: 180000"
+                  step={1000}
+                  min={0}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
                 />
                 {proposedRate && parseInt(proposedRate) > (proposalTarget.dailyRate || 0) && (

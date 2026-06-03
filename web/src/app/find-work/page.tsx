@@ -813,6 +813,8 @@ export default function FindWorkPage() {
                     value={proposedRate}
                     onChange={(e) => setProposedRate(e.target.value)}
                     placeholder="금액을 입력하세요"
+                    step={1000}
+                    min={0}
                     className="w-full border border-gray-300 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent pr-8"
                   />
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">원</span>

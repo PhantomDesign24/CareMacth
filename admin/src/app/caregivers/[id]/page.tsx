@@ -455,10 +455,16 @@ export default function CaregiverDetailPage() {
   const disputes = data.disputes || [];
   const additionalFees = data.additionalFees || [];
 
+  // 미인증 서류 수 — 승인 전(미승인)일 때만 빨간 배지로 노출. 승인되면 0.
+  const isApproved = data.status === "APPROVED";
+  const pendingCerts = isApproved ? 0 : certificates.filter((c) => !c.verified).length;
+  const pendingIdCard = isApproved ? 0 : (data.idCardImage && !data.identityVerified ? 1 : 0);
+  const pendingCriminal = isApproved ? 0 : (data.criminalCheckDoc && !data.criminalCheckDone ? 1 : 0);
+
   const tabs = [
-    { key: "certificates" as const, label: "자격증", count: certificates.length },
-    { key: "documents" as const, label: "서류" },
-    { key: "criminal" as const, label: "범죄이력" },
+    { key: "certificates" as const, label: "자격증", count: certificates.length, pending: pendingCerts },
+    { key: "documents" as const, label: "서류", pending: pendingIdCard },
+    { key: "criminal" as const, label: "범죄이력", pending: pendingCriminal },
     { key: "contracts" as const, label: "계약 이력", count: contracts.length },
     { key: "earnings" as const, label: "수익/정산", count: earnings.length },
     { key: "fees" as const, label: "추가비 요청", count: additionalFees.length },
@@ -660,6 +666,12 @@ export default function CaregiverDetailPage() {
                   activeTab === tab.key ? "bg-primary-100 text-primary-700" : "bg-gray-100 text-gray-500"
                 }`}>
                   {tab.count}
+                </span>
+              )}
+              {/* 미인증 서류 빨간 배지 — 승인 전 검토 필요 표시 */}
+              {!!(tab as { pending?: number }).pending && (
+                <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-bold text-white">
+                  {(tab as { pending?: number }).pending}
                 </span>
               )}
             </button>
