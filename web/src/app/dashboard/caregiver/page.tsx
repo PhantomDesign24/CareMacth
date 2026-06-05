@@ -237,7 +237,11 @@ function CaregiverDashboard() {
         caregiverAPI.getMyApplications().catch(() => ({ data: { data: [] } })),
       ]);
       // 내가 이미 지원한 요청 ID 목록 (PENDING/ACCEPTED 상태만)
-      const myApps: any[] = applicationsRes.data?.data || [];
+      // axios 인터셉터가 {success,data} 를 자동 언래핑하므로 res.data 가 곧 배열.
+      // (catch fallback 은 {data:{data:[]}} 형태라 .data?.data 도 함께 처리)
+      const myApps: any[] = Array.isArray(applicationsRes.data)
+        ? applicationsRes.data
+        : (applicationsRes.data?.data || []);
       setMyApplications(myApps);
       const activeAppIds = new Set(
         myApps
