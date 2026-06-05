@@ -118,25 +118,24 @@ export default function CompanyPage() {
           </div>
 
           {/* 2단 메시지 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10 mb-12 sm:mb-16">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 mb-14 sm:mb-16">
             <p className="text-sm sm:text-base text-gray-600 leading-loose text-center md:text-right">
-              케어매치의 임직원은 현장에서 일어나는 다양한 일에 대하여<br className="hidden lg:block" />
-              적극적으로 참여하고 해결책을 찾아 드리겠습니다.
+              케어매치의 임직원은 현장에서 일어나는 다양한 일에 대하여 적극적으로 참여하고 해결책을 찾아 드리겠습니다.
             </p>
             <p className="text-sm sm:text-base text-gray-600 leading-loose text-center md:text-left">
-              고통받고 있는 환자를 보살피는 일은 천사의 일입니다.<br className="hidden lg:block" />
-              이보다 더 의미 있고 소중한 일은 없습니다.
+              고통받고 있는 환자를 보살피는 일은 천사의 일입니다. 이보다 더 의미 있고 소중한 일은 없습니다.
             </p>
           </div>
 
           {/* 인용구 — 큰 따옴표로 감싼 약속 메시지 */}
-          <div className="relative max-w-3xl mx-auto text-center px-6 sm:px-10 py-8 sm:py-12">
-            <span className="absolute left-0 top-0 text-6xl sm:text-8xl font-serif text-primary-200 leading-none select-none">&ldquo;</span>
-            <p className="text-base sm:text-2xl font-semibold text-gray-800 leading-relaxed sm:leading-loose">
-              케어매치의 임직원은 언제나 환우님과 환우님의 보호자<br className="hidden sm:block" />
+          <div className="relative max-w-3xl mx-auto text-center px-8 sm:px-14 pt-12 pb-14 sm:pt-14 sm:pb-16">
+            <span className="absolute left-0 top-0 text-5xl sm:text-8xl font-serif text-primary-200 leading-none select-none">&ldquo;</span>
+            <p className="text-base sm:text-2xl font-semibold text-gray-800 leading-loose">
+              케어매치의 임직원은 언제나 환우님과 환우님의 보호자{" "}
+              <br className="hidden sm:block" />
               그리고 간병인님을 존경하고 사랑할 것임을 약속드립니다.
             </p>
-            <span className="absolute right-0 bottom-0 text-6xl sm:text-8xl font-serif text-primary-200 leading-none select-none translate-y-4">&rdquo;</span>
+            <span className="absolute right-0 bottom-0 text-5xl sm:text-8xl font-serif text-primary-200 leading-none select-none">&rdquo;</span>
           </div>
         </div>
       </section>
