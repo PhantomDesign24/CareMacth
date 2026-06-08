@@ -78,11 +78,49 @@ async function sendPushNotification(
   }
 }
 
+// 알림 type + data + 수신자 role 로 앱/웹이 이동할 내부 URL 도출.
+// 호출부가 data.url 을 명시했으면 그걸 우선 사용.
+function deriveNotificationUrl(type: string, data: any, role?: string | null): string | null {
+  const d = data || {};
+  if (typeof d.url === 'string' && d.url.startsWith('/')) return d.url;
+  if (d.forAdmin || d.adminAlert) return null; // 관리자 알림은 앱 대상 아님
+  const isCg = role === 'CAREGIVER';
+  switch (type) {
+    case 'APPLICATION': // 보호자: 새 지원자 → 지원자 목록
+      return d.careRequestId ? `/dashboard/guardian/applicants/${d.careRequestId}` : '/dashboard/guardian';
+    case 'MATCHING': // 간병사: 새 일감 → 공고 확인 탭
+      return '/dashboard/caregiver?tab=requests';
+    case 'CONTRACT':
+      return isCg ? '/dashboard/caregiver?tab=activity' : '/dashboard/guardian';
+    case 'PAYMENT':
+      if (d.contractId) return `/dashboard/guardian/payment/${d.contractId}`;
+      return '/dashboard/guardian?tab=payments';
+    case 'REVIEW':
+      return isCg ? '/dashboard/caregiver?tab=reviews' : '/dashboard/guardian?tab=reviews';
+    case 'INSURANCE':
+      return '/dashboard/guardian?tab=insurance';
+    case 'DISPUTE':
+      return isCg ? '/dashboard/caregiver' : '/dashboard/guardian';
+    default:
+      return isCg ? '/dashboard/caregiver' : '/dashboard/guardian';
+  }
+}
+
 /**
  * 알림 생성 + 푸시 발송
  */
 export async function sendNotification(params: SendNotificationParams) {
   const { userId, type, title, body, data } = params;
+
+  // 수신자 정보 먼저 조회 (url 도출에 role 필요)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { fcmToken: true, pushEnabled: true, notificationPrefs: true, role: true },
+  });
+
+  // 알림 클릭 시 이동할 URL 자동 도출 → data 에 포함 (앱은 data.url 로 이동)
+  const url = deriveNotificationUrl(type, data, user?.role);
+  const enrichedData = url ? { ...(data || {}), url } : (data || {});
 
   // 1. DB에 알림 저장
   const notification = await prisma.notification.create({
@@ -91,14 +129,8 @@ export async function sendNotification(params: SendNotificationParams) {
       type,
       title,
       body,
-      data: data || {},
+      data: enrichedData,
     },
-  });
-
-  // 2. FCM 푸시 알림 발송 + 결과 기록
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { fcmToken: true, pushEnabled: true, notificationPrefs: true, role: true },
   });
 
   // 카테고리별 설정 체크: 명시적으로 false면 발송 안 함, 그 외(true/undefined)는 발송
@@ -112,7 +144,7 @@ export async function sendNotification(params: SendNotificationParams) {
       user.fcmToken,
       title,
       body,
-      { type, notificationId: notification.id, ...data },
+      { type, notificationId: notification.id, ...enrichedData },
       colorForRole(user.role),
     );
 
