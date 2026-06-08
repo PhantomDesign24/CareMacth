@@ -34,6 +34,15 @@ export function buildAuthHashes(params: { authToken: string; timestamp: string |
   };
 }
 
+// 모바일(mobile.inicis.com/smart) 위변조 방지 해시
+//  P_CHKFAKE = BASE64( SHA512( P_AMT + P_OID + P_TIMESTAMP + signKey ) )
+export function buildMobileChkfake(params: { amt: number | string; oid: string; timestamp: string | number }) {
+  const { amt, oid, timestamp } = params;
+  const signKey = config.inicis.signKey;
+  const sha512 = crypto.createHash('sha512').update(`${amt}${oid}${timestamp}${signKey}`, 'utf8').digest();
+  return Buffer.from(sha512).toString('base64');
+}
+
 export type InicisApproveResult = {
   resultCode: string;   // '0000' = 승인성공
   resultMsg: string;

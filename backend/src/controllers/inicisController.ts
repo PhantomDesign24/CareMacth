@@ -3,7 +3,7 @@ import { prisma } from '../app';
 import { config } from '../config';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
-import { buildPaymentHashes, requestApproval, netCancel } from '../utils/inicis';
+import { buildPaymentHashes, buildMobileChkfake, requestApproval, netCancel } from '../utils/inicis';
 
 const WEB_BASE = process.env.WEB_BASE_URL || 'https://cm.phantomdesign.kr';
 const API_BASE = process.env.API_BASE_URL || 'https://cm.phantomdesign.kr/api';
@@ -12,7 +12,8 @@ const API_BASE = process.env.API_BASE_URL || 'https://cm.phantomdesign.kr/api';
 // 결제 PENDING 생성 + INIStdPay 결제창에 넘길 폼 파라미터 반환
 export const prepareInicisPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { contractId, pointsUsed } = req.body as { contractId?: string; pointsUsed?: number };
+    const { contractId, pointsUsed, platform } = req.body as { contractId?: string; pointsUsed?: number; platform?: string };
+    const isMobile = platform === 'mobile';
     if (!contractId) throw new AppError('contractId가 필요합니다.', 400);
 
     const guardian = await prisma.guardian.findUnique({ where: { userId: req.user!.id } });
@@ -49,7 +50,10 @@ export const prepareInicisPayment = async (req: AuthRequest, res: Response, next
     // 주문번호(oid) — mid + 계약 + 타임스탬프로 유니크 보장 (40byte 이내)
     const oid = `${config.inicis.mid}_${Date.now()}_${contract.id.slice(0, 8)}`;
     const timestamp = Date.now().toString();
-    const { signature, verification, mKey } = buildPaymentHashes({ oid, price: totalAmount, timestamp });
+    const goodname = `간병서비스 (${contract.careRequest?.patient?.name || '환자'})`;
+    const buyername = user?.name || '보호자';
+    const buyertel = (user?.phone || '01000000000').replace(/[^0-9]/g, '');
+    const buyeremail = user?.email || req.user!.email || '';
 
     // 기존 PENDING(미완료) 이니시스 결제 정리 후 새로 생성
     await prisma.payment.deleteMany({ where: { contractId: contract.id, status: 'PENDING', pgProvider: 'inicis' } });
@@ -57,20 +61,46 @@ export const prepareInicisPayment = async (req: AuthRequest, res: Response, next
       data: {
         contractId: contract.id,
         guardianId: guardian.id,
-        amount,
-        vatAmount,
-        totalAmount,
-        method: 'CARD',
-        status: 'PENDING',
-        pgProvider: 'inicis',
-        tossOrderId: oid,      // 이니시스 oid 저장
-        pointsUsed: actualPoints,
+        amount, vatAmount, totalAmount,
+        method: 'CARD', status: 'PENDING', pgProvider: 'inicis',
+        tossOrderId: oid, pointsUsed: actualPoints,
       },
     });
 
+    if (isMobile) {
+      // 모바일: mobile.inicis.com/smart/payment/ 로 폼 전송 (전체페이지 이동)
+      const chkfake = buildMobileChkfake({ amt: totalAmount, oid, timestamp });
+      return res.json({
+        success: true,
+        data: {
+          mode: 'mobile',
+          action: 'https://mobile.inicis.com/smart/payment/',
+          form: {
+            P_INI_PAYMENT: 'CARD',
+            P_MID: config.inicis.mid,
+            P_OID: oid,
+            P_AMT: String(totalAmount),
+            P_GOODS: goodname,
+            P_UNAME: buyername,
+            P_MOBILE: buyertel,
+            P_EMAIL: buyeremail,
+            P_NEXT_URL: `${API_BASE}/payments/inicis/mobile-return`,
+            P_NOTI_URL: `${API_BASE}/payments/inicis/mobile-return`,
+            P_CHARSET: 'utf8',
+            P_RESERVED: 'twotrs_isp=Y&block_isp=Y&twotrs_isp_noti=N&amt_hash=Y',
+            P_TIMESTAMP: timestamp,
+            P_CHKFAKE: chkfake,
+          },
+        },
+      });
+    }
+
+    // PC: INIStdPay.js 팝업
+    const { signature, verification, mKey } = buildPaymentHashes({ oid, price: totalAmount, timestamp });
     res.json({
       success: true,
       data: {
+        mode: 'pc',
         stdJsUrl: config.inicis.stdJsUrl,
         form: {
           version: '1.0',
@@ -78,14 +108,9 @@ export const prepareInicisPayment = async (req: AuthRequest, res: Response, next
           oid,
           price: String(totalAmount),
           timestamp,
-          signature,
-          verification,
-          mKey,
+          signature, verification, mKey,
           currency: 'WON',
-          goodname: `간병서비스 (${contract.careRequest?.patient?.name || '환자'})`,
-          buyername: user?.name || '보호자',
-          buyertel: (user?.phone || '01000000000').replace(/[^0-9]/g, ''),
-          buyeremail: user?.email || req.user!.email || '',
+          goodname, buyername, buyertel, buyeremail,
           gopaymethod: 'Card',
           acceptmethod: 'HPP(1):below1000:va_receipt',
           use_chkfake: 'Y',
@@ -180,6 +205,73 @@ export const inicisReturn = async (req: Request, res: Response) => {
 
     return res.redirect(`${WEB_BASE}/payment/success?provider=inicis&oid=${encodeURIComponent(oid)}`);
   } catch (e: any) {
+    return fail('결제 처리 중 오류가 발생했습니다.');
+  }
+};
+
+// 결제 ESCROW 전이 + careRequest IN_PROGRESS + 보호자 알림 (PC/모바일 공통 finalize)
+async function finalizeInicisPayment(paymentId: string, tid?: string) {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment) return;
+  const contract = payment.contractId ? await prisma.contract.findUnique({ where: { id: payment.contractId } }) : null;
+  try {
+    await prisma.$transaction(async (tx) => {
+      const fin = await tx.payment.updateMany({
+        where: { id: payment.id, status: 'PENDING' },
+        data: { status: 'ESCROW', paidAt: new Date(), tossPaymentKey: tid || null },
+      });
+      if (fin.count === 0) throw new Error('이미 처리됨');
+      const g = contract ? await tx.guardian.findUnique({ where: { id: payment.guardianId } }) : null;
+      if (payment.pointsUsed > 0 && g) {
+        await tx.user.update({ where: { id: g.userId }, data: { points: { decrement: payment.pointsUsed } } }).catch(() => {});
+      }
+      if (contract) {
+        await tx.careRequest.update({ where: { id: contract.careRequestId }, data: { status: 'IN_PROGRESS' } }).catch(() => {});
+        if (g) {
+          await tx.notification.create({
+            data: {
+              userId: g.userId, type: 'PAYMENT', title: '결제가 완료되었습니다',
+              body: `결제가 완료되어 간병이 시작됩니다. 결제금액: ${payment.totalAmount.toLocaleString()}원`,
+              data: { paymentId: payment.id },
+            },
+          });
+        }
+      }
+    });
+  } catch {
+    await prisma.payment.updateMany({
+      where: { id: payment.id, status: 'PENDING' },
+      data: { status: 'ESCROW', paidAt: new Date(), tossPaymentKey: tid || null },
+    }).catch(() => {});
+  }
+}
+
+// POST /payments/inicis/mobile-return — 모바일 결제결과 수신 (P_NEXT_URL)
+export const inicisMobileReturn = async (req: Request, res: Response) => {
+  const b: any = req.body || {};
+  const status = b.P_STATUS;
+  const oid = b.P_OID;
+  const tid = b.P_TID;
+  const amt = b.P_AMT;
+  const fail = (msg: string) => res.redirect(`${WEB_BASE}/payment/fail?reason=${encodeURIComponent(msg)}`);
+  try {
+    if (!oid) return fail('주문번호 없음');
+    const payment = await prisma.payment.findFirst({ where: { tossOrderId: oid, pgProvider: 'inicis' } });
+    if (!payment) return fail('결제 정보를 찾을 수 없습니다.');
+
+    if (String(status) !== '00') {
+      await prisma.payment.updateMany({ where: { id: payment.id, status: 'PENDING' }, data: { status: 'FAILED' } });
+      return fail(b.P_RMESG1 || '결제 실패');
+    }
+    // 금액 검증
+    if (Number(amt) !== payment.totalAmount) {
+      await prisma.payment.updateMany({ where: { id: payment.id, status: 'PENDING' }, data: { status: 'FAILED' } });
+      return fail('결제 금액 불일치');
+    }
+    // 모바일 스마트결제는 P_STATUS=00 이면 승인 완료 → finalize
+    await finalizeInicisPayment(payment.id, tid);
+    return res.redirect(`${WEB_BASE}/payment/success?provider=inicis&oid=${encodeURIComponent(oid)}`);
+  } catch {
     return fail('결제 처리 중 오류가 발생했습니다.');
   }
 };

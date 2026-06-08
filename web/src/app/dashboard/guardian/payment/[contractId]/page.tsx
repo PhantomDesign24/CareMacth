@@ -158,14 +158,18 @@ export default function PaymentPage() {
       document.head.appendChild(s);
     });
 
-  // 이니시스 카드결제: prepare → 숨김폼 구성 → INIStdPay.pay()
+  // 이니시스 카드결제 — PC: INIStdPay.js 팝업 / 모바일·앱: mobile.inicis.com 폼 전송
   const startInicisPayment = async () => {
     if (!contract) return;
+    const w = window as any;
+    const isMobile =
+      w.IS_CAREMATCH_APP === true ||
+      (typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
     const token = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
     const res = await fetch("/api/payments/inicis/prepare", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ contractId: contract.id, pointsUsed: clampedPoints }),
+      body: JSON.stringify({ contractId: contract.id, pointsUsed: clampedPoints, platform: isMobile ? "mobile" : "pc" }),
     });
     const json = await res.json();
     if (!json?.success) {
@@ -173,23 +177,33 @@ export default function PaymentPage() {
       setSubmitting(false);
       return;
     }
-    const { form, stdJsUrl } = json.data;
+    const data = json.data;
     const old = document.getElementById("inicis_pay_form");
     if (old) old.remove();
     const f = document.createElement("form");
     f.id = "inicis_pay_form";
     f.method = "POST";
     f.acceptCharset = "UTF-8";
-    Object.entries(form).forEach(([k, v]) => {
+    Object.entries(data.form).forEach(([k, v]) => {
       const inp = document.createElement("input");
       inp.type = "hidden"; inp.name = k; inp.value = String(v);
       f.appendChild(inp);
     });
+
+    if (data.mode === "mobile") {
+      // 모바일: 결제 페이지로 전체 이동 (앱 WebView 안에서 카드앱 호출 → 복귀)
+      f.action = data.action;
+      document.body.appendChild(f);
+      f.submit();
+      return;
+    }
+
+    // PC: INIStdPay 팝업
     document.body.appendChild(f);
-    await loadScriptOnce(stdJsUrl);
+    await loadScriptOnce(data.stdJsUrl);
     const INIStdPay = (window as any).INIStdPay;
     if (!INIStdPay?.pay) { alert("결제창을 불러올 수 없습니다."); setSubmitting(false); return; }
-    INIStdPay.pay("inicis_pay_form"); // 결제창 오픈 → 결과는 returnUrl(백엔드)에서 처리 후 success/fail 리다이렉트
+    INIStdPay.pay("inicis_pay_form");
   };
 
   const handleSubmit = async (e: React.FormEvent, testMode = false) => {

@@ -9,7 +9,8 @@ import * as inicisController from '../controllers/inicisController';
 const router = Router();
 
 // ── 이니시스 결제결과 수신 (이니시스 서버 → 가맹점) — 인증 없음(공개), authenticate 미들웨어 위에 배치
-router.post('/inicis/return', inicisController.inicisReturn);
+router.post('/inicis/return', inicisController.inicisReturn);            // PC
+router.post('/inicis/mobile-return', inicisController.inicisMobileReturn); // 모바일
 
 // PDF 영수증: 쿼리스트링 토큰 허용 (새 탭 다운로드)
 router.get(
