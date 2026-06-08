@@ -147,12 +147,67 @@ export default function PaymentPage() {
     setPointsUsed(maxUsable);
   };
 
+  // INIStdPay.js 1회 로드
+  const loadScriptOnce = (src: string): Promise<void> =>
+    new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) return resolve();
+      const s = document.createElement("script");
+      s.src = src; s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("INIStdPay 로드 실패"));
+      document.head.appendChild(s);
+    });
+
+  // 이니시스 카드결제: prepare → 숨김폼 구성 → INIStdPay.pay()
+  const startInicisPayment = async () => {
+    if (!contract) return;
+    const token = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
+    const res = await fetch("/api/payments/inicis/prepare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ contractId: contract.id, pointsUsed: clampedPoints }),
+    });
+    const json = await res.json();
+    if (!json?.success) {
+      alert(json?.message || "결제 준비에 실패했습니다.");
+      setSubmitting(false);
+      return;
+    }
+    const { form, stdJsUrl } = json.data;
+    const old = document.getElementById("inicis_pay_form");
+    if (old) old.remove();
+    const f = document.createElement("form");
+    f.id = "inicis_pay_form";
+    f.method = "POST";
+    f.acceptCharset = "UTF-8";
+    Object.entries(form).forEach(([k, v]) => {
+      const inp = document.createElement("input");
+      inp.type = "hidden"; inp.name = k; inp.value = String(v);
+      f.appendChild(inp);
+    });
+    document.body.appendChild(f);
+    await loadScriptOnce(stdJsUrl);
+    const INIStdPay = (window as any).INIStdPay;
+    if (!INIStdPay?.pay) { alert("결제창을 불러올 수 없습니다."); setSubmitting(false); return; }
+    INIStdPay.pay("inicis_pay_form"); // 결제창 오픈 → 결과는 returnUrl(백엔드)에서 처리 후 success/fail 리다이렉트
+  };
+
   const handleSubmit = async (e: React.FormEvent, testMode = false) => {
     e.preventDefault();
-
     if (!contract) return;
-
     setSubmitting(true);
+
+    // 카드결제 → 이니시스 결제창 (토스 대체)
+    if (method === "CARD" && !testMode) {
+      try {
+        await startInicisPayment();
+      } catch (err: any) {
+        alert(err?.message || "결제창을 열 수 없습니다.");
+        setSubmitting(false);
+      }
+      return;
+    }
+
     try {
       const res = await paymentAPI.create({
         contractId: contract.id,
@@ -163,30 +218,7 @@ export default function PaymentPage() {
 
       const data = res.data?.data || res.data || {};
 
-      if (method === "CARD") {
-        // 토스페이먼츠 결제창 호출
-        try {
-          const tossPayments = await loadTossPayments(TOSS_CLIENT_KEY);
-          const userName = (typeof window !== "undefined" ? JSON.parse(localStorage.getItem("cm_user") || "{}")?.name : "") || "고객";
-          await tossPayments.requestPayment("카드", {
-            amount: data.totalAmount || data.amount || 0,
-            orderId: data.orderId,
-            orderName: `${contract.patientName} 환자 간병 서비스`,
-            customerName: userName,
-            successUrl: `${window.location.origin}/payment/success`,
-            failUrl: `${window.location.origin}/payment/fail`,
-          });
-          return; // 결제창에서 리디렉트됨
-        } catch (tossErr: any) {
-          if (tossErr?.code === "USER_CANCEL") {
-            alert("결제가 취소되었습니다.");
-          } else {
-            alert(tossErr?.message || "결제창을 열 수 없습니다.");
-          }
-          setSubmitting(false);
-          return;
-        }
-      } else if (method === "BANK_TRANSFER") {
+      if (method === "BANK_TRANSFER") {
         const accountInfo = data.virtualAccount
           ? `입금 계좌: ${data.virtualAccount.bankName} ${data.virtualAccount.accountNumber}\n입금액: ${formatMoney(data.amount)}\n입금 기한: ${data.virtualAccount.dueDate || "24시간 이내"}`
           : `주문번호: ${data.orderId}\n결제 금액: ${formatMoney(data.amount)}\n무통장입금 안내가 등록된 연락처로 발송됩니다.`;

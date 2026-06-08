@@ -13,6 +13,14 @@ function PaymentSuccessContent() {
   const [amount, setAmount] = useState(0);
 
   useEffect(() => {
+    // 이니시스: 백엔드 returnUrl 에서 이미 승인 완료 후 리다이렉트됨 → confirm 불필요, 성공 표시만
+    const provider = searchParams.get("provider");
+    if (provider === "inicis") {
+      setStatus("success");
+      try { window.history.replaceState({}, "", "/payment/success"); } catch {}
+      return;
+    }
+
     const paymentKey = searchParams.get("paymentKey");
     const orderId = searchParams.get("orderId");
     const amt = searchParams.get("amount");
@@ -93,9 +101,11 @@ function PaymentSuccessContent() {
         </div>
         <h1 className="text-xl font-bold text-gray-900 mb-2">결제 완료</h1>
         <p className="text-sm text-gray-500 mb-1">결제가 성공적으로 처리되었습니다.</p>
-        <div className="my-6 py-4 border-y border-gray-100">
-          <div className="text-2xl font-bold text-primary-600">{amount.toLocaleString()}원</div>
-        </div>
+        {amount > 0 && (
+          <div className="my-6 py-4 border-y border-gray-100">
+            <div className="text-2xl font-bold text-primary-600">{amount.toLocaleString()}원</div>
+          </div>
+        )}
         <div className="flex gap-2">
           <Link href="/dashboard/guardian" className="btn-primary flex-1">
             대시보드

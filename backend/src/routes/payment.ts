@@ -4,8 +4,12 @@ import { body } from 'express-validator';
 import { authenticate } from '../middlewares/auth';
 import { paymentLimiter } from '../middlewares/rateLimiter';
 import * as paymentController from '../controllers/paymentController';
+import * as inicisController from '../controllers/inicisController';
 
 const router = Router();
+
+// ── 이니시스 결제결과 수신 (이니시스 서버 → 가맹점) — 인증 없음(공개), authenticate 미들웨어 위에 배치
+router.post('/inicis/return', inicisController.inicisReturn);
 
 // PDF 영수증: 쿼리스트링 토큰 허용 (새 탭 다운로드)
 router.get(
@@ -29,6 +33,12 @@ router.post('/', paymentLimiter, [
   body('method').notEmpty().withMessage('결제 방법을 선택해주세요.'),
   body('pointsUsed').optional().isInt({ min: 0 }).withMessage('포인트 사용량은 0 이상이어야 합니다.'),
 ], paymentController.createPayment);
+
+// POST /inicis/prepare - 이니시스 결제 준비 (PENDING 생성 + 결제창 폼 파라미터 반환)
+router.post('/inicis/prepare', paymentLimiter, [
+  body('contractId').notEmpty().withMessage('계약 ID가 필요합니다.'),
+  body('pointsUsed').optional().isInt({ min: 0 }),
+], inicisController.prepareInicisPayment);
 
 // POST /confirm - 토스페이먼츠 결제 확인
 router.post('/confirm', [

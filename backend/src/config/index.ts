@@ -34,6 +34,28 @@ export const config = {
     secretKey: process.env.TOSS_SECRET_KEY || '',
   },
 
+  // KG이니시스 INIStdPay 웹표준결제
+  // INICIS_MODE=test 면 공개 테스트 MID/signKey 사용(실결제 X), production 이면 운영값 사용.
+  inicis: (() => {
+    const mode = process.env.INICIS_MODE || 'test';
+    const isProd = mode === 'production';
+    return {
+      mode,
+      isProd,
+      // 테스트: 이니시스 공개 테스트 상점 (실제 청구 없음)
+      mid: isProd ? (process.env.INICIS_MID_PROD || '') : 'INIpayTest',
+      signKey: isProd ? (process.env.INICIS_SIGNKEY_PROD || '') : 'SU5JTElURV9UUklQTEVERVNfS0VZU1RS',
+      // iniapiKey(취소/환불 API용) — 운영 전환 시 상점관리자에서 발급
+      iniApiKey: isProd ? (process.env.INICIS_INIAPIKEY_PROD || '') : '',
+      // 결제창 JS / 결제 도메인 (테스트는 stg)
+      stdJsUrl: isProd
+        ? 'https://stdpay.inicis.com/stdjs/INIStdPay.js'
+        : 'https://stgstdpay.inicis.com/stdjs/INIStdPay.js',
+      // 취소 API 인증서 키파일 경로 (운영)
+      certDir: process.env.INICIS_CERT_DIR || 'key/SIRmatch11',
+    };
+  })(),
+
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || '',
     privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),

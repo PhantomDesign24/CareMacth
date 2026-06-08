@@ -529,9 +529,11 @@ model Payment {
   method      PaymentMethod
   status      PaymentStatus @default(PENDING)
 
-  // 토스페이먼츠 연동
-  tossPaymentKey String?
-  tossOrderId    String? @unique
+  // PG 연동 (toss | inicis) — 취소/환불 라우팅 구분용
+  pgProvider     String? // 'toss' | 'inicis' (null=레거시 toss)
+  // 토스: paymentKey/orderId · 이니시스: tid/oid 를 동일 컬럼에 저장
+  tossPaymentKey String? // 이니시스 tid 도 여기 저장
+  tossOrderId    String? @unique // 이니시스 oid 도 여기 저장
 
   // 포인트 사용
   pointsUsed Int @default(0)
