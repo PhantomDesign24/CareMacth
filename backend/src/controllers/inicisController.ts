@@ -131,7 +131,7 @@ export const inicisReturn = async (req: Request, res: Response) => {
   const { resultCode, authToken, authUrl, netCancelUrl, orderNumber } = b;
   const oid = orderNumber || b.oid;
   const fail = (msg: string) =>
-    res.redirect(`${WEB_BASE}/payment/fail?reason=${encodeURIComponent(msg)}`);
+    res.redirect(`${WEB_BASE}/payment/fail?message=${encodeURIComponent(msg)}`);
 
   try {
     if (!oid) return fail('주문번호 없음');
@@ -253,7 +253,7 @@ export const inicisMobileReturn = async (req: Request, res: Response) => {
   const oid = b.P_OID;
   const tid = b.P_TID;
   const amt = b.P_AMT;
-  const fail = (msg: string) => res.redirect(`${WEB_BASE}/payment/fail?reason=${encodeURIComponent(msg)}`);
+  const fail = (msg: string) => res.redirect(`${WEB_BASE}/payment/fail?message=${encodeURIComponent(msg)}`);
   try {
     if (!oid) return fail('주문번호 없음');
     const payment = await prisma.payment.findFirst({ where: { tossOrderId: oid, pgProvider: 'inicis' } });
