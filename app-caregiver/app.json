@@ -36,7 +36,7 @@
       },
       "googleServicesFile": "./google-services.json",
       "package": "kr.carematch.giver",
-      "versionCode": 9,
+      "versionCode": 10,
       "permissions": [
         "INTERNET",
         "USE_BIOMETRIC",
@@ -44,10 +44,13 @@
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
         "POST_NOTIFICATIONS",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "READ_MEDIA_IMAGES",
         "VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "plugins": [

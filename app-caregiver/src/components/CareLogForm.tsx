@@ -51,12 +51,7 @@ export default function CareLogForm({ onSubmit, isSubmitting = false }: CareLogF
   };
 
   const launchGallery = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('권한 필요', '사진 접근 권한이 필요합니다. 설정에서 허용해주세요.');
-      return;
-    }
-
+    // Android Photo Picker 사용 → READ_MEDIA_IMAGES 권한 불필요 (구글 사진/동영상 정책 준수)
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
