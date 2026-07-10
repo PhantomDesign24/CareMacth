@@ -2,7 +2,40 @@
 // 공식 매뉴얼(manual.inicis.com/pay/stdpay_pc.html) 스펙 기준 해시 생성.
 import crypto from 'crypto';
 import axios from 'axios';
+import iconv from 'iconv-lite';
 import { config } from '../config';
+
+// application/x-www-form-urlencoded 본문(EUC-KR) → 객체.
+// 이니시스 모바일은 EUC-KR 로 P_NEXT_URL 에 결과를 POST → 기본 UTF-8 파서로는 한글(P_RMESG1) 깨짐.
+export function parseEucKrFormBody(buf: Buffer): Record<string, string> {
+  const s = buf.toString('latin1'); // 퍼센트 인코딩 보존 (바이트 그대로)
+  const out: Record<string, string> = {};
+  for (const pair of s.split('&')) {
+    if (!pair) continue;
+    const idx = pair.indexOf('=');
+    const rawKey = idx >= 0 ? pair.slice(0, idx) : pair;
+    const rawVal = idx >= 0 ? pair.slice(idx + 1) : '';
+    out[iconv.decode(percentDecodeToBuffer(rawKey), 'euc-kr')] =
+      iconv.decode(percentDecodeToBuffer(rawVal), 'euc-kr');
+  }
+  return out;
+}
+
+function percentDecodeToBuffer(str: string): Buffer {
+  const bytes: number[] = [];
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (c === '+') {
+      bytes.push(0x20);
+    } else if (c === '%' && i + 2 < str.length) {
+      bytes.push(parseInt(str.substr(i + 1, 2), 16));
+      i += 2;
+    } else {
+      bytes.push(str.charCodeAt(i) & 0xff);
+    }
+  }
+  return Buffer.from(bytes);
+}
 
 export function sha256hex(input: string): string {
   return crypto.createHash('sha256').update(input, 'utf8').digest('hex');

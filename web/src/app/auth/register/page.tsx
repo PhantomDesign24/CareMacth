@@ -133,6 +133,13 @@ function RegisterPageInner() {
     setErrorMessage("");
     setFieldErrors({});
 
+    // 필수 약관 동의 검증 — 버튼을 비활성화하지 않고(미반응처럼 보임) 명확한 안내로 처리
+    if (!agreeTerms || !agreePrivacy) {
+      setErrorMessage("이용약관과 개인정보처리방침에 모두 동의해 주세요.");
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     if (!isSocialMode && password !== passwordConfirm) {
       setFieldErrors({ passwordConfirm: "비밀번호가 일치하지 않습니다" });
       return;
@@ -830,7 +837,6 @@ function RegisterPageInner() {
                   checked={agreeTerms}
                   onChange={(e) => setAgreeTerms(e.target.checked)}
                   className="w-5 h-5 mt-0.5 text-primary-500 border-gray-300 rounded focus:ring-primary-400"
-                  required
                 />
                 <span className="text-sm text-gray-700">
                   <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary-600 underline">이용약관</a>에 동의합니다 (필수)
@@ -842,7 +848,6 @@ function RegisterPageInner() {
                   checked={agreePrivacy}
                   onChange={(e) => setAgreePrivacy(e.target.checked)}
                   className="w-5 h-5 mt-0.5 text-primary-500 border-gray-300 rounded focus:ring-primary-400"
-                  required
                 />
                 <span className="text-sm text-gray-700">
                   <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary-600 underline">개인정보처리방침</a>에 동의합니다 (필수)
@@ -852,7 +857,7 @@ function RegisterPageInner() {
 
             <button
               type="submit"
-              disabled={loading || !agreeTerms || !agreePrivacy}
+              disabled={loading}
               className="btn-primary w-full py-3.5"
             >
               {loading ? (

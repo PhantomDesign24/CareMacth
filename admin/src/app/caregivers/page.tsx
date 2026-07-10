@@ -242,6 +242,17 @@ export default function CaregiversPage() {
       ),
     },
     {
+      key: "authProvider",
+      label: "가입 방식",
+      align: "center",
+      render: (_value, row) => {
+        const p = ((row as any).authProvider as string) || "LOCAL";
+        const label = p === "KAKAO" ? "카카오" : p === "NAVER" ? "네이버" : p === "APPLE" ? "애플" : "이메일";
+        const cls = p === "KAKAO" ? "badge-yellow" : p === "NAVER" ? "badge-green" : p === "APPLE" ? "badge-blue" : "badge-gray";
+        return <span className={cls}>{label}</span>;
+      },
+    },
+    {
       key: "documents",
       label: "서류",
       align: "center",

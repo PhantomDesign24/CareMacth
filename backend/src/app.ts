@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import hpp from 'hpp';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
+import { parseEucKrFormBody } from './utils/inicis';
 import authRoutes from './routes/auth';
 import guardianRoutes from './routes/guardian';
 import caregiverRoutes from './routes/caregiver';
@@ -49,7 +50,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'https://cm.phantomdesign.kr'],
+      imgSrc: ["'self'", 'data:', 'https://cm.phantomdesign.kr', 'https://care-match.kr', 'https://www.care-match.kr'],
     },
   },
   crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -59,6 +60,8 @@ app.use(helmet({
 app.use(cors({
   origin: [
     'https://cm.phantomdesign.kr',
+    'https://care-match.kr',
+    'https://www.care-match.kr',
     'http://localhost:3000',
     'http://localhost:3001',
   ],
@@ -69,6 +72,14 @@ app.use(cors({
 
 // HPP: HTTP Parameter Pollution 방어
 app.use(hpp());
+
+// 이니시스 모바일 결과수신: EUC-KR 본문 → 전역 UTF-8 파서보다 먼저 raw 로 받아 EUC-KR 디코딩
+app.use('/api/payments/inicis/mobile-return', express.raw({ type: () => true, limit: '1mb' }), (req, _res, next) => {
+  if (Buffer.isBuffer(req.body)) {
+    try { req.body = parseEucKrFormBody(req.body); } catch { req.body = {}; }
+  }
+  next();
+});
 
 // 요청 본문 크기 제한
 app.use(express.json({ limit: '5mb' }));

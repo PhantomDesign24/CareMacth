@@ -211,10 +211,15 @@ export default function Footer() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-3">
             <div className="text-xs text-gray-500 text-center md:text-left leading-relaxed">
               <p>
-                케어매치 주식회사 | 대표 하만채 | 사업자등록번호 173-81-03376
+                케어매치 주식회사 | 대표 하만채 | 사업자등록번호 173-81-03376 | 통신판매업신고 제2024-서울서초-0612호
               </p>
               <p>
                 서울시 서초구 법원로3길 15 4층 406호
+              </p>
+              <p className="mt-1.5 text-gray-400">
+                모든 거래에 대한 책임과 배송, 환불, 민원 등의 처리는 케어매치㈜에서 진행합니다.
+                <br />
+                민원담당자 : 박소연 과장 (02-535-6600)
               </p>
             </div>
             <p className="text-xs text-gray-500">

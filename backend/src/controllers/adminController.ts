@@ -149,7 +149,7 @@ export const getGuardians = async (req: AuthRequest, res: Response, next: NextFu
       ];
     }
     if (authProvider) {
-      if (!['LOCAL', 'KAKAO', 'NAVER'].includes(authProvider)) {
+      if (!['LOCAL', 'KAKAO', 'NAVER', 'APPLE'].includes(authProvider)) {
         throw new AppError('지원하지 않는 가입 방식입니다.', 400);
       }
       userWhere.authProvider = authProvider;
@@ -409,6 +409,7 @@ export const getCaregivers = async (req: AuthRequest, res: Response, next: NextF
               email: true,
               phone: true,
               profileImage: true,
+              authProvider: true,
               createdAt: true,
             },
           },
@@ -454,6 +455,7 @@ export const getCaregivers = async (req: AuthRequest, res: Response, next: NextF
       phone: cg.user.phone,
       email: cg.user.email,
       profileImage: cg.user.profileImage,
+      authProvider: cg.user.authProvider,
       // 서류 인증 현황
       identityVerified: cg.identityVerified,
       hasIdCard: !!cg.idCardImage,
@@ -524,6 +526,7 @@ export const getCaregiverDetail = async (req: AuthRequest, res: Response, next: 
             email: true,
             phone: true,
             profileImage: true,
+            authProvider: true,
             createdAt: true,
           },
         },

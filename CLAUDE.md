@@ -79,7 +79,7 @@ cd android
 
 ### 앱 패키지명
 - 보호자: `kr.carematch.patient`
-- 간병인: `kr.carematch.caregiver`
+- 간병인: `kr.carematch.giver` (Play Console 등록 기준 — 'caregiver' 아님)
 
 ## 자주 하는 실수 방지
 

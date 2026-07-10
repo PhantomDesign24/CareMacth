@@ -183,7 +183,8 @@ export default function PaymentPage() {
     const f = document.createElement("form");
     f.id = "inicis_pay_form";
     f.method = "POST";
-    f.acceptCharset = "UTF-8";
+    // 모바일 이니시스는 EUC-KR 기반 → 한글(상품명 등) 깨짐 방지. PC(INIStdPay)는 UTF-8.
+    f.acceptCharset = data.mode === "mobile" ? "euc-kr" : "UTF-8";
     Object.entries(data.form).forEach(([k, v]) => {
       const inp = document.createElement("input");
       inp.type = "hidden"; inp.name = k; inp.value = String(v);

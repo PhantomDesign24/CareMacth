@@ -128,8 +128,8 @@ export default function GuardiansPage() {
       align: "center",
       render: (v) => {
         const p = (v as string) || "LOCAL";
-        const label = p === "KAKAO" ? "카카오" : p === "NAVER" ? "네이버" : "이메일";
-        const cls = p === "KAKAO" ? "badge-yellow" : p === "NAVER" ? "badge-green" : "badge-gray";
+        const label = p === "KAKAO" ? "카카오" : p === "NAVER" ? "네이버" : p === "APPLE" ? "애플" : "이메일";
+        const cls = p === "KAKAO" ? "badge-yellow" : p === "NAVER" ? "badge-green" : p === "APPLE" ? "badge-blue" : "badge-gray";
         return <span className={cls}>{label}</span>;
       },
     },
@@ -231,6 +231,7 @@ export default function GuardiansPage() {
           <option value="LOCAL">이메일</option>
           <option value="KAKAO">카카오</option>
           <option value="NAVER">네이버</option>
+          <option value="APPLE">애플</option>
         </select>
       </div>
 
@@ -310,7 +311,7 @@ export default function GuardiansPage() {
                         </div>
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">가입방식</label>
-                          <input value={detail.authProvider === 'KAKAO' ? '카카오' : detail.authProvider === 'NAVER' ? '네이버' : '이메일'} disabled className="input-field bg-gray-50" />
+                          <input value={detail.authProvider === 'KAKAO' ? '카카오' : detail.authProvider === 'NAVER' ? '네이버' : detail.authProvider === 'APPLE' ? '애플' : '이메일'} disabled className="input-field bg-gray-50" />
                         </div>
                       </div>
                     ) : (
@@ -318,7 +319,7 @@ export default function GuardiansPage() {
                         <div><span className="text-gray-500">이름:</span> {detail.name}</div>
                         <div><span className="text-gray-500">이메일:</span> {detail.email}</div>
                         <div><span className="text-gray-500">전화:</span> {detail.phone}</div>
-                        <div><span className="text-gray-500">가입방식:</span> {detail.authProvider === 'KAKAO' ? '카카오' : detail.authProvider === 'NAVER' ? '네이버' : '이메일'}</div>
+                        <div><span className="text-gray-500">가입방식:</span> {detail.authProvider === 'KAKAO' ? '카카오' : detail.authProvider === 'NAVER' ? '네이버' : detail.authProvider === 'APPLE' ? '애플' : '이메일'}</div>
                       </div>
                     )}
                   </div>

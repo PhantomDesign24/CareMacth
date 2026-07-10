@@ -92,12 +92,23 @@ function useCountUp(end: number, duration = 2000, startOnView = true) {
   return { count, ref };
 }
 
+/* 앱(WebView) 내부 실행 여부 — 앱 안에서는 스토어 다운로드 버튼 숨김
+   (iOS 앱 바이너리에 Google Play 노출 시 앱스토어 심사 거절: 2.3.10) */
+function useIsApp() {
+  const [isApp, setIsApp] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined" && (window as any).IS_CAREMATCH_APP) setIsApp(true);
+  }, []);
+  return isApp;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Hero Section                                                       */
 /* ------------------------------------------------------------------ */
 function HeroSection() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const router = useRouter();
+  const isApp = useIsApp();
 
   // 비로그인 상태면 회원가입으로, 로그인 상태면 역할 체크 후 목적 페이지
   // 역할이 다를 때는 alert 대신 자동 라우팅 (간병 신청 ↔ 일감 찾기)
@@ -244,7 +255,8 @@ function HeroSection() {
             </button>
           </div>
 
-          {/* App Store Buttons */}
+          {/* App Store Buttons — 앱 내부에서는 숨김 */}
+          {!isApp && (
           <div className="mt-6 sm:mt-8 flex items-center justify-center gap-2 sm:gap-3">
             <a
               href="#"
@@ -277,6 +289,7 @@ function HeroSection() {
               </div>
             </a>
           </div>
+          )}
         </div>
       </div>
 
@@ -1231,6 +1244,9 @@ function ConsultationSection() {
 /*  App Download Section                                               */
 /* ------------------------------------------------------------------ */
 function AppDownloadSection() {
+  const isApp = useIsApp();
+  // 앱 내부에서는 "앱 다운로드" 섹션 전체 숨김 (Google Play 노출 방지 + 무의미)
+  if (isApp) return null;
   return (
     <section className="py-12 sm:py-8 md:py-12 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

@@ -306,6 +306,8 @@ export default function App() {
       'qr.kakaopay.com', 'app.kakaopay.com', 'mobile-pay.kakaopay.com', 'kakaopay.com',
       'mobile.pay.naver.com', 'pay.naver.com',
       'nicepay.co.kr', 'payapp.kr', 'kcp.co.kr',
+      'inicis.com', 'mobile.inicis.com', 'ksmobile.inicis.com',
+      'stdpay.inicis.com', 'stgstdpay.inicis.com', 'stdmobile.inicis.com',
     ];
     const isPayment = paymentHosts.some((h) => url.includes(h));
     setPaymentActive(isPayment);

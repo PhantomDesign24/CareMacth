@@ -117,6 +117,7 @@ interface CaregiverDetailData {
     email: string;
     phone: string;
     profileImage: string | null;
+    authProvider?: string | null;
     createdAt: string;
   };
   certificates: {
@@ -526,6 +527,12 @@ export default function CaregiverDetailPage() {
               <div>
                 <p className="text-xs font-medium text-gray-400">이메일</p>
                 <p className="mt-0.5 text-sm text-gray-900">{data.user.email || "-"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400">가입방식</p>
+                <p className="mt-0.5 text-sm text-gray-900">
+                  {data.user.authProvider === "KAKAO" ? "카카오" : data.user.authProvider === "NAVER" ? "네이버" : data.user.authProvider === "APPLE" ? "애플" : "이메일"}
+                </p>
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-400">생년월일</p>

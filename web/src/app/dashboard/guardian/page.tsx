@@ -253,6 +253,14 @@ function GuardianDashboard() {
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  // 소셜(카카오/네이버/애플) 계정은 비밀번호가 없음 → 탈퇴 시 비번 입력 생략
+  const [isSocialAccount, setIsSocialAccount] = useState(false);
+  useEffect(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem("cm_user") || localStorage.getItem("user") || "null");
+      if (u?.authProvider && u.authProvider !== "LOCAL") setIsSocialAccount(true);
+    } catch {}
+  }, []);
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== "탈퇴합니다") {
@@ -1592,6 +1600,7 @@ function GuardianDashboard() {
             </div>
 
             <div className="space-y-3 mb-4">
+              {!isSocialAccount && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   비밀번호 확인 <span className="text-red-500">*</span>
@@ -1605,6 +1614,7 @@ function GuardianDashboard() {
                   autoComplete="current-password"
                 />
               </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   탈퇴 사유 <span className="text-gray-400 text-xs">(선택)</span>
@@ -1655,7 +1665,7 @@ function GuardianDashboard() {
               <button
                 type="button"
                 onClick={handleDeleteAccount}
-                disabled={deleteLoading || !deletePassword || deleteConfirmText !== "탈퇴합니다"}
+                disabled={deleteLoading || (!isSocialAccount && !deletePassword) || deleteConfirmText !== "탈퇴합니다"}
                 className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-gray-300 text-white font-medium rounded-xl transition-colors"
               >
                 {deleteLoading ? "처리 중..." : "탈퇴 확정"}
