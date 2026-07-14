@@ -394,7 +394,7 @@ function HomeBannerSection() {
     <section className="relative py-4 sm:py-10 bg-gray-50">
       <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8">
         <div
-          className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg bg-gray-900 aspect-[4/3] sm:aspect-[16/7]"
+          className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg bg-white border border-gray-100 h-[340px] sm:h-[300px]"
           onMouseEnter={() => setPaused(true)}
           onMouseLeave={() => setPaused(false)}
         >
@@ -406,84 +406,58 @@ function HomeBannerSection() {
                 i === current ? "opacity-100 z-10" : "opacity-0 z-0"
               }`}
             >
-              <div
-                className={`w-full h-full bg-gradient-to-br ${b.gradient} relative flex items-center`}
-                style={{ backgroundImage: b.pattern }}
-              >
-                {/* 컨텐츠 */}
-                <div className="relative z-10 px-5 sm:px-12 md:px-16 py-5 sm:py-10 max-w-3xl h-full flex flex-col justify-center">
-                  <div className="text-4xl sm:text-6xl md:text-7xl mb-1.5 sm:mb-3 drop-shadow-lg">
-                    {b.emoji}
+              <div className="flex flex-col md:grid md:grid-cols-2 h-full">
+                {/* 비주얼 — 모바일 상단 / 데스크탑 우측 */}
+                <div
+                  className={`order-1 md:order-2 relative h-24 sm:h-28 md:h-full bg-gradient-to-br ${b.gradient} flex items-center justify-center overflow-hidden`}
+                >
+                  <div className="absolute inset-0" style={{ backgroundImage: b.pattern }} />
+                  <div className="relative text-6xl sm:text-7xl md:text-9xl drop-shadow-lg">{b.emoji}</div>
+                  <div className="absolute top-3 right-4 text-white/40 font-black text-base sm:text-2xl tabular-nums">
+                    {String(i + 1).padStart(2, "0")}
+                    <span className="text-xs sm:text-base">/{String(banners.length).padStart(2, "0")}</span>
                   </div>
-                  <p className="text-white/90 text-[11px] sm:text-sm font-semibold mb-0.5 sm:mb-2 drop-shadow">
+                </div>
+
+                {/* 텍스트 — 모바일 하단 / 데스크탑 좌측 */}
+                <div className="order-2 md:order-1 flex-1 flex flex-col justify-center px-6 sm:px-10 md:px-12 py-5 md:py-8">
+                  <span className={`inline-flex self-start items-center gap-1.5 px-3 py-1 rounded-full text-[11px] sm:text-sm font-semibold text-white bg-gradient-to-r ${b.gradient} mb-2.5 sm:mb-4`}>
                     {b.subtitle}
-                  </p>
-                  <h3 className="text-white text-xl sm:text-4xl md:text-5xl font-black mb-1.5 sm:mb-3 drop-shadow-lg leading-tight">
+                  </span>
+                  <h3 className="text-2xl sm:text-4xl font-black text-gray-900 leading-tight mb-2 sm:mb-3">
                     {b.title}
                   </h3>
-                  <p className="hidden sm:block text-white/85 text-sm sm:text-base md:text-lg font-medium mb-4 sm:mb-6 drop-shadow">
-                    {b.desc}
-                  </p>
-                  <p className="sm:hidden text-white/85 text-xs font-medium mb-3 drop-shadow line-clamp-2">
+                  <p className="text-sm sm:text-base text-gray-500 leading-relaxed mb-4 sm:mb-6 max-w-md line-clamp-2">
                     {b.desc}
                   </p>
                   <button
                     type="button"
                     onClick={() => go(b.target, b.role)}
-                    className="inline-flex self-start items-center gap-1.5 px-4 sm:px-7 py-2 sm:py-3.5 bg-white text-gray-900 font-bold rounded-lg sm:rounded-xl text-xs sm:text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                    className={`inline-flex self-start items-center gap-1.5 px-5 sm:px-7 py-2.5 sm:py-3.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r ${b.gradient} shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all`}
                   >
                     {b.cta}
                     <FiArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
                 </div>
-
-                {/* 우측 장식 번호 */}
-                <div className="absolute top-3 right-3 sm:top-6 sm:right-8 text-white/30 font-black text-xl sm:text-4xl tabular-nums">
-                  {String(i + 1).padStart(2, "0")}
-                  <span className="text-sm sm:text-xl">/{String(banners.length).padStart(2, "0")}</span>
-                </div>
               </div>
             </div>
           ))}
 
-          {/* 인디케이터 (dots) */}
-          <div className="absolute bottom-3 sm:bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
-            {banners.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                aria-label={`슬라이드 ${i + 1}`}
-                onClick={() => setCurrent(i)}
-                className={`transition-all rounded-full ${
-                  i === current
-                    ? "w-6 h-1.5 bg-white"
-                    : "w-1.5 h-1.5 bg-white/50 hover:bg-white/80"
-                }`}
-              />
-            ))}
-          </div>
+        </div>
 
-          {/* 좌우 버튼 — 데스크톱에서만 */}
-          <button
-            type="button"
-            aria-label="이전 슬라이드"
-            onClick={() => setCurrent((c) => (c - 1 + banners.length) % banners.length)}
-            className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 items-center justify-center rounded-full bg-black/30 backdrop-blur-sm text-white hover:bg-black/50 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            aria-label="다음 슬라이드"
-            onClick={() => setCurrent((c) => (c + 1) % banners.length)}
-            className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 items-center justify-center rounded-full bg-black/30 backdrop-blur-sm text-white hover:bg-black/50 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-            </svg>
-          </button>
+        {/* 인디케이터 — 카드 아래 가운데 */}
+        <div className="mt-4 flex items-center justify-center gap-1.5">
+          {banners.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={`배너 ${i + 1}`}
+              onClick={() => setCurrent(i)}
+              className={`transition-all rounded-full ${
+                i === current ? "w-6 h-1.5 bg-gray-800" : "w-2 h-2 bg-gray-300 hover:bg-gray-400"
+              }`}
+            />
+          ))}
         </div>
       </div>
     </section>
