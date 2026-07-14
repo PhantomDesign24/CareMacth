@@ -141,13 +141,15 @@ function HeroSection() {
     {
       type: "video" as const,
       src: "/img/main/hero_video.mp4",
+      num: "01",
       title: "인공지능 AI",
       highlight: "간병 매칭 플랫폼",
-      desc: "실시간 간병 연결 서비스",
+      desc: "병원, 재택, 방문, 생활 돌봄 요양이 필요한 모든 분께",
     },
     {
       type: "image" as const,
       src: "/img/main/main_bg01.png",
+      num: "02",
       title: "NO.1 케어매치",
       highlight: "매칭 전문가의 실시간 연결",
       desc: "검증된 간병인 10,000명이 대기하고 있습니다",
@@ -155,6 +157,7 @@ function HeroSection() {
     {
       type: "image" as const,
       src: "/img/main/main_bg02.png",
+      num: "03",
       title: "케어매치",
       highlight: "6단계 고객만족 시스템",
       desc: "체계적인 관리로 최상의 간병 서비스를 제공합니다",
@@ -169,9 +172,10 @@ function HeroSection() {
   }, [slides.length]);
 
   const slide = slides[currentSlide];
+  const isImg = slide.type === "image"; // 인물 슬라이드=밝은 배경/어두운 텍스트, 영상=어두운 배경/흰 텍스트
 
   return (
-    <section className="relative overflow-hidden min-h-[600px] md:min-h-[700px] flex items-center">
+    <section className="relative overflow-hidden min-h-[560px] md:min-h-[660px] flex items-center">
       {/* Background slides */}
       {slides.map((s, i) => (
         <div
@@ -179,66 +183,56 @@ function HeroSection() {
           className={`absolute inset-0 transition-opacity duration-1000 ${i === currentSlide ? "opacity-100" : "opacity-0"}`}
         >
           {s.type === "video" ? (
-            <video
-              autoPlay
-              muted
-              loop
-              playsInline
-              className="w-full h-full object-cover object-top"
-            >
-              <source src={s.src} type="video/mp4" />
-            </video>
+            <>
+              <video autoPlay muted loop playsInline className="w-full h-full object-cover object-center">
+                <source src={s.src} type="video/mp4" />
+              </video>
+              <div className="absolute inset-0 bg-black/40" />
+            </>
           ) : (
-            <img src={s.src} alt="" className="w-full h-full object-cover object-top" />
+            <>
+              {/* 밝은 배경 + 인물 컷아웃 우측 (옛 사이트 구조) */}
+              <div className="absolute inset-0 bg-gradient-to-br from-primary-50 via-white to-secondary-50" />
+              <img
+                src={s.src}
+                alt=""
+                className="absolute bottom-0 right-0 md:right-[3%] h-[40%] sm:h-[64%] md:h-[88%] w-auto max-w-[54%] object-contain object-bottom pointer-events-none select-none"
+              />
+            </>
           )}
-          <div className="absolute inset-0 bg-black/30" />
         </div>
       ))}
 
-      {/* Slide indicators */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex gap-2">
-        {slides.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => setCurrentSlide(i)}
-            className={`h-1.5 rounded-full transition-all duration-300 ${
-              i === currentSlide ? "w-8 bg-primary-500" : "w-4 bg-white/40 hover:bg-white/60"
-            }`}
-          />
-        ))}
-      </div>
-
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 w-full z-10">
-        <div className="max-w-3xl mx-auto text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 text-white/90 text-xs sm:text-sm font-medium mb-5 sm:mb-8">
-            <span className="w-2 h-2 rounded-full bg-secondary-400 animate-pulse flex-shrink-0" />
-            {slide.desc}
-          </div>
+      {/* Content — 왼쪽 정렬 (옛 사이트 구조 그대로) */}
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-14 w-full z-10">
+        <div className="max-w-xl">
+          {/* Slide number */}
+          <p className={`text-2xl sm:text-4xl font-black mb-2 sm:mb-4 ${isImg ? "text-primary-500" : "text-white/80"}`}>
+            {slide.num}
+          </p>
 
           {/* Main title */}
-          <h1 className="text-2xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-white leading-[1.15] tracking-tight">
+          <h1 className={`text-3xl sm:text-5xl md:text-6xl font-extrabold leading-[1.15] tracking-tight ${isImg ? "text-gray-900" : "text-white"}`}>
             {slide.title}
             <br />
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary-400 via-primary-500 to-accent-400">
+            <span className={isImg ? "text-primary-600" : "bg-clip-text text-transparent bg-gradient-to-r from-primary-400 via-primary-500 to-accent-400"}>
               {slide.highlight}
             </span>
           </h1>
 
-          <p className="mt-4 sm:mt-6 text-sm sm:text-lg md:text-xl text-white font-medium leading-relaxed max-w-2xl mx-auto" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.7)" }}>
-            케어매치는 환자와 간병인을 실시간으로 연결하는
-            <br className="hidden sm:block" />
-            대한민국 대표 AI 간병 매칭 서비스입니다.
+          <p
+            className={`mt-4 sm:mt-6 text-sm sm:text-lg font-medium leading-relaxed max-w-md ${isImg ? "text-gray-600" : "text-white"}`}
+            style={isImg ? undefined : { textShadow: "0 2px 8px rgba(0,0,0,0.7)" }}
+          >
+            {slide.desc}
           </p>
 
           {/* CTA Buttons */}
-          <div className="mt-6 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+          <div className="mt-6 sm:mt-9 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
             <button
               type="button"
               onClick={() => handleAuthRedirect("/care-request", "guardian")}
-              className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-primary-500 text-white font-bold rounded-2xl text-sm sm:text-base
-                         hover:bg-primary-600 transition-all duration-200 shadow-xl shadow-primary-500/30 hover:shadow-2xl hover:shadow-primary-500/40
-                         w-full sm:w-auto"
+              className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-primary-500 text-white font-bold rounded-2xl text-sm sm:text-base hover:bg-primary-600 transition-all duration-200 shadow-xl shadow-primary-500/30 w-full sm:w-auto"
             >
               간병인 찾기
               <FiArrowRight className="w-5 h-5" />
@@ -246,50 +240,46 @@ function HeroSection() {
             <button
               type="button"
               onClick={() => handleAuthRedirect("/find-work", "caregiver")}
-              className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-secondary-500 text-white font-bold rounded-2xl text-sm sm:text-base
-                         hover:bg-secondary-600 transition-all duration-200 shadow-xl shadow-secondary-500/30 hover:shadow-2xl hover:shadow-secondary-500/40
-                         w-full sm:w-auto"
+              className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-secondary-500 text-white font-bold rounded-2xl text-sm sm:text-base hover:bg-secondary-600 transition-all duration-200 shadow-xl shadow-secondary-500/30 w-full sm:w-auto"
             >
               간병일감 찾기
               <FiArrowRight className="w-5 h-5" />
             </button>
           </div>
 
-          {/* App Store Buttons — 앱 내부에서는 숨김 */}
+          {/* App Store Buttons — 앱 내부에서는 숨김. 밝은/어두운 슬라이드 모두 보이게 검은 배지 */}
           {!isApp && (
-          <div className="mt-6 sm:mt-8 flex items-center justify-center gap-2 sm:gap-3">
-            <a
-              href="#"
-              className="inline-flex items-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-white/10 backdrop-blur-sm text-white rounded-xl
-                         hover:bg-white/20 transition-all duration-200 border border-white/10"
-            >
-              <FaApple className="w-4 sm:w-5 h-4 sm:h-5" />
-              <div className="text-left">
-                <div className="text-[9px] sm:text-[10px] opacity-70 leading-none">
-                  Download on the
+            <div className="mt-5 sm:mt-7 flex items-center gap-2 sm:gap-3">
+              <a href="#" className="inline-flex items-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
+                <FaApple className="w-4 sm:w-5 h-4 sm:h-5" />
+                <div className="text-left">
+                  <div className="text-[9px] sm:text-[10px] opacity-70 leading-none">Download on the</div>
+                  <div className="text-xs sm:text-sm font-semibold leading-tight">App Store</div>
                 </div>
-                <div className="text-xs sm:text-sm font-semibold leading-tight">
-                  App Store
+              </a>
+              <a href="#" className="inline-flex items-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
+                <FaGooglePlay className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                <div className="text-left">
+                  <div className="text-[9px] sm:text-[10px] opacity-70 leading-none">GET IT ON</div>
+                  <div className="text-xs sm:text-sm font-semibold leading-tight">Google Play</div>
                 </div>
-              </div>
-            </a>
-            <a
-              href="#"
-              className="inline-flex items-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-white/10 backdrop-blur-sm text-white rounded-xl
-                         hover:bg-white/20 transition-all duration-200 border border-white/10"
-            >
-              <FaGooglePlay className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-              <div className="text-left">
-                <div className="text-[9px] sm:text-[10px] opacity-70 leading-none">
-                  GET IT ON
-                </div>
-                <div className="text-xs sm:text-sm font-semibold leading-tight">
-                  Google Play
-                </div>
-              </div>
-            </a>
-          </div>
+              </a>
+            </div>
           )}
+
+          {/* Slide indicators — 좌하단, 텍스트와 정렬 */}
+          <div className="mt-8 sm:mt-10 flex gap-2">
+            {slides.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentSlide(i)}
+                aria-label={`슬라이드 ${i + 1}`}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  i === currentSlide ? "w-8 bg-primary-500" : `w-4 ${isImg ? "bg-gray-300 hover:bg-gray-400" : "bg-white/40 hover:bg-white/60"}`
+                }`}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
