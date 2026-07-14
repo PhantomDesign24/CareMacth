@@ -77,6 +77,28 @@ export function buildMobileChkfake(params: { amt: number | string; oid: string; 
   return Buffer.from(sha512).toString('base64');
 }
 
+// 모바일 최종 승인 — 인증(P_NEXT_URL, P_STATUS=00) 후 P_REQ_URL 로 POST 해야 실제 승인 완료.
+// 응답(EUC-KR urlencoded)에 최종 P_STATUS/P_OID/P_AMT 가 담겨온다.
+export async function requestMobileApproval(reqUrl: string, tid: string): Promise<Record<string, string>> {
+  const body = new URLSearchParams({ P_MID: config.inicis.mid, P_TID: tid });
+  const res = await axios.post(reqUrl, body.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 20000,
+    responseType: 'arraybuffer', // EUC-KR 바이트 보존
+  });
+  const raw = Buffer.from(res.data).toString('latin1');
+  const out: Record<string, string> = {};
+  for (const pair of raw.split('&')) {
+    if (!pair) continue;
+    const idx = pair.indexOf('=');
+    const k = (idx >= 0 ? pair.slice(0, idx) : pair).trim();
+    const v = idx >= 0 ? pair.slice(idx + 1) : '';
+    // 필요한 필드(P_STATUS/P_OID/P_AMT)는 ASCII라 안전. 한글(P_RMESG1)은 디코드 실패 시 원문.
+    try { out[k] = decodeURIComponent(v.replace(/\+/g, ' ')); } catch { out[k] = v; }
+  }
+  return out;
+}
+
 export type InicisApproveResult = {
   resultCode: string;   // '0000' = 승인성공
   resultMsg: string;

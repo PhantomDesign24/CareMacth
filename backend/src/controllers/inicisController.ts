@@ -3,7 +3,7 @@ import { prisma } from '../app';
 import { config } from '../config';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
-import { buildPaymentHashes, buildMobileChkfake, requestApproval, netCancel } from '../utils/inicis';
+import { buildPaymentHashes, buildMobileChkfake, requestApproval, requestMobileApproval, netCancel } from '../utils/inicis';
 
 const WEB_BASE = process.env.WEB_BASE_URL || 'https://cm.phantomdesign.kr';
 const API_BASE = process.env.API_BASE_URL || 'https://cm.phantomdesign.kr/api';
@@ -264,34 +264,39 @@ export const inicisMobileReturn = async (req: Request, res: Response) => {
   const b: any = req.body || {};
   console.log('[INICIS MOBILE return] body keys:', Object.keys(b), '| body:', JSON.stringify(b).slice(0, 500));
   const status = b.P_STATUS;
-  const oid = b.P_OID || b.oid || b.MOID;
-  const tid = b.P_TID;
-  const amt = b.P_AMT;
+  const authTid = b.P_TID;
+  const reqUrl = b.P_REQ_URL;
   const { web: webBase } = inicisBases(req);
   const fail = (msg: string) => res.redirect(`${webBase}/payment/fail?message=${encodeURIComponent(msg)}`);
   try {
-    // 실패(취소/위변조 등)는 oid 가 안 올 수 있음 → 실제 사유(P_RMESG1) 먼저 표시
+    // 1단계 인증 실패(취소/위변조 등) — 사유(P_RMESG1) 표시
     if (String(status) !== '00') {
-      if (oid) {
-        await prisma.payment.updateMany({ where: { tossOrderId: oid, pgProvider: 'inicis', status: 'PENDING' }, data: { status: 'FAILED' } });
-      }
-      // 깨진 문자(U+FFFD)·빈 메시지는 깔끔한 기본 문구로 대체
       const raw = String(b.P_RMESG1 || '').trim();
       const clean = raw && !raw.includes('�') ? raw : '결제가 취소되었거나 실패했습니다.';
       return fail(clean);
     }
+    // 1단계 인증 성공 → 2단계 최종 승인: P_REQ_URL 로 POST (여기서 P_OID/최종결과 옴)
+    if (!reqUrl || !authTid) return fail('승인 요청 정보 없음');
+    const appr = await requestMobileApproval(reqUrl, authTid);
+    console.log('[INICIS MOBILE approve] result:', JSON.stringify(appr).slice(0, 500));
+    if (String(appr.P_STATUS) !== '00') {
+      const raw = String(appr.P_RMESG1 || '').trim();
+      return fail(raw && !raw.includes('�') ? raw : '결제 승인에 실패했습니다.');
+    }
+    const oid = appr.P_OID || appr.MOID;
+    const amt = appr.P_AMT;
+    const tid = appr.P_TID || authTid;
     if (!oid) return fail('주문번호 없음');
     const payment = await prisma.payment.findFirst({ where: { tossOrderId: oid, pgProvider: 'inicis' } });
     if (!payment) return fail('결제 정보를 찾을 수 없습니다.');
-    // 금액 검증
     if (Number(amt) !== payment.totalAmount) {
       await prisma.payment.updateMany({ where: { id: payment.id, status: 'PENDING' }, data: { status: 'FAILED' } });
       return fail('결제 금액 불일치');
     }
-    // 모바일 스마트결제는 P_STATUS=00 이면 승인 완료 → finalize
     await finalizeInicisPayment(payment.id, tid);
     return res.redirect(`${webBase}/payment/success?provider=inicis&oid=${encodeURIComponent(oid)}`);
-  } catch {
+  } catch (e: any) {
+    console.error('[INICIS MOBILE] error:', e?.message);
     return fail('결제 처리 중 오류가 발생했습니다.');
   }
 };
