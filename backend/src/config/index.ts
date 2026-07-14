@@ -45,8 +45,9 @@ export const config = {
       // 테스트: 이니시스 공개 테스트 상점 (실제 청구 없음)
       mid: isProd ? (process.env.INICIS_MID_PROD || '') : 'INIpayTest',
       signKey: isProd ? (process.env.INICIS_SIGNKEY_PROD || '') : 'SU5JTElURV9UUklQTEVERVNfS0VZU1RS',
-      // iniapiKey(취소/환불 API용) — 운영 전환 시 상점관리자에서 발급
+      // iniapiKey/IV (취소/환불 INIAPI용, AES 암호화) — 운영 전환 시 상점관리자에서 발급
       iniApiKey: isProd ? (process.env.INICIS_INIAPIKEY_PROD || '') : '',
+      iniApiIv: isProd ? (process.env.INICIS_INIAPI_IV_PROD || '') : '',
       // 결제창 JS / 결제 도메인 (테스트는 stg)
       stdJsUrl: isProd
         ? 'https://stdpay.inicis.com/stdjs/INIStdPay.js'
