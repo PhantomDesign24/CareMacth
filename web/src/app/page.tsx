@@ -141,6 +141,7 @@ function HeroSection() {
     {
       type: "video" as const,
       src: "/img/main/hero_video.mp4",
+      bg: "from-gray-800 via-gray-900 to-black",
       num: "01",
       title: "인공지능 AI",
       highlight: "간병 매칭 플랫폼",
@@ -149,6 +150,7 @@ function HeroSection() {
     {
       type: "image" as const,
       src: "/img/main/main_bg01.png",
+      bg: "from-amber-100 via-white to-orange-50",
       num: "02",
       title: "NO.1 케어매치",
       highlight: "매칭 전문가의 실시간 연결",
@@ -157,6 +159,7 @@ function HeroSection() {
     {
       type: "image" as const,
       src: "/img/main/main_bg02.png",
+      bg: "from-rose-100 via-white to-pink-50",
       num: "03",
       title: "케어매치",
       highlight: "6단계 고객만족 시스템",
@@ -165,6 +168,7 @@ function HeroSection() {
     {
       type: "image" as const,
       src: "/img/main/main_bg03.png",
+      bg: "from-orange-100 via-white to-amber-50",
       num: "04",
       title: "케어매치 AI",
       highlight: "토탈 케어 플랫폼 3.0",
@@ -173,6 +177,7 @@ function HeroSection() {
     {
       type: "image" as const,
       src: "/img/main/main_bg04.png",
+      bg: "from-yellow-50 via-white to-rose-100",
       num: "05",
       title: "걱정 없고 존중받는",
       highlight: "행복한 노후",
@@ -213,8 +218,8 @@ function HeroSection() {
             </>
           ) : (
             <>
-              {/* 밝은 배경 + 인물 컷아웃 우측 (옛 사이트 구조) */}
-              <div className="absolute inset-0 bg-gradient-to-br from-primary-50 via-white to-secondary-50" />
+              {/* 밝은 배경(슬라이드별 다른 웜톤 — 옛 사이트 색 참고) + 인물 컷아웃 우측 */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${s.bg}`} />
               <img
                 src={s.src}
                 alt=""
