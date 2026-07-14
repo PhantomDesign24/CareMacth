@@ -162,14 +162,16 @@ export default function PaymentPage() {
   const startInicisPayment = async () => {
     if (!contract) return;
     const w = window as any;
+    const inApp = w.IS_CAREMATCH_APP === true; // 케어매치 앱(WebView) 내부 여부
     const isMobile =
-      w.IS_CAREMATCH_APP === true ||
+      inApp ||
       (typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
     const token = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
     const res = await fetch("/api/payments/inicis/prepare", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ contractId: contract.id, pointsUsed: clampedPoints, platform: isMobile ? "mobile" : "pc" }),
+      // inApp: 앱 내부일 때만 → 카카오페이/앱카드가 결제 후 carematch:// 로 자동 복귀(app_scheme)
+      body: JSON.stringify({ contractId: contract.id, pointsUsed: clampedPoints, platform: isMobile ? "mobile" : "pc", inApp }),
     });
     const json = await res.json();
     if (!json?.success) {

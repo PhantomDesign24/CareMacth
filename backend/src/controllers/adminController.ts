@@ -2145,6 +2145,7 @@ export const getSettlements = async (req: AuthRequest, res: Response, next: Next
       amount: s.amount,
       platformFee: s.platformFee,
       taxAmount: s.taxAmount,
+      associationFeeDeducted: s.associationFeeDeducted,
       netAmount: s.netAmount,
       isPaid: s.isPaid,
       paidAt: s.paidAt ? s.paidAt.toISOString() : null,

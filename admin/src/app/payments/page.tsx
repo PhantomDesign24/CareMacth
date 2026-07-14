@@ -112,6 +112,13 @@ function formatDate(dateStr: string | null): string {
 
 export default function PaymentsPage() {
   const [activeTab, setActiveTab] = useState<PaymentTab>("payments");
+  // 사이드바 '환불 대기' 배지 클릭 진입 시 ?tab=refunds → 환불 요청(대기) 탭으로 바로 진입
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab") as PaymentTab | null;
+    if (t && ["payments", "settlements", "mid-settlement", "refunds", "additional-fees", "fees"].includes(t)) {
+      setActiveTab(t);
+    }
+  }, []);
 
   // Payments state
   const [payments, setPayments] = useState<AdminPayment[]>([]);
@@ -503,13 +510,34 @@ export default function PaymentsPage() {
       key: "taxAmount",
       label: "세금 (3.3%)",
       align: "right",
-      render: (v) => <span className="text-gray-500">{(v as number).toLocaleString()}원</span>,
+      render: (v) => <span className="text-gray-500">-{(v as number).toLocaleString()}원</span>,
+    },
+    {
+      key: "associationFeeDeducted",
+      label: "협회비",
+      align: "right",
+      render: (v) => {
+        const n = (v as number) || 0;
+        return n > 0
+          ? <span className="text-rose-600">-{n.toLocaleString()}원</span>
+          : <span className="text-gray-300">-</span>;
+      },
     },
     {
       key: "netAmount",
       label: "실 지급액",
       align: "right",
-      render: (v) => <span className="font-bold text-gray-900">{(v as number).toLocaleString()}원</span>,
+      render: (v, row) => {
+        const s = row as AdminSettlement;
+        return (
+          <span
+            className="font-bold text-gray-900"
+            title={`총 ${s.amount.toLocaleString()} − 수수료 ${s.platformFee.toLocaleString()} − 세금 ${s.taxAmount.toLocaleString()}${(s.associationFeeDeducted || 0) > 0 ? ` − 협회비 ${s.associationFeeDeducted.toLocaleString()}` : ""} = ${s.netAmount.toLocaleString()}원`}
+          >
+            {(v as number).toLocaleString()}원
+          </span>
+        );
+      },
     },
     {
       key: "isPaid",
@@ -705,6 +733,14 @@ export default function PaymentsPage() {
               </li>
               <li>
                 즉, <b>정산 = 금액 산정/Earning 생성</b>, <b>일괄정산 = 실제 송금 후 지급 완료 표시</b>입니다.
+              </li>
+              <li className="pt-1 border-t border-blue-100 mt-1">
+                <b>실 지급액 계산</b> — <code className="bg-white px-1 rounded text-[11px]">실지급액 = 총금액 − 수수료 − 세금 − 협회비</code>
+                <ul className="ml-4 mt-0.5 list-[circle]">
+                  <li>세금(3.3%)은 총금액이 아니라 <b>(총금액 − 수수료)의 3.3%</b> 입니다.</li>
+                  <li><b>협회비(최대 12만원)는 간병사 첫 정산에서만</b> 차감돼, 첫 정산액이 유독 작게 보일 수 있습니다.</li>
+                  <li>VAT(카드 10%)는 결제 청구에만 붙고 정산은 <b>공급가(원금) 기준</b>이라 정산엔 포함되지 않습니다.</li>
+                </ul>
               </li>
             </ul>
           </div>

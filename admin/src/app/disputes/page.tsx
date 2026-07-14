@@ -64,6 +64,11 @@ function statusBadgeClass(status?: string): string {
 
 export default function DisputesPage() {
   const [statusFilter, setStatusFilter] = useState("");
+  // 사이드바 '미처리 분쟁' 배지 클릭 진입 시 ?status=pending → 접수 분쟁으로 필터
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("status");
+    if (s) setStatusFilter(s);
+  }, []);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
@@ -87,6 +92,7 @@ export default function DisputesPage() {
       // 실제 Dispute API 호출
       const { apiRequest } = await import("@/lib/api");
       const statusMap: Record<string, string> = {
+        todo: "TODO", // 미처리(접수+처리중) — 백엔드가 IN [PENDING,PROCESSING] 로 처리
         pending: "PENDING",
         processing: "PROCESSING",
         resolved: "RESOLVED",
@@ -310,11 +316,12 @@ export default function DisputesPage() {
             className="input-field w-auto"
           >
             <option value="">전체 상태</option>
-            <option value="CANCELLED">취소됨</option>
-            <option value="open">접수</option>
-            <option value="in_progress">처리중</option>
-            <option value="escalated">에스컬레이션</option>
+            <option value="todo">미처리(접수·처리중)</option>
+            <option value="pending">접수</option>
+            <option value="processing">처리중</option>
             <option value="resolved">해결</option>
+            <option value="escalated">에스컬레이션</option>
+            <option value="rejected">거절</option>
           </select>
           <select
             value={categoryFilter}

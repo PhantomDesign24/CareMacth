@@ -999,6 +999,7 @@ export interface AdminSettlement {
   amount: number;
   platformFee: number;
   taxAmount: number;
+  associationFeeDeducted: number;
   netAmount: number;
   isPaid: boolean;
   paidAt: string | null;

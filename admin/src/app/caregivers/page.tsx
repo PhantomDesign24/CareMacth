@@ -26,6 +26,11 @@ import {
 export default function CaregiversPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  // 사이드바 '승인 대기' 배지 클릭 진입 시 ?status=PENDING → 목록이 배지 숫자와 일치
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("status");
+    if (s) setStatusFilter(s);
+  }, []);
   const [regionFilter, setRegionFilter] = useState("");
   const [experienceFilter, setExperienceFilter] = useState("");
   const [workStatusFilter, setWorkStatusFilter] = useState("");

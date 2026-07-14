@@ -7,6 +7,7 @@ import { AuthRequest } from '../middlewares/auth';
 import { logAdminAction } from '../services/auditLog';
 import { config } from '../config';
 import { generateOrderId } from '../utils/generateCode';
+import { refundInicis } from '../utils/inicis';
 import { calculateEarning, computeAssociationDeduction } from '../utils/earning';
 import { sendEmail, emailPaymentCompleted } from '../services/emailService';
 import { sendFromTemplate, renderTemplate, sendToAdmins } from '../services/notificationService';
@@ -827,29 +828,42 @@ async function executeRefund(
   const totalRefundedAfter = existingRefunded + refundAmount;
   const isPartialRefund = totalRefundedAfter < payment.totalAmount;
 
-  // 1) 토스페이먼츠 실환불 — CARD 결제 + tossPaymentKey 가 있을 때만 호출.
+  // 1) PG 실환불 — CARD 결제 + tossPaymentKey(=이니시스는 TID 저장) 가 있을 때만 호출.
   // BANK_TRANSFER (가상계좌) 등은 통장정보 별도 필요 → 오프라인 환불 기록만 반영.
-  let tossSucceeded = false;
+  // pgProvider 로 이니시스(INIAPI) / 토스 분기. (이니시스 결제를 토스로 취소하면 실패하므로 필수 분기)
+  let pgRefunded = false;
   if (payment.tossPaymentKey && payment.method === 'CARD') {
-    const secretKey = config.toss.secretKey;
-    const encodedKey = Buffer.from(`${secretKey}:`).toString('base64');
-    try {
-      await axios.post(
-        `https://api.tosspayments.com/v1/payments/${payment.tossPaymentKey}/cancel`,
-        { cancelReason: reason, cancelAmount: refundAmount },
-        { headers: { Authorization: `Basic ${encodedKey}`, 'Content-Type': 'application/json' } },
-      );
-      tossSucceeded = true;
-    } catch (tossError: any) {
-      const msg = tossError.response?.data?.message || '토스 환불 실패';
-      throw new AppError(msg, 400);
+    if (payment.pgProvider === 'inicis') {
+      // 이니시스 INIAPI 취소 (부분환불이면 price 전달)
+      const r = await refundInicis({
+        tid: payment.tossPaymentKey,
+        price: isPartialRefund ? refundAmount : undefined,
+        msg: reason || '환불',
+      });
+      if (!r.ok) throw new AppError(`이니시스 환불 실패: ${r.resultMsg || r.resultCode}`, 400);
+      pgRefunded = true;
+    } else {
+      // 토스페이먼츠 취소
+      const secretKey = config.toss.secretKey;
+      const encodedKey = Buffer.from(`${secretKey}:`).toString('base64');
+      try {
+        await axios.post(
+          `https://api.tosspayments.com/v1/payments/${payment.tossPaymentKey}/cancel`,
+          { cancelReason: reason, cancelAmount: refundAmount },
+          { headers: { Authorization: `Basic ${encodedKey}`, 'Content-Type': 'application/json' } },
+        );
+        pgRefunded = true;
+      } catch (tossError: any) {
+        const msg = tossError.response?.data?.message || '토스 환불 실패';
+        throw new AppError(msg, 400);
+      }
     }
   }
 
-  // 2) DB 연쇄 업데이트 — Toss 환불 성공 후 DB 실패 시 락 해제하지 않고 관리자 reconcile 큐로
+  // 2) DB 연쇄 업데이트 — PG 환불 성공 후 DB 실패 시 락 해제하지 않고 관리자 reconcile 큐로
   // 비카드(오프라인) 환불은 실제 송금 전이므로 DB 상 status/refundAmount/포인트/Earning 미반영.
   // 송금 완료 후 별도 confirmOfflineRefund 엔드포인트에서 확정.
-  const isOfflineRefund = !tossSucceeded;
+  const isOfflineRefund = !pgRefunded;
   try {
     await prisma.$transaction(async (tx) => {
     if (isOfflineRefund) {
@@ -980,24 +994,24 @@ async function executeRefund(
     // Toss cancel 은 성공했는데 DB finalize 실패 — 실돈은 빠졌으나 DB 미반영.
     // throw 시 호출측(approveRefundRequest)이 락을 해제하면 재시도에서 Toss cancel 중복 호출 위험.
     // 락은 그대로 두고 관리자에게 즉시 reconcile 알림.
-    console.error('[CRITICAL] executeRefund DB finalize 실패. paymentId=', payment.id, 'tossSucceeded=', tossSucceeded, dbErr);
+    console.error('[CRITICAL] executeRefund DB finalize 실패. paymentId=', payment.id, 'pgRefunded=', pgRefunded, dbErr);
     await sendToAdmins({
       key: 'REFUND_DB_SYNC_FAILED_ADMIN',
       vars: {
         paymentId: payment.id,
-        tossSucceeded: tossSucceeded ? 'true' : 'false',
+        tossSucceeded: pgRefunded ? 'true' : 'false',
         refundAmount: refundAmount.toLocaleString(),
         message: dbErr?.message || 'unknown',
       },
-      data: { paymentId: payment.id, manualReconcile: true, tossSucceeded, refundAmount },
+      data: { paymentId: payment.id, manualReconcile: true, tossSucceeded: pgRefunded, refundAmount },
     }).catch(() => {});
     // 호출측에 격리 결과를 알리도록 새 에러 발행. approveRefundRequest 가 락 해제하지 않게 별도 코드.
     const e: any = new AppError(
-      `환불 ${tossSucceeded ? '실행됐으나 DB 동기화에 실패' : '처리 중 DB 오류'}했습니다. 관리자가 수동 동기화 합니다.`,
+      `환불 ${pgRefunded ? '실행됐으나 DB 동기화에 실패' : '처리 중 DB 오류'}했습니다. 관리자가 수동 동기화 합니다.`,
       500,
     );
     e.refundDbSyncFailed = true;
-    e.tossSucceeded = tossSucceeded;
+    e.tossSucceeded = pgRefunded;
     throw e;
   }
 

@@ -23,6 +23,8 @@ interface NavItem {
   href: string;
   icon: React.ReactNode;
   badgeKey?: keyof BadgeCounts;
+  badgeParam?: string; // 배지>0 클릭 시 붙일 쿼리 → 해당 페이지가 '미처리' 필터로 진입
+  badgeDesc?: string;  // 배지 툴팁(숫자가 뭘 세는지 설명)
 }
 
 interface NavGroup {
@@ -52,6 +54,8 @@ const navGroups: NavGroup[] = [
         label: "간병인 관리",
         href: "/caregivers",
         badgeKey: "caregivers",
+        badgeParam: "status=PENDING",
+        badgeDesc: "승인 대기 간병인 수",
         icon: (
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
@@ -112,6 +116,8 @@ const navGroups: NavGroup[] = [
         label: "분쟁 처리",
         href: "/disputes",
         badgeKey: "disputes",
+        badgeParam: "status=todo",
+        badgeDesc: "미처리 분쟁(접수·처리중) 수",
         icon: (
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
@@ -131,6 +137,8 @@ const navGroups: NavGroup[] = [
         label: "신고 관리",
         href: "/reports",
         badgeKey: "reports",
+        badgeParam: "status=TODO",
+        badgeDesc: "미처리 신고(접수·검토중) 수",
         icon: (
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" />
@@ -141,6 +149,8 @@ const navGroups: NavGroup[] = [
         label: "보험서류 관리",
         href: "/insurance",
         badgeKey: "insurance",
+        badgeParam: "status=TODO",
+        badgeDesc: "미처리 보험서류(접수·처리중) 수",
         icon: (
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 13.5 3 3m0 0-3-3m3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
@@ -215,6 +225,8 @@ const navGroups: NavGroup[] = [
         label: "결제/정산",
         href: "/payments",
         badgeKey: "refunds",
+        badgeParam: "tab=refunds",
+        badgeDesc: "환불 대기 건수",
         icon: (
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
@@ -383,10 +395,13 @@ export default function Sidebar({ onLogout }: SidebarProps) {
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const badgeCount = item.badgeKey ? badges[item.badgeKey] : 0;
+                // 배지가 있으면 '미처리' 필터 파라미터를 붙여 이동 → 페이지 목록 = 배지 숫자
+                const linkHref =
+                  badgeCount > 0 && item.badgeParam ? `${item.href}?${item.badgeParam}` : item.href;
                 return (
                   <li key={item.href}>
                     <Link
-                      href={item.href}
+                      href={linkHref}
                       className={clsx(
                         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                         isActive(item.href)
@@ -397,7 +412,10 @@ export default function Sidebar({ onLogout }: SidebarProps) {
                       {item.icon}
                       <span className="flex-1">{item.label}</span>
                       {badgeCount > 0 && (
-                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                        <span
+                          title={item.badgeDesc}
+                          className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
+                        >
                           {badgeCount > 99 ? "99+" : badgeCount}
                         </span>
                       )}

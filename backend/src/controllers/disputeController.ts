@@ -100,7 +100,12 @@ export const adminGetDisputes = async (req: AuthRequest, res: Response, next: Ne
   try {
     const { status, category } = req.query;
     const where: any = {};
-    if (status && VALID_STATUSES.includes(status as any)) where.status = status;
+    // TODO = 미처리(접수+처리중) — 사이드바 '미처리 분쟁' 배지와 정확히 일치
+    if (status === 'TODO') {
+      where.status = { in: ['PENDING', 'PROCESSING'] };
+    } else if (status && VALID_STATUSES.includes(status as any)) {
+      where.status = status;
+    }
     if (category && VALID_CATEGORIES.includes(category as any)) where.category = category;
 
     const disputes = await prisma.dispute.findMany({

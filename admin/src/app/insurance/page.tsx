@@ -51,6 +51,11 @@ export default function InsuranceAdminPage() {
   const [list, setList] = useState<InsuranceReq[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
+  // 사이드바 '미처리 보험서류' 배지 클릭 진입 시 ?status=TODO → 접수·처리중만 표시(배지 숫자와 일치)
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("status");
+    if (s) setStatusFilter(s);
+  }, []);
   const [completeTarget, setCompleteTarget] = useState<InsuranceReq | null>(null);
   const [rejectTarget, setRejectTarget] = useState<InsuranceReq | null>(null);
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -60,9 +65,16 @@ export default function InsuranceAdminPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const qs = statusFilter ? `?status=${statusFilter}` : "";
-      const res: any = await apiRequest(`/admin/insurance${qs}`);
-      setList(Array.isArray(res) ? res : res?.data || []);
+      if (statusFilter === "TODO") {
+        // 미처리 = 접수(REQUESTED) + 처리중(PROCESSING) → 배지와 정확히 일치
+        const res: any = await apiRequest(`/admin/insurance`);
+        const arr = Array.isArray(res) ? res : res?.data || [];
+        setList(arr.filter((x: any) => x.status === "REQUESTED" || x.status === "PROCESSING"));
+      } else {
+        const qs = statusFilter ? `?status=${statusFilter}` : "";
+        const res: any = await apiRequest(`/admin/insurance${qs}`);
+        setList(Array.isArray(res) ? res : res?.data || []);
+      }
     } catch {
       // ignore
     } finally {
@@ -147,6 +159,7 @@ export default function InsuranceAdminPage() {
             className="input-field w-auto"
           >
             <option value="">전체</option>
+            <option value="TODO">미처리(접수·처리중)</option>
             <option value="REQUESTED">접수</option>
             <option value="PROCESSING">처리중</option>
             <option value="COMPLETED">완료</option>

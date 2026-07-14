@@ -21,7 +21,7 @@ function inicisBases(req: Request): { web: string; api: string } {
 // 결제 PENDING 생성 + INIStdPay 결제창에 넘길 폼 파라미터 반환
 export const prepareInicisPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { contractId, pointsUsed, platform } = req.body as { contractId?: string; pointsUsed?: number; platform?: string };
+    const { contractId, pointsUsed, platform, inApp } = req.body as { contractId?: string; pointsUsed?: number; platform?: string; inApp?: boolean };
     const isMobile = platform === 'mobile';
     if (!contractId) throw new AppError('contractId가 필요합니다.', 400);
 
@@ -94,6 +94,12 @@ export const prepareInicisPayment = async (req: AuthRequest, res: Response, next
         // P_CHARSET 생략 → 모바일 기본 EUC-KR (프론트 폼도 accept-charset=euc-kr 로 전송)
         P_RESERVED: 'twotrs_isp=Y&block_isp=Y&twotrs_isp_noti=N',
       };
+      // 앱(WebView) 내부 결제 → 카카오페이/앱카드 결제완료 후 앱으로 자동 복귀시킬 스킴 전달.
+      // (모바일 브라우저 결제엔 넣지 않음 — 앱 미설치 시 복귀 실패하므로 inApp 일 때만)
+      // 보호자 결제 전용 → 보호자 앱 스킴 carematch:// 고정.
+      if (inApp) {
+        mobileForm.P_RESERVED += '&app_scheme=carematch://';
+      }
       // 위변조 해시(amt_hash)는 운영(실 HashKey)에서만 적용. 테스트는 HashKey 불명확해 생략.
       if (config.inicis.isProd) {
         mobileForm.P_RESERVED += '&amt_hash=Y';
@@ -294,7 +300,7 @@ export const inicisMobileReturn = async (req: Request, res: Response) => {
       return fail('결제 금액 불일치');
     }
     await finalizeInicisPayment(payment.id, tid);
-    return res.redirect(`${webBase}/payment/success?provider=inicis&oid=${encodeURIComponent(oid)}`);
+    return res.redirect(`${webBase}/payment/success?provider=inicis&amount=${encodeURIComponent(String(amt))}`);
   } catch (e: any) {
     console.error('[INICIS MOBILE] error:', e?.message);
     return fail('결제 처리 중 오류가 발생했습니다.');

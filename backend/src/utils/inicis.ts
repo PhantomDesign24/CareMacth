@@ -86,17 +86,9 @@ export async function requestMobileApproval(reqUrl: string, tid: string): Promis
     timeout: 20000,
     responseType: 'arraybuffer', // EUC-KR 바이트 보존
   });
-  const raw = Buffer.from(res.data).toString('latin1');
-  const out: Record<string, string> = {};
-  for (const pair of raw.split('&')) {
-    if (!pair) continue;
-    const idx = pair.indexOf('=');
-    const k = (idx >= 0 ? pair.slice(0, idx) : pair).trim();
-    const v = idx >= 0 ? pair.slice(idx + 1) : '';
-    // 필요한 필드(P_STATUS/P_OID/P_AMT)는 ASCII라 안전. 한글(P_RMESG1)은 디코드 실패 시 원문.
-    try { out[k] = decodeURIComponent(v.replace(/\+/g, ' ')); } catch { out[k] = v; }
-  }
-  return out;
+  // 승인 응답도 EUC-KR urlencoded → 인증결과 파서 재사용(한글 P_RMESG1 정상 디코드).
+  // 이전엔 latin1+decodeURIComponent 라 한글 에러메시지가 깨져 그대로 노출됐음.
+  return parseEucKrFormBody(Buffer.from(res.data));
 }
 
 export type InicisApproveResult = {
@@ -136,6 +128,46 @@ export async function requestApproval(authUrl: string, authToken: string): Promi
     applDate: d.applDate, applTime: d.applTime,
     raw: d,
   };
+}
+
+// INIAPI 취소/환불 — 이니시스 승인건 취소 (iniapi.inicis.com/api/v1/refund)
+//  hashData = SHA512hex( iniApiKey + type + paymethod + timestamp + clientIp + mid + tid )
+//  timestamp = KST(UTC+9) yyyyMMddHHmmss 14자리
+//  resultCode '00' = 정상처리 (그 외 실패)
+//  price 지정 시 부분취소, 미지정 시 전액취소
+export async function refundInicis(params: {
+  tid: string;
+  msg?: string;
+  price?: number;
+  clientIp?: string;
+}): Promise<{ ok: boolean; resultCode: string; resultMsg: string; raw: any }> {
+  const { tid } = params;
+  const mid = config.inicis.mid;
+  const iniApiKey = config.inicis.iniApiKey;
+  const type = 'Refund';
+  const paymethod = 'Card';
+  const clientIp = params.clientIp || process.env.INICIS_CLIENT_IP || '115.68.220.241';
+  const msg = params.msg || '관리자 환불';
+
+  const kst = new Date(Date.now() + 9 * 3600 * 1000);
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  const timestamp = `${kst.getUTCFullYear()}${p2(kst.getUTCMonth() + 1)}${p2(kst.getUTCDate())}${p2(kst.getUTCHours())}${p2(kst.getUTCMinutes())}${p2(kst.getUTCSeconds())}`;
+
+  const hashData = crypto
+    .createHash('sha512')
+    .update(`${iniApiKey}${type}${paymethod}${timestamp}${clientIp}${mid}${tid}`, 'utf8')
+    .digest('hex');
+
+  const body: Record<string, string> = { mid, type, paymethod, timestamp, clientIp, hashData, tid, msg };
+  if (params.price && params.price > 0) body.price = String(params.price); // 부분취소
+
+  const res = await axios.post('https://iniapi.inicis.com/api/v1/refund', new URLSearchParams(body).toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 20000,
+  });
+  const d = res.data || {};
+  const resultCode = String(d.resultCode ?? '');
+  return { ok: resultCode === '00', resultCode, resultMsg: String(d.resultMsg ?? ''), raw: d };
 }
 
 // 망취소 — 승인 단계에서 오류 시 인증 무효화 (10분 이내)

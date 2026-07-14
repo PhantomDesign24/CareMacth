@@ -14,6 +14,11 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
+  // 사이드바 '미처리 신고' 배지 클릭 진입 시 ?status=TODO → 접수·검토중만 표시(배지 숫자와 일치)
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("status");
+    if (s) setStatusFilter(s);
+  }, []);
   const [target, setTarget] = useState<Report | null>(null);
   const [adminNote, setAdminNote] = useState("");
   const [newStatus, setNewStatus] = useState<"REVIEWING" | "RESOLVED" | "REJECTED">("RESOLVED");
@@ -24,8 +29,14 @@ export default function ReportsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getReports(statusFilter || undefined);
-      setReports(data);
+      if (statusFilter === "TODO") {
+        // 미처리 = 접수(PENDING) + 검토중(REVIEWING) → 배지와 정확히 일치
+        const data = await getReports(undefined);
+        setReports(data.filter((r) => r.status === "PENDING" || r.status === "REVIEWING"));
+      } else {
+        const data = await getReports(statusFilter || undefined);
+        setReports(data);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -107,6 +118,14 @@ export default function ReportsPage() {
           }`}
         >
           전체
+        </button>
+        <button
+          onClick={() => setStatusFilter("TODO")}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+            statusFilter === "TODO" ? "bg-orange-500 text-white" : "bg-white border border-orange-200 text-orange-600 hover:border-orange-300"
+          }`}
+        >
+          미처리
         </button>
         {REPORT_STATUSES.map((s) => (
           <button
