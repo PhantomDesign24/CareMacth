@@ -162,6 +162,22 @@ function HeroSection() {
       highlight: "6단계 고객만족 시스템",
       desc: "체계적인 관리로 최상의 간병 서비스를 제공합니다",
     },
+    {
+      type: "image" as const,
+      src: "/img/main/main_bg03.png",
+      num: "04",
+      title: "케어매치 AI",
+      highlight: "토탈 케어 플랫폼 3.0",
+      desc: "환자 맞춤형 통합 돌봄 솔루션을 제공합니다",
+    },
+    {
+      type: "image" as const,
+      src: "/img/main/main_bg04.png",
+      num: "05",
+      title: "걱정 없고 존중받는",
+      highlight: "행복한 노후",
+      desc: "믿을 수 있는 간병으로 편안한 일상을 함께합니다",
+    },
   ];
 
   useEffect(() => {
@@ -205,23 +221,22 @@ function HeroSection() {
 
       {/* Content — 왼쪽 정렬 (옛 사이트 구조 그대로) */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-14 w-full z-10">
-        <div className="max-w-xl">
+        <div className="max-w-2xl">
           {/* Slide number */}
-          <p className={`text-2xl sm:text-4xl font-black mb-2 sm:mb-4 ${isImg ? "text-primary-500" : "text-white/80"}`}>
+          <p className={`text-3xl sm:text-5xl font-black mb-2 sm:mb-4 ${isImg ? "text-primary-500" : "text-white/80"}`}>
             {slide.num}
           </p>
 
-          {/* Main title */}
-          <h1 className={`text-3xl sm:text-5xl md:text-6xl font-extrabold leading-[1.15] tracking-tight ${isImg ? "text-gray-900" : "text-white"}`}>
-            {slide.title}
-            <br />
-            <span className={isImg ? "text-primary-600" : "bg-clip-text text-transparent bg-gradient-to-r from-primary-400 via-primary-500 to-accent-400"}>
+          {/* Main title — 첫줄(제목) 크게, 둘째줄(하이라이트)은 한 줄에 맞게 약간 작게 */}
+          <h1 className={`font-extrabold leading-[1.1] tracking-tight ${isImg ? "text-gray-900" : "text-white"}`}>
+            <span className="block text-4xl sm:text-6xl md:text-7xl">{slide.title}</span>
+            <span className={`block mt-1 text-2xl sm:text-4xl md:text-5xl ${isImg ? "text-primary-600" : "bg-clip-text text-transparent bg-gradient-to-r from-primary-400 via-primary-500 to-accent-400"}`}>
               {slide.highlight}
             </span>
           </h1>
 
           <p
-            className={`mt-4 sm:mt-6 text-sm sm:text-lg font-medium leading-relaxed max-w-md ${isImg ? "text-gray-600" : "text-white"}`}
+            className={`mt-5 sm:mt-7 text-base sm:text-xl font-medium leading-relaxed max-w-lg ${isImg ? "text-gray-600" : "text-white"}`}
             style={isImg ? undefined : { textShadow: "0 2px 8px rgba(0,0,0,0.7)" }}
           >
             {slide.desc}
