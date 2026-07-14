@@ -189,6 +189,12 @@ function HeroSection() {
 
   const slide = slides[currentSlide];
   const isImg = slide.type === "image"; // 인물 슬라이드=밝은 배경/어두운 텍스트, 영상=어두운 배경/흰 텍스트
+  // 하이라이트(둘째줄) 글자수에 따라 크기 자동 조절 — 짧으면 크게, 길면 한 줄에 맞게 작게
+  const hlLen = slide.highlight.replace(/\s/g, "").length;
+  const hlSize =
+    hlLen <= 5 ? "text-4xl sm:text-6xl md:text-7xl"
+    : hlLen <= 9 ? "text-3xl sm:text-5xl md:text-6xl"
+    : "text-2xl sm:text-4xl md:text-5xl";
 
   return (
     <section className="relative overflow-hidden min-h-[560px] md:min-h-[660px] flex items-center">
@@ -230,7 +236,7 @@ function HeroSection() {
           {/* Main title — 첫줄(제목) 크게, 둘째줄(하이라이트)은 한 줄에 맞게 약간 작게 */}
           <h1 className={`font-extrabold leading-[1.1] tracking-tight ${isImg ? "text-gray-900" : "text-white"}`}>
             <span className="block text-4xl sm:text-6xl md:text-7xl">{slide.title}</span>
-            <span className={`block mt-1 text-2xl sm:text-4xl md:text-5xl ${isImg ? "text-primary-600" : "bg-clip-text text-transparent bg-gradient-to-r from-primary-400 via-primary-500 to-accent-400"}`}>
+            <span className={`block mt-1 ${hlSize} ${isImg ? "text-primary-600" : "bg-clip-text text-transparent bg-gradient-to-r from-primary-400 via-primary-500 to-accent-400"}`}>
               {slide.highlight}
             </span>
           </h1>
