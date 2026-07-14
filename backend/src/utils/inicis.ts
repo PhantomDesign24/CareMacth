@@ -71,8 +71,9 @@ export function buildAuthHashes(params: { authToken: string; timestamp: string |
 //  P_CHKFAKE = BASE64( SHA512( P_AMT + P_OID + P_TIMESTAMP + signKey ) )
 export function buildMobileChkfake(params: { amt: number | string; oid: string; timestamp: string | number }) {
   const { amt, oid, timestamp } = params;
-  const signKey = config.inicis.signKey;
-  const sha512 = crypto.createHash('sha512').update(`${amt}${oid}${timestamp}${signKey}`, 'utf8').digest();
+  // 모바일 위변조 해시는 PC signKey가 아니라 모바일 전용 HashKey 사용 (없으면 signKey로 fallback)
+  const hashKey = config.inicis.mobileHashKey || config.inicis.signKey;
+  const sha512 = crypto.createHash('sha512').update(`${amt}${oid}${timestamp}${hashKey}`, 'utf8').digest();
   return Buffer.from(sha512).toString('base64');
 }
 

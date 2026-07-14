@@ -48,6 +48,8 @@ export const config = {
       // iniapiKey/IV (취소/환불 INIAPI용, AES 암호화) — 운영 전환 시 상점관리자에서 발급
       iniApiKey: isProd ? (process.env.INICIS_INIAPIKEY_PROD || '') : '',
       iniApiIv: isProd ? (process.env.INICIS_INIAPI_IV_PROD || '') : '',
+      // 모바일 결제 위변조 해시(P_CHKFAKE)용 HashKey — PC signKey와 다름(상점관리자 모바일 설정)
+      mobileHashKey: isProd ? (process.env.INICIS_MOBILE_HASHKEY_PROD || '') : '',
       // 결제창 JS / 결제 도메인 (테스트는 stg)
       stdJsUrl: isProd
         ? 'https://stdpay.inicis.com/stdjs/INIStdPay.js'
