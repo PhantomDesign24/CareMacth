@@ -2,7 +2,7 @@
   "expo": {
     "name": "케어매치",
     "slug": "carematch-patient",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -56,7 +56,7 @@
       },
       "googleServicesFile": "./google-services.json",
       "package": "kr.carematch.patient",
-      "versionCode": 9,
+      "versionCode": 10,
       "permissions": [
         "INTERNET",
         "RECEIVE_BOOT_COMPLETED",
@@ -77,7 +77,8 @@
         }
       ],
       "./plugins/withAndroidQueries.js",
-      "./plugins/withAndroidFinishAndRemoveTask.js"
+      "./plugins/withAndroidFinishAndRemoveTask.js",
+      "./plugins/withAndroidTargetSdk.js"
     ],
     "notification": {
       "icon": "./assets/notification-icon.png",

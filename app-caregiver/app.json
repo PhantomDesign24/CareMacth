@@ -2,7 +2,7 @@
   "expo": {
     "name": "케어매치 간병인",
     "slug": "carematch-caregiver",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -36,7 +36,7 @@
       },
       "googleServicesFile": "./google-services.json",
       "package": "kr.carematch.giver",
-      "versionCode": 10,
+      "versionCode": 11,
       "permissions": [
         "INTERNET",
         "USE_BIOMETRIC",
@@ -65,7 +65,8 @@
         }
       ],
       "./plugins/withAndroidQueries.js",
-      "./plugins/withAndroidFinishAndRemoveTask.js"
+      "./plugins/withAndroidFinishAndRemoveTask.js",
+      "./plugins/withAndroidTargetSdk.js"
     ],
     "scheme": "carematch-caregiver",
     "extra": {
