@@ -24,6 +24,9 @@ interface ContractInfo {
   endDate: string;
   dailyRate: number;
   totalAmount: number;
+  feePerDay: number; // 플랫폼 정액 매칭 이용료(원/일) — 직접결제 시 사용
+  days: number;      // 계약 기간(일)
+  status: string;    // 계약 상태 — PENDING_SIGNATURE 면 결제 차단(서명 우선)
 }
 
 type PaymentMethod = "CARD" | "BANK_TRANSFER" | "DIRECT";
@@ -108,6 +111,12 @@ export default function PaymentPage() {
         endDate: found.endDate ? new Date(found.endDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : "",
         dailyRate: found.dailyRate || 0,
         totalAmount: found.totalAmount || 0,
+        feePerDay: found.directFeePerDay || 0,
+        status: found.status || "",
+        days:
+          found.startDate && found.endDate
+            ? Math.max(1, Math.ceil((new Date(found.endDate).getTime() - new Date(found.startDate).getTime()) / 86400000))
+            : 0,
       });
     } catch (err: unknown) {
       const message =
@@ -125,12 +134,21 @@ export default function PaymentPage() {
   }, [fetchContract]);
 
   // Calculated amounts
-  // VAT: 카드결제만 간병비(공급가)의 10% 부과. 무통장/직접결제는 VAT 미부과(백엔드와 동일).
+  // 직접결제(DIRECT): 간병비는 간병사에게 직접 지급, 플랫폼은 매칭 이용료(정액수수료×일수)만 수취.
+  const isDirect = method === "DIRECT";
+  const feePerDay = contract?.feePerDay || 0;
+  const days = contract?.days || 0;
+  const directMatchFee = feePerDay * days;
+
+  // 백엔드와 동일한 순서로 계산: 포인트를 공급가에서 먼저 차감 → 차감 후 금액의 10%가 VAT.
+  // (이전엔 VAT를 원금 기준으로 먼저 더해 포인트 사용 시 표시금액이 실제 청구액과 어긋났음)
   const serviceAmount = contract?.totalAmount || 0;
-  const vatAmount = method === "CARD" ? Math.round(serviceAmount * 0.1) : 0;
-  const totalBeforeDiscount = serviceAmount + vatAmount;
-  const clampedPoints = Math.min(pointsUsed, pointsAvailable, totalBeforeDiscount);
-  const finalAmount = totalBeforeDiscount - clampedPoints;
+  // 직접결제는 포인트 미적용 (플랫폼 이용료만 결제). 포인트는 최대 공급가까지만 사용 가능(백엔드 동일).
+  const clampedPoints = isDirect ? 0 : Math.min(pointsUsed, pointsAvailable, serviceAmount);
+  const supplyAmount = serviceAmount - clampedPoints;
+  const vatAmount = (method === "CARD" || method === "BANK_TRANSFER") ? Math.round(supplyAmount * 0.1) : 0;
+  const totalBeforeDiscount = serviceAmount; // 포인트 입력 상한(공급가) 표시용
+  const finalAmount = isDirect ? directMatchFee : supplyAmount + vatAmount;
 
   const handlePointsChange = (value: string) => {
     const num = parseInt(value, 10);
@@ -236,12 +254,15 @@ export default function PaymentPage() {
       const data = res.data?.data || res.data || {};
 
       if (method === "BANK_TRANSFER") {
-        const accountInfo = data.virtualAccount
-          ? `입금 계좌: ${data.virtualAccount.bankName} ${data.virtualAccount.accountNumber}\n입금액: ${formatMoney(data.amount)}\n입금 기한: ${data.virtualAccount.dueDate || "24시간 이내"}`
+        const acct = data.depositAccount;
+        const accountInfo = acct?.accountNumber
+          ? `입금 계좌: ${acct.bankName} ${acct.accountNumber}${acct.accountHolder ? ` (예금주: ${acct.accountHolder})` : ""}\n입금액: ${formatMoney(data.amount)}\n\n입금 확인 후 결제가 완료됩니다.`
           : `주문번호: ${data.orderId}\n결제 금액: ${formatMoney(data.amount)}\n무통장입금 안내가 등록된 연락처로 발송됩니다.`;
         alert(accountInfo);
       } else if (method === "DIRECT") {
-        alert("직접결제가 등록되었습니다");
+        alert(
+          `직접결제로 진행됩니다.\n\n간병비는 간병사님께 직접 지급해주시고,\n플랫폼 매칭 이용료 ${formatMoney(data.matchFee ?? data.amount ?? 0)}만 안내에 따라 결제해주세요.\n\n관리자 확인 후 처리됩니다.`
+        );
       }
 
       router.push("/dashboard/guardian");
@@ -304,7 +325,7 @@ export default function PaymentPage() {
   const paymentMethods: { value: PaymentMethod; label: string; desc: string }[] = [
     { value: "CARD", label: "카드 결제", desc: "신용/체크카드로 결제합니다" },
     { value: "BANK_TRANSFER", label: "무통장입금", desc: "가상계좌로 입금합니다" },
-    { value: "DIRECT", label: "직접결제", desc: "간병인에게 직접 결제합니다" },
+    { value: "DIRECT", label: "직접결제", desc: "간병비는 간병사님께 직접 지급, 플랫폼 이용료만 결제" },
   ];
 
   return (
@@ -380,6 +401,20 @@ export default function PaymentPage() {
             </div>
           </div>
 
+          {/* 서명 미완료 안내 — 서명 완료 전 결제 차단 */}
+          {contract?.status === "PENDING_SIGNATURE" && (
+            <div className="mb-6 flex items-start gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
+              <span className="text-xl">✍️</span>
+              <div>
+                <p className="font-bold text-amber-900 text-sm">계약서 서명이 아직 완료되지 않았습니다</p>
+                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                  간병인과 보호자 간 계약서 서명이 완료되어야 결제가 가능합니다.
+                  간병 현황에서 계약서 서명을 먼저 진행해주세요.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* 2. Payment method */}
           <div className="card mb-6">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
@@ -412,7 +447,8 @@ export default function PaymentPage() {
             </div>
           </div>
 
-          {/* 3. Points */}
+          {/* 3. Points (직접결제는 포인트 미적용) */}
+          {!isDirect && (
           <div className="card mb-6">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
               포인트 사용
@@ -451,6 +487,7 @@ export default function PaymentPage() {
               </p>
             )}
           </div>
+          )}
 
           {/* 4. Payment summary */}
           <div className="card mb-8">
@@ -458,32 +495,49 @@ export default function PaymentPage() {
               결제 금액 계산
             </h2>
             <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600">서비스 비용</span>
-                <span className="text-gray-900">
-                  {formatMoney(serviceAmount)}
-                </span>
-              </div>
-              {vatAmount > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">VAT (별도, 카드결제 10%)</span>
-                  <span className="text-gray-900">
-                    {formatMoney(vatAmount)}
-                  </span>
-                </div>
-              )}
-              {clampedPoints > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">포인트 할인</span>
-                  <span className="text-primary-600 font-medium">
-                    -{formatMoney(clampedPoints)}
-                  </span>
-                </div>
+              {isDirect ? (
+                <>
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 leading-relaxed">
+                    간병비 <b>{formatMoney(serviceAmount)}</b>은 간병사님께 <b>직접 지급</b>하시고,
+                    아래 <b>플랫폼 매칭 이용료</b>만 결제하시면 됩니다.
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">
+                      매칭 이용료 ({formatMoney(feePerDay)} × {days}일)
+                    </span>
+                    <span className="text-gray-900">{formatMoney(directMatchFee)}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">서비스 비용</span>
+                    <span className="text-gray-900">
+                      {formatMoney(serviceAmount)}
+                    </span>
+                  </div>
+                  {vatAmount > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">VAT (별도, 10%)</span>
+                      <span className="text-gray-900">
+                        {formatMoney(vatAmount)}
+                      </span>
+                    </div>
+                  )}
+                  {clampedPoints > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">포인트 할인</span>
+                      <span className="text-primary-600 font-medium">
+                        -{formatMoney(clampedPoints)}
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
               <div className="border-t border-gray-200 pt-3 mt-3">
                 <div className="flex items-center justify-between">
                   <span className="text-base font-bold text-gray-900">
-                    최종 결제
+                    {isDirect ? "플랫폼 이용료 결제" : "최종 결제"}
                   </span>
                   <span className="text-xl font-bold text-primary-600">
                     {formatMoney(finalAmount)}
@@ -503,8 +557,8 @@ export default function PaymentPage() {
             </Link>
             <button
               type="submit"
-              disabled={submitting || finalAmount < 0}
-              className="btn-primary flex-1"
+              disabled={submitting || finalAmount < 0 || contract?.status === "PENDING_SIGNATURE"}
+              className="btn-primary flex-1 disabled:opacity-50"
             >
               {submitting ? (
                 <svg
@@ -526,6 +580,8 @@ export default function PaymentPage() {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                   />
                 </svg>
+              ) : isDirect ? (
+                "직접결제로 진행"
               ) : (
                 "결제하기"
               )}

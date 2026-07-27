@@ -17,10 +17,17 @@ function withAuthToken(url: string | null | undefined): string {
 
 // 생년월일 셀렉트 — value 는 'YYYY-MM-DD' 문자열
 function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [y, m, d] = (value || '').split('-');
-  const year = y || '';
-  const month = m || '';
-  const day = d || '';
+  // 내부 state로 년/월/일 각각 유지 (3개 다 안 차면 부모 value를 ''로 리셋해 선택이 저장 안 되던 버그 수정)
+  const init = (value || '').split('-');
+  const [year, setYear] = useState(init[0] || '');
+  const [month, setMonth] = useState(init[1] || '');
+  const [day, setDay] = useState(init[2] || '');
+
+  // 외부에서 '완성된' 날짜가 주입되면 동기화. 미완성('')일 땐 내부 선택 유지.
+  useEffect(() => {
+    const p = (value || '').split('-');
+    if (p.length === 3 && p[0] && p[1] && p[2]) { setYear(p[0]); setMonth(p[1]); setDay(p[2]); }
+  }, [value]);
 
   const currentYear = new Date().getFullYear();
   const years = useMemo(() => {
@@ -40,7 +47,8 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
     [daysInMonth],
   );
 
-  const update = (ny: string, nm: string, nd: string) => {
+  // 3개 모두 선택됐을 때만 완성 날짜 전달, 미완성이면 빈 값
+  const emit = (ny: string, nm: string, nd: string) => {
     if (!ny || !nm || !nd) {
       onChange('');
       return;
@@ -56,7 +64,7 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
       <select
         className="input-field"
         value={year}
-        onChange={(e) => update(e.target.value, month, day)}
+        onChange={(e) => { setYear(e.target.value); emit(e.target.value, month, day); }}
       >
         <option value="">년</option>
         {years.map((yy) => (
@@ -66,7 +74,7 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
       <select
         className="input-field"
         value={month}
-        onChange={(e) => update(year, e.target.value, day)}
+        onChange={(e) => { setMonth(e.target.value); emit(year, e.target.value, day); }}
       >
         <option value="">월</option>
         {months.map((mm) => (
@@ -76,7 +84,7 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
       <select
         className="input-field"
         value={day}
-        onChange={(e) => update(year, month, e.target.value)}
+        onChange={(e) => { setDay(e.target.value); emit(year, month, e.target.value); }}
       >
         <option value="">일</option>
         {days.map((dd) => (
@@ -374,7 +382,7 @@ export default function CaregiverDocumentsPage() {
             <p className="text-gray-500 mt-1">프로필 정보와 자격증을 관리합니다.</p>
           </div>
           <Link href="/dashboard/caregiver" className="btn-secondary text-sm px-4 py-2">
-            대시보드로 돌아가기
+            마이페이지로 돌아가기
           </Link>
         </div>
 
@@ -544,16 +552,34 @@ export default function CaregiverDocumentsPage() {
                       {cert.issuer} | 발급일: {formatDate(cert.issueDate)}
                     </div>
                   </div>
-                  {cert.imageUrl && (
-                    <a
-                      href={withAuthToken(cert.imageUrl)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-primary-600 hover:text-primary-700 underline shrink-0"
+                  <div className="flex items-center gap-3 shrink-0">
+                    {cert.imageUrl && (
+                      <a
+                        href={withAuthToken(cert.imageUrl)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary-600 hover:text-primary-700 underline"
+                      >
+                        이미지 보기
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm(`'${cert.name}' 자격증을 삭제할까요?`)) return;
+                        try {
+                          await documentAPI.deleteCertificate(cert.id);
+                          setSuccessMsg("자격증이 삭제되었습니다.");
+                          await fetchProfile();
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "자격증 삭제에 실패했습니다.");
+                        }
+                      }}
+                      className="text-sm text-red-500 hover:text-red-600 underline"
                     >
-                      이미지 보기
-                    </a>
-                  )}
+                      삭제
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

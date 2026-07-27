@@ -38,6 +38,7 @@ enum CaregiverWorkStatus {
   WORKING // 근무중
   AVAILABLE // 근무 가능
   IMMEDIATE // 즉시 가능
+  ON_LEAVE // 휴직 중 (매칭 알림·지원 제외)
 }
 
 model User {
@@ -971,6 +972,11 @@ model PlatformConfig {
   cancellationFee        Int     @default(0) // 기본 취소 수수료(원) - 향후 확장
   companyPhone           String? // 상담사 연결 회사 대표번호
 
+  // 무통장입금 입금계좌 (관리자 설정 → 결제 안내에 표시/발송)
+  depositBankName       String? // 은행명
+  depositAccountNumber  String? // 계좌번호
+  depositAccountHolder  String? // 예금주
+
   // ── 간병비 산출 룰 (3단계 등급 + 가산) ─────────────────────────────
   careFeeBaseLight         Int @default(130000) // 경증 base (부축·식사 도움 정도)
   careFeeBaseMedium        Int @default(140000) // 중증 base (편마비 등)
@@ -1199,4 +1205,21 @@ model AlimtalkLog {
   @@index([status, createdAt])
   @@index([userId, createdAt])
   @@index([templateKey, createdAt])
+}
+
+// 병원·기업 제휴 문의 (홈페이지 /business 폼)
+model BusinessInquiry {
+  id          String    @id @default(uuid())
+  companyName String
+  contactName String
+  phone       String
+  email       String?
+  type        String    @default("hospital") // hospital / company / 기타
+  message     String?
+  status      String    @default("PENDING") // PENDING(미확인) / DONE(처리완료)
+  adminNote   String?
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
 }

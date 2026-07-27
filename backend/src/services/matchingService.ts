@@ -9,6 +9,7 @@ import {
 } from '../utils/matchingScores';
 
 import { prisma } from '../app';
+import { sendFromTemplate } from './notificationService';
 
 interface MatchScoreResult {
   caregiverId: string;
@@ -159,18 +160,18 @@ export async function notifyCandidates(
     const region = (candidate.careRequest as any).region
       || (Array.isArray((candidate.careRequest as any).regions) && (candidate.careRequest as any).regions[0])
       || (candidate.careRequest.address ? candidate.careRequest.address.split(/\s+/).slice(0, 2).join(' ') : '인근');
-    await prisma.notification.create({
-      data: {
-        userId: caregiver.userId,
-        type: 'MATCHING',
-        title: '새로운 간병 요청',
-        body: `${region}에서 ${candidate.careRequest.scheduleType === 'FULL_TIME' ? '24시간' : '시간제'} 간병인을 찾고 있습니다.`,
-        data: {
-          careRequestId,
-          matchScore: candidate.score,
-        },
-      },
-    });
+    const scheduleLabel = candidate.careRequest.scheduleType === 'FULL_TIME' ? '24시간' : '시간제';
+    // 템플릿 기반 발송(인앱 + 푸시 + 알림톡). 기존엔 raw notification.create 라 인앱 벨에만 뜨고
+    // 푸시/알림톡이 안 나가서 "공고 올려도 간병인 알림 안 옴" 버그가 있었음.
+    await sendFromTemplate({
+      userId: caregiver.userId,
+      key: 'MATCHING_NEW',
+      vars: { address: region, scheduleType: scheduleLabel },
+      fallbackTitle: '새로운 간병 요청',
+      fallbackBody: `${region}에서 ${scheduleLabel} 간병인을 찾고 있습니다.`,
+      fallbackType: 'MATCHING',
+      data: { careRequestId, matchScore: candidate.score },
+    }).catch((e: any) => console.error('[notifyCandidates] MATCHING_NEW 발송 실패:', e?.message));
 
     // 알림 발송 상태 업데이트
     await prisma.matchScore.update({

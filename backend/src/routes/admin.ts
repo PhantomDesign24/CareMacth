@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import { authenticate, authorize } from '../middlewares/auth';
 import * as adminController from '../controllers/adminController';
+import * as businessInquiryController from '../controllers/businessInquiryController';
 import * as reportController from '../controllers/reportController';
 import * as noticeController from '../controllers/noticeController';
 import { upload, uploadNotice, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
@@ -43,6 +44,7 @@ router.post('/caregivers/:id/memo', [
 ], adminController.addConsultMemo);
 router.put('/caregivers/:caregiverId/certificates/:certId/verify', adminController.verifyCertificate);
 router.delete('/caregivers/:caregiverId/certificates/:certId/verify', adminController.unverifyCertificate);
+router.delete('/caregivers/:caregiverId/certificates/:certId', adminController.deleteCertificateAdmin);
 router.put('/caregivers/:id/verify-id-card', adminController.verifyIdCard);
 router.delete('/caregivers/:id/verify-id-card', adminController.unverifyIdCard);
 router.put('/caregivers/:id/verify-criminal-check', adminController.verifyCriminalCheck);
@@ -117,6 +119,14 @@ router.get('/additional-fees', adminController.adminListAdditionalFees);
 router.get('/settlements', adminController.getSettlements);
 router.post('/settlements/bulk-pay', adminController.bulkPaySettlements);
 router.post('/settlements/:id/pay', adminController.paySettlement);
+
+// 직접결제 요청 (보호자가 간병사에게 직접 지급 + 플랫폼 이용료만 수취)
+router.get('/direct-payments', adminController.getDirectPayments);
+router.post('/direct-payments/:id/complete', adminController.completeDirectPayment);
+
+// 병원·기업 제휴 문의
+router.get('/business-inquiries', businessInquiryController.getBusinessInquiries);
+router.post('/business-inquiries/:id/status', businessInquiryController.updateBusinessInquiry);
 
 // 중간정산
 router.get('/contracts/active-for-settlement', adminController.getActiveContractsForSettlement);

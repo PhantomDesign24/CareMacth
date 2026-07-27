@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import DataTable, { Column } from "@/components/DataTable";
 import { emergencyRematch, Dispute } from "@/lib/api";
+import { formatPhone } from "@/lib/constants";
 
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return "-";
@@ -112,7 +113,7 @@ export default function DisputesPage() {
         patientName: d.contract?.careRequest?.patient?.name || "-",
         // 분쟁 시점의 간병인(원 계약의 간병인)
         caregiverName: d.contract?.caregiver?.user?.name || "-",
-        caregiverPhone: d.contract?.caregiver?.user?.phone || "",
+        caregiverPhone: formatPhone(d.contract?.caregiver?.user?.phone || ""),
         guardianName: d.contract?.guardian?.user?.name || "-",
         reporterName: d.reporter?.name || "-",
         targetName: d.target?.name || "-",

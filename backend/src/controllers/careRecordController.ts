@@ -249,12 +249,12 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
       throw new AppError('계약 ID가 필요합니다.', 400);
     }
 
-    // 계약 확인
+    // 계약 확인 — 완료(COMPLETED)된 계약도 마지막 일지 작성/보완 허용
     const contract = await prisma.contract.findFirst({
       where: {
         id: contractId,
         caregiverId: caregiver.id,
-        status: { in: ['ACTIVE', 'EXTENDED'] },
+        status: { in: ['ACTIVE', 'EXTENDED', 'COMPLETED'] },
       },
     });
 
@@ -629,10 +629,11 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
 
     const info = [
       ['환자명', patient.name || '-', '성별', patient.gender === 'M' ? '남' : (patient.gender === 'F' ? '여' : '-')],
-      ['생년월일', patient.birthDate ? new Date(patient.birthDate).toISOString().slice(0, 10) : '-', '병원명', contract.careRequest.hospitalName || contract.careRequest.address || '-'],
+      ['생년월일', patient.birthDate ? new Date(patient.birthDate).toISOString().slice(0, 10) : '-', '병원명', contract.careRequest.hospitalName || '-'],
       ['간병 시작일', contract.startDate ? new Date(contract.startDate).toISOString().slice(0, 10) : '-', '간병 기간', contract.careRequest.durationDays ? `${contract.careRequest.durationDays}일` : '-'],
       ['간병인 성명', caregiverUser?.name || '-', '간병인 연락처', caregiverUser?.phone || '-'],
-      ['간병인 사용 법인명', contract.corporateName || caregiver.corporateName || '', '', ''],
+      // 법인명은 케어매치 주식회사로 일괄 표기 (클라이언트 요청 2026-07-20)
+      ['간병인 사용 법인명', '케어매치 주식회사', '', ''],
     ];
 
     info.forEach((row, idx) => {
@@ -678,8 +679,8 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
     const displayRows = Math.max(records.length, 10);
     for (let i = 0; i < displayRows; i++) {
       const r = records[i];
-      if (y + rowH > PAGE_H - MARGIN - 160) {
-        // 페이지 넘김 (하단 서명 공간 확보)
+      if (y + rowH > PAGE_H - MARGIN - 20) {
+        // 페이지 넘김 — 하단은 페이지 여백만 남기고 꽉 채움 (불필요한 빈 페이지/여백 방지)
         doc.addPage();
         y = MARGIN;
         // 헤더 재인쇄
@@ -692,7 +693,13 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
       const rowBg = i % 2 === 1 ? COLOR_ALT_ROW : undefined;
       const dateStr = r?.date ? new Date(r.date).toISOString().slice(5, 10).replace('-', '. ') : '';
       const hrs = r?.careHoursManual ?? r?.careHours ?? null;
-      const hoursStr = hrs ? `${hrs} 시간` : '';
+      // 시작시간(출근 체크) 표시 — KST HH:MM
+      let startStr = '';
+      if (r?.checkInTime) {
+        const kst = new Date(new Date(r.checkInTime).getTime() + 9 * 3600 * 1000);
+        startStr = `${String(kst.getUTCHours()).padStart(2, '0')}:${String(kst.getUTCMinutes()).padStart(2, '0')}`;
+      }
+      const hoursStr = [startStr, hrs ? `${hrs}시간` : ''].filter(Boolean).join(' · ');
 
       drawCell(TABLE_LEFT, y, dateW, rowH, dateStr, { size: 10, align: 'center', bg: rowBg });
       drawCell(TABLE_LEFT + dateW, y, timeW, rowH, hoursStr, { size: 10, align: 'center', bg: rowBg });
@@ -710,7 +717,7 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
     const drawNotesSection = (title: string, rows: { date: Date; text: string }[]) => {
       if (rows.length === 0) return;
       y += 20;
-      if (y + 30 + rows.length * 22 > PAGE_H - MARGIN - 140) {
+      if (y + 30 + rowH > PAGE_H - MARGIN - 20) {
         doc.addPage();
         y = MARGIN;
       }
@@ -733,7 +740,7 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
         const textHeight = doc.heightOfString(r.text, { width: noteContentW - 16 });
         const dynamicRowH = Math.max(rowH, textHeight + 12);
 
-        if (y + dynamicRowH > PAGE_H - MARGIN - 140) {
+        if (y + dynamicRowH > PAGE_H - MARGIN - 20) {
           doc.addPage();
           y = MARGIN;
         }

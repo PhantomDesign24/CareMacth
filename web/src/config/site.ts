@@ -15,19 +15,23 @@ export const SITE = {
   titleTemplate: "%s | 케어매치",
   /** 메타 설명 */
   description:
-    "검증된 간병인과 보호자를 AI가 실시간 매칭해드립니다. 병원간병, 재택간병, 방문요양, 생활돌봄, 24시간 간병 모두 지원. 1555-0801 전화상담 가능.",
+    "검증된 간병인과 보호자를 AI가 실시간 매칭해드립니다. 병원간병, 재택간병, 가족간병, 생활돌봄, 24시간 간병 모두 지원. 1555-0801 전화상담 가능.",
   /** 대표 연락처 */
   phone: "1555-0801",
   /** 카카오톡 채널 페이지 (홈) */
   kakaoChannelUrl: "https://pf.kakao.com/_UTRjX",
   /** 카카오톡 채널 1:1 상담 (상담말하기 대체용 WL 링크) */
   kakaoChannelChatUrl: "https://pf.kakao.com/_UTRjX/chat",
+  /** 구글 플레이 (보호자 앱) — 패키지명 기반, 게시 즉시 유효 */
+  androidStoreUrl: "https://play.google.com/store/apps/details?id=kr.carematch.patient",
+  /** 앱스토어 (보호자 앱) — iOS 승인 후 숫자 App ID로 교체 (현재 검색 폴백) */
+  iosStoreUrl: "https://apps.apple.com/kr/search?term=%EC%BC%80%EC%96%B4%EB%A7%A4%EC%B9%98",
   /** 대표 이메일 */
   email: "support@carematch.kr",
   /** 주요 키워드 */
   keywords: [
     "간병", "간병인", "간병매칭", "케어매치", "care-match",
-    "병원간병", "재택간병", "방문요양", "생활돌봄", "24시간간병",
+    "병원간병", "재택간병", "가족간병", "생활돌봄", "24시간간병",
     "AI매칭", "케어코디", "간병인구하기", "간병사구하기",
     "간병비", "간병료", "가족간병", "1:1간병", "전문간병인",
   ],

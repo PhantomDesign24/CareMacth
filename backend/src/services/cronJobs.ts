@@ -149,8 +149,9 @@ export function setupCronJobs() {
           },
         });
         if (stillActive === 0) {
-          await prisma.caregiver.update({
-            where: { id: caregiverId },
+          // 휴직 중(ON_LEAVE)으로 본인이 설정한 상태는 덮어쓰지 않음 — WORKING 만 AVAILABLE 로 해제
+          await prisma.caregiver.updateMany({
+            where: { id: caregiverId, workStatus: 'WORKING' },
             data: { workStatus: 'AVAILABLE' },
           });
         }
@@ -253,9 +254,10 @@ export function setupCronJobs() {
     }
   });
 
-  // 매 2분: 5분 이상 PENDING 상태인 결제 자동 실패 처리 (토스 세션 만료 후처리)
+  // 매 2분: 5분 이상 PENDING 상태인 결제 자동 실패 처리 (토스/이니시스 카드 세션 만료 후처리)
   // - tossPaymentKey 가 이미 클레임된 행은 건드리지 않음 (confirm 진행 중이거나 DB sync 실패 격리)
   // - 트랜잭션으로 status=FAILED + 차감된 포인트 복구
+  // - DIRECT(관리자 입금확인 대기)·BANK_TRANSFER(무통장 입금 대기)는 사람이 처리하는 흐름이라 만료 제외
   cron.schedule('*/2 * * * *', async () => {
     try {
       const cutoff = new Date(Date.now() - 5 * 60 * 1000);
@@ -264,6 +266,7 @@ export function setupCronJobs() {
           status: 'PENDING',
           tossPaymentKey: null,
           createdAt: { lt: cutoff },
+          method: { notIn: ['DIRECT', 'BANK_TRANSFER'] },
         },
         include: {
           guardian: { include: { user: { select: USER_PUBLIC_SELECT } } },

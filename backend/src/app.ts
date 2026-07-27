@@ -24,6 +24,7 @@ import insuranceRoutes from './routes/insurance';
 import disputeRoutes from './routes/dispute';
 import noticeRoutes from './routes/notice';
 import filesRoutes from './routes/files';
+import businessInquiryRoutes from './routes/businessInquiry';
 import { errorHandler } from './middlewares/errorHandler';
 import { generalLimiter } from './middlewares/rateLimiter';
 import { sanitizeInput } from './middlewares/sanitize';
@@ -166,6 +167,7 @@ app.use('/api/insurance', insuranceRoutes);
 app.use('/api/disputes', disputeRoutes);
 app.use('/api/notices', noticeRoutes);
 app.use('/api/files', filesRoutes);
+app.use('/api/business-inquiries', businessInquiryRoutes);
 
 // Error handler
 app.use(errorHandler);

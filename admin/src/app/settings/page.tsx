@@ -418,6 +418,48 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        <div className="card">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">무통장입금 입금계좌</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              보호자가 무통장입금을 선택하면 안내되는 입금 계좌입니다. 결제 화면과 알림에 표시됩니다.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 max-w-2xl">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">은행명</label>
+              <input
+                type="text"
+                value={(settings.depositBankName as string) ?? ""}
+                onChange={(e) => handleChange("depositBankName", e.target.value)}
+                placeholder="예: 국민은행"
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">계좌번호</label>
+              <input
+                type="text"
+                value={(settings.depositAccountNumber as string) ?? ""}
+                onChange={(e) => handleChange("depositAccountNumber", e.target.value)}
+                placeholder="000000-00-000000"
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">예금주</label>
+              <input
+                type="text"
+                value={(settings.depositAccountHolder as string) ?? ""}
+                onChange={(e) => handleChange("depositAccountHolder", e.target.value)}
+                placeholder="케어매치 주식회사"
+                className="input-field"
+              />
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-gray-400">계좌번호를 비워두면 "안내가 발송됩니다" 문구만 표시됩니다.</p>
+        </div>
+
         {/* Save button */}
         <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <p className="text-sm text-gray-500">

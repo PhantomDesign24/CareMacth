@@ -10,10 +10,18 @@ type Role = "guardian" | "caregiver" | "hospital" | "";
 
 // 생년월일 셀렉트 — value 는 'YYYY-MM-DD' 문자열 (documents 페이지와 동일 UI)
 function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [y, m, d] = (value || "").split("-");
-  const year = y || "";
-  const month = m || "";
-  const day = d || "";
+  // 내부 state로 년/월/일을 각각 유지 (예전엔 3개 다 안 차면 부모 value를 ""로 리셋해
+  // 하나 고르면 나머지가 비어 즉시 초기화 → 선택이 저장 안 되던 버그)
+  const init = (value || "").split("-");
+  const [year, setYear] = useState(init[0] || "");
+  const [month, setMonth] = useState(init[1] || "");
+  const [day, setDay] = useState(init[2] || "");
+
+  // 외부에서 '완성된' 날짜가 주입되면(기존값 로드 등) 동기화. 미완성("")일 땐 내부 선택 유지.
+  useEffect(() => {
+    const p = (value || "").split("-");
+    if (p.length === 3 && p[0] && p[1] && p[2]) { setYear(p[0]); setMonth(p[1]); setDay(p[2]); }
+  }, [value]);
 
   const currentYear = new Date().getFullYear();
   const years = useMemo(() => {
@@ -31,7 +39,8 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
     [daysInMonth],
   );
 
-  const update = (ny: string, nm: string, nd: string) => {
+  // 3개 모두 선택됐을 때만 완성 날짜를 부모에 전달. 미완성이면 빈 값.
+  const emit = (ny: string, nm: string, nd: string) => {
     if (!ny || !nm || !nd) { onChange(""); return; }
     const maxDay = new Date(Number(ny), Number(nm), 0).getDate();
     const safeDay = Math.min(Number(nd), maxDay);
@@ -40,15 +49,15 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
 
   return (
     <div className="grid grid-cols-3 gap-2">
-      <select className="input-field" value={year} onChange={(e) => update(e.target.value, month, day)}>
+      <select className="input-field" value={year} onChange={(e) => { setYear(e.target.value); emit(e.target.value, month, day); }}>
         <option value="">년</option>
         {years.map((yy) => <option key={yy} value={yy}>{yy}</option>)}
       </select>
-      <select className="input-field" value={month} onChange={(e) => update(year, e.target.value, day)}>
+      <select className="input-field" value={month} onChange={(e) => { setMonth(e.target.value); emit(year, e.target.value, day); }}>
         <option value="">월</option>
         {months.map((mm) => <option key={mm} value={mm}>{Number(mm)}</option>)}
       </select>
-      <select className="input-field" value={day} onChange={(e) => update(year, month, e.target.value)}>
+      <select className="input-field" value={day} onChange={(e) => { setDay(e.target.value); emit(year, month, e.target.value); }}>
         <option value="">일</option>
         {days.map((dd) => <option key={dd} value={dd}>{Number(dd)}</option>)}
       </select>
@@ -62,6 +71,15 @@ function RegisterPageInner() {
 
   // 소셜 가입 모드 — signupToken 은 URL 미사용, sessionStorage('cm_signup_payload') 만 신뢰
   const social = searchParams.get("social"); // 'kakao' | 'naver' | 'apple' | null
+
+  // 진입 경로 기반 가입 가능 역할 제한
+  //  - 간병인 찾기(/care-request) → ?role=guardian : 보호자·병원만 (간병인 가입 차단)
+  //  - 간병 일감 찾기(/find-work) → ?role=caregiver : 간병인만 (보호자·병원 가입 차단)
+  const flowRole = searchParams.get("role");
+  const allowedRoles: Role[] | null =
+    flowRole === "guardian" ? (["guardian", "hospital"] as Role[])
+    : flowRole === "caregiver" ? (["caregiver"] as Role[])
+    : null;
   const [signupToken, setSignupToken] = useState("");
   const [signupPrefill, setSignupPrefill] = useState<{ email?: string; name?: string; phone?: string }>({});
   const isSocialMode = !!signupToken && (social === "kakao" || social === "naver" || social === "apple");
@@ -146,9 +164,9 @@ function RegisterPageInner() {
     }
 
     if (!isSocialMode) {
-      const pwOk = password.length >= 8 && /[A-Za-z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
+      const pwOk = password.length >= 8;
       if (!pwOk) {
-        setFieldErrors({ password: "비밀번호는 8자 이상, 영문·숫자·특수문자를 모두 포함해야 합니다." });
+        setFieldErrors({ password: "비밀번호는 8자 이상이어야 합니다." });
         return;
       }
     }
@@ -486,7 +504,7 @@ function RegisterPageInner() {
           )}
 
           <div className="space-y-4">
-            {roleOptions.map((opt) => (
+            {roleOptions.filter((opt) => !allowedRoles || allowedRoles.includes(opt.value)).map((opt) => (
               <button
                 key={opt.value}
                 type="button"
@@ -512,6 +530,20 @@ function RegisterPageInner() {
             ))}
           </div>
 
+          {flowRole === "guardian" && (
+            <p className="text-center text-xs text-gray-400 mt-4">
+              간병인으로 가입하시려면{" "}
+              <Link href="/find-work" className="text-primary-600 font-medium hover:underline">간병 일감 찾기</Link>
+              에서 가입해주세요.
+            </p>
+          )}
+          {flowRole === "caregiver" && (
+            <p className="text-center text-xs text-gray-400 mt-4">
+              보호자·병원 회원은{" "}
+              <Link href="/care-request" className="text-primary-600 font-medium hover:underline">간병인 찾기</Link>
+              에서 가입해주세요.
+            </p>
+          )}
           <p className="text-center text-sm text-gray-500 mt-6">
             이미 회원이신가요?{" "}
             <Link href="/auth/login" className="text-primary-600 font-semibold hover:underline">
@@ -621,7 +653,7 @@ function RegisterPageInner() {
                   <input
                     type="password"
                     className="input-field"
-                    placeholder="8자 이상, 영문+숫자+특수문자"
+                    placeholder="8자 이상 (영문·숫자 조합 권장)"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required

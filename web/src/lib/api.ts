@@ -204,8 +204,8 @@ export const caregiverAPI = {
   updateStatus: (status: string) => {
     // Map frontend status values to Prisma CaregiverWorkStatus enum
     const statusMap: Record<string, string> = {
-      working: 'WORKING', available: 'AVAILABLE', immediately: 'IMMEDIATE',
-      WORKING: 'WORKING', AVAILABLE: 'AVAILABLE', IMMEDIATE: 'IMMEDIATE',
+      working: 'WORKING', available: 'AVAILABLE', immediately: 'IMMEDIATE', on_leave: 'ON_LEAVE',
+      WORKING: 'WORKING', AVAILABLE: 'AVAILABLE', IMMEDIATE: 'IMMEDIATE', ON_LEAVE: 'ON_LEAVE',
     };
     return api.put("/caregiver/work-status", { workStatus: statusMap[status] || status.toUpperCase() });
   },
@@ -272,6 +272,8 @@ export const documentAPI = {
   updateProfile: (data: Record<string, unknown>) => api.put('/caregiver/profile', data),
   uploadCertificate: (formData: FormData) =>
     api.post('/caregiver/certificates', formData),
+  deleteCertificate: (id: string) =>
+    api.delete(`/caregiver/certificates/${id}`),
   uploadIdCard: (formData: FormData) =>
     api.post('/caregiver/id-card', formData),
   uploadCriminalCheck: (formData: FormData) =>

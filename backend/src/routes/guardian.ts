@@ -6,8 +6,9 @@ import * as guardianController from '../controllers/guardianController';
 const router = Router();
 
 // 모든 보호자 라우트에 인증 필요
+// HOSPITAL 도 가입 시 guardian 레코드가 생성되어 보호자와 동일 플로우 사용 (대시보드 role 가드와 일치)
 router.use(authenticate);
-router.use(authorize('GUARDIAN'));
+router.use(authorize('GUARDIAN', 'HOSPITAL'));
 
 // GET / - 내 정보 조회
 router.get('/', guardianController.getMyInfo);

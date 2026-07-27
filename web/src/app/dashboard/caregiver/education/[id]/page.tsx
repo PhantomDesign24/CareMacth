@@ -67,6 +67,7 @@ export default function EducationDetailPage() {
   const id = params?.id;
 
   const [course, setCourse] = useState<Course | null>(null);
+  const [nextCourse, setNextCourse] = useState<{ id: string; title: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentProgress, setCurrentProgress] = useState(0);
   const [notFound, setNotFound] = useState(false);
@@ -105,6 +106,11 @@ export default function EducationDetailPage() {
         completedAt: found.completedAt ?? null,
       });
       setCurrentProgress(found.progress ?? 0);
+      // 다음 강의(순서 기준) — 수료 후 "다음화 보기" 버튼용
+      const sorted = [...list].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const idx = sorted.findIndex((c) => c.id === id);
+      const next = idx >= 0 ? sorted[idx + 1] : null;
+      setNextCourse(next ? { id: next.id, title: next.title } : null);
     } catch (err: any) {
       showToast(err?.message || "교육 정보를 불러오지 못했습니다.", "error");
     } finally {
@@ -397,11 +403,31 @@ export default function EducationDetailPage() {
           {/* 수료 완료 버튼 */}
           <div className="mt-4">
             {course.completed ? (
-              <div className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-sm">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                </svg>
-                수료 완료됨
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-sm">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                  </svg>
+                  수료 완료됨
+                </div>
+                {nextCourse ? (
+                  <Link
+                    href={`/dashboard/caregiver/education/${nextCourse.id}`}
+                    className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-bold text-sm transition-colors shadow-sm"
+                  >
+                    다음화 보기 — {nextCourse.title}
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                    </svg>
+                  </Link>
+                ) : (
+                  <Link
+                    href="/dashboard/caregiver/education"
+                    className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm transition-colors"
+                  >
+                    모든 강의를 확인했어요 — 교육 목록으로
+                  </Link>
+                )}
               </div>
             ) : currentProgress >= 80 ? (
               <button

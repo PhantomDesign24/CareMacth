@@ -64,7 +64,7 @@ export default function Footer() {
                 <FaInstagram className="w-4 h-4" />
               </a>
               <a
-                href="http://pf.kakao.com/_nnJxkxj"
+                href={SITE.kakaoChannelUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-9 h-9 rounded-full bg-gray-800 hover:bg-yellow-500 flex items-center justify-center transition-all duration-200"
@@ -103,14 +103,6 @@ export default function Footer() {
                   className="text-sm text-gray-400 hover:text-primary-400 transition-colors"
                 >
                   병원·기업회원
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/home-care"
-                  className="text-sm text-gray-400 hover:text-primary-400 transition-colors"
-                >
-                  방문요양
                 </Link>
               </li>
             </ul>
@@ -186,10 +178,10 @@ export default function Footer() {
               <li className="flex items-start gap-2 text-sm text-gray-400">
                 <FiMail className="w-4 h-4 mt-0.5 shrink-0 text-gray-500" />
                 <a
-                  href="mailto:wooritelceo@hanmail.net"
+                  href="mailto:carematch11@naver.com"
                   className="hover:text-primary-400 transition-colors"
                 >
-                  wooritelceo@hanmail.net
+                  carematch11@naver.com
                 </a>
               </li>
               <li className="flex items-start gap-2 text-sm text-gray-400">

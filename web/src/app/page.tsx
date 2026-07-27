@@ -276,14 +276,14 @@ function HeroSection() {
           {/* App Store Buttons — 앱 내부에서는 숨김. 밝은/어두운 슬라이드 모두 보이게 검은 배지 */}
           {!isApp && (
             <div className="mt-5 sm:mt-7 flex items-center gap-2 sm:gap-3">
-              <a href="#" className="inline-flex items-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
+              <a href={SITE.iosStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
                 <FaApple className="w-4 sm:w-5 h-4 sm:h-5" />
                 <div className="text-left">
                   <div className="text-[9px] sm:text-[10px] opacity-70 leading-none">Download on the</div>
                   <div className="text-xs sm:text-sm font-semibold leading-tight">App Store</div>
                 </div>
               </a>
-              <a href="#" className="inline-flex items-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
+              <a href={SITE.androidStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
                 <FaGooglePlay className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                 <div className="text-left">
                   <div className="text-[9px] sm:text-[10px] opacity-70 leading-none">GET IT ON</div>
@@ -481,16 +481,16 @@ function LiveDashboardSection() {
     { name: "김영○", region: "서울 강남", exp: "5년", type: "병원간병" },
     { name: "이순○", region: "경기 성남", exp: "3년", type: "재택간병" },
     { name: "박지○", region: "서울 서초", exp: "7년", type: "병원간병" },
-    { name: "정미○", region: "인천 부평", exp: "2년", type: "방문요양" },
+    { name: "정미○", region: "인천 부평", exp: "2년", type: "가족간병" },
     { name: "최윤○", region: "서울 송파", exp: "4년", type: "생활돌봄" },
     { name: "한수○", region: "경기 수원", exp: "6년", type: "병원간병" },
     { name: "강민○", region: "서울 마포", exp: "8년", type: "재택간병" },
-    { name: "조은○", region: "경기 고양", exp: "1년", type: "방문요양" },
+    { name: "조은○", region: "경기 고양", exp: "1년", type: "가족간병" },
   ];
   const matches = [
     { cg: "김영○", pt: "홍○○ (68세)", type: "병원간병" },
     { cg: "이순○", pt: "박○○ (75세)", type: "재택간병" },
-    { cg: "정미○", pt: "최○○ (82세)", type: "방문요양" },
+    { cg: "정미○", pt: "최○○ (82세)", type: "가족간병" },
     { cg: "한수○", pt: "강○○ (71세)", type: "병원간병" },
     { cg: "조은○", pt: "윤○○ (79세)", type: "생활돌봄" },
     { cg: "강민○", pt: "이○○ (66세)", type: "병원간병" },
@@ -598,7 +598,7 @@ function SpecialServiceSection() {
             { image: "/img/main/free_01.png", title: "간병 매칭료 최저가 보장", desc: "업계 최저 수수료로 부담 없이 이용하세요" },
             { image: "/img/main/free_02.png", title: "간병인 배상책임 100% 가입", desc: "만약의 사고에도 안전하게 보장됩니다" },
             { image: "/img/main/free_03.png", title: "3중 케어 시스템 운영", desc: "간병인+케어코디+지역센터장 3중 관리" },
-            { image: "/img/main/free_04.png", title: "간병일지 매일 제공", desc: "매일 간병 상태를 기록하여 보호자에게 전달" },
+            { image: "/img/main/free_04_insurance.svg", title: "간병보험 청구서류 발급 지원", desc: "간병 서비스 이용 후 보험금 청구에 필요한 간병 확인서와 관련 서류 발급을 지원합니다." },
           ].map((s, i) => (
             <div key={i} className="bg-white rounded-2xl p-4 sm:p-6 text-center shadow-sm hover:shadow-lg transition-shadow">
               <img src={s.image} alt={s.title} className="w-16 h-16 sm:w-24 sm:h-24 object-contain mx-auto mb-3 sm:mb-4" />
@@ -835,8 +835,8 @@ function PremiumFeaturesSection() {
     },
     {
       image: "/img/main/serIcon04.png",
-      title: "선불 간병료 유예 지급제",
-      desc: "선불 간병료를 유예하여 부담 없이 서비스를 시작할 수 있습니다.",
+      title: "고객 만족도 해피콜 시스템",
+      desc: "간병인 매칭 후 해피콜을 통해 서비스 만족도와 불편사항을 확인하고, 필요한 사항을 담당자가 신속하게 안내합니다.",
       bg: "bg-amber-50",
       text: "text-amber-600",
     },
@@ -901,7 +901,7 @@ function CareFieldsSection() {
   const fields = [
     { image: "/img/main/field01.jpg", title: "병원간병", desc: "입원 환자를 위한 전문 병원 간병 서비스", count: "8,200+" },
     { image: "/img/main/field02.jpg", title: "재택간병", desc: "자택에서 편안하게 받는 전문 재택 간병", count: "5,100+" },
-    { image: "/img/main/field03.jpg", title: "방문요양", desc: "요양이 필요한 분들을 위한 전문 방문요양", count: "3,800+" },
+    { image: "/img/main/field03.jpg", title: "가족간병", desc: "가족처럼 세심하게 돌보는 맞춤 가족 간병 서비스", count: "3,800+" },
     { image: "/img/main/field04.jpg", title: "생활돌봄간병", desc: "일상생활 지원이 필요한 분들을 위한 돌봄", count: "2,400+" },
   ];
 
@@ -1206,7 +1206,7 @@ function ConsultationSection() {
             <span className="text-xs sm:text-sm font-medium">Instagram</span>
           </a>
           <a
-            href="http://pf.kakao.com/_nnJxkxj"
+            href={SITE.kakaoChannelUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 sm:py-3 bg-white/10 backdrop-blur-sm text-white rounded-xl hover:bg-yellow-500/80 transition-all duration-200 border border-white/10"
@@ -1256,7 +1256,9 @@ function AppDownloadSection() {
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
                 <a
-                  href="#"
+                  href={SITE.iosStoreUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-3 px-6 py-3.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all shadow-lg w-full sm:w-auto justify-center"
                 >
                   <FaApple className="w-6 h-6" />
@@ -1270,7 +1272,9 @@ function AppDownloadSection() {
                   </div>
                 </a>
                 <a
-                  href="#"
+                  href={SITE.androidStoreUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-3 px-6 py-3.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all shadow-lg w-full sm:w-auto justify-center"
                 >
                   <FaGooglePlay className="w-5 h-5" />
@@ -1348,7 +1352,7 @@ function FAQSection() {
     },
     {
       q: "간병비는 어떻게 결정되나요?",
-      a: "간병 유형(병원간병/재택간병/방문요양/생활돌봄), 시간(24시간/시간제), 환자 상태, 지역 등에 따라 결정됩니다. 요청 시 예상 비용을 안내해 드립니다.",
+      a: "간병 유형(병원간병/재택간병/가족간병/생활돌봄), 시간(24시간/시간제), 환자 상태, 지역 등에 따라 결정됩니다. 요청 시 예상 비용을 안내해 드립니다.",
     },
     {
       q: "간병인 교체가 가능한가요?",
@@ -1364,7 +1368,7 @@ function FAQSection() {
     },
     {
       q: "어떤 종류의 간병 서비스를 제공하나요?",
-      a: "병원간병, 재택간병, 방문요양, 생활돌봄간병 등 다양한 간병 서비스를 제공합니다. 환자의 상태와 필요에 맞는 맞춤형 서비스를 선택하실 수 있습니다.",
+      a: "병원간병, 재택간병, 가족간병, 생활돌봄간병 등 다양한 간병 서비스를 제공합니다. 환자의 상태와 필요에 맞는 맞춤형 서비스를 선택하실 수 있습니다.",
     },
   ];
 

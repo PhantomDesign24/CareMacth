@@ -21,6 +21,7 @@ import {
   WORK_STATUS_OPTIONS as workStatusOptions,
   caregiverStatusLabel as statusLabel,
   caregiverStatusBadge as statusBadge,
+  formatPhone,
 } from "@/lib/constants";
 
 export default function CaregiversPage() {
@@ -241,7 +242,7 @@ export default function CaregiversPage() {
                 <span className="badge-purple text-[10px]" title="우수 간병사">⭐ 우수</span>
               )}
             </div>
-            <div className="text-[11px] text-gray-400 truncate">{(row.phone as string) || (row.email as string) || ""}</div>
+            <div className="text-[11px] text-gray-400 truncate">{formatPhone(row.phone as string) || (row.email as string) || ""}</div>
           </div>
         </div>
       ),

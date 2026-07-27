@@ -308,9 +308,15 @@ export const getContract = async (req: AuthRequest, res: Response, next: NextFun
       }
     }
 
+    // 직접결제 매칭 이용료 단가(현재 수수료 설정, careType별) — 웹 결제화면 표시용
+    const dpCfg = await prisma.platformConfig.findUnique({ where: { id: 'default' } });
+    const directFeePerDay = contract.careRequest?.careType === 'INDIVIDUAL'
+      ? (dpCfg?.individualFeeFixed ?? 0)
+      : (dpCfg?.familyFeeFixed ?? 0);
+
     res.json({
       success: true,
-      data: contract,
+      data: { ...contract, directFeePerDay },
     });
   } catch (error) {
     next(error);
@@ -1255,7 +1261,11 @@ export const signContract = async (req: AuthRequest, res: Response, next: NextFu
 
     const contract = await prisma.contract.findUnique({
       where: { id },
-      include: { guardian: true, caregiver: true },
+      include: {
+        guardian: { include: { user: { select: { name: true } } } },
+        caregiver: { include: { user: { select: { name: true } } } },
+        careRequest: { include: { patient: { select: { name: true } } } },
+      },
     });
     if (!contract) throw new AppError('계약을 찾을 수 없습니다.', 404);
 
@@ -1310,14 +1320,26 @@ export const signContract = async (req: AuthRequest, res: Response, next: NextFu
 
     const updated = await prisma.contract.findUnique({ where: { id } });
 
-    // 알림 발송
+    // 알림 발송 — 템플릿 변수(간병인/환자/기간) 채워서 발송
+    // (기존엔 vars 를 비워 보내 {{caregiverName}} 등이 공란으로 나가던 문제 수정)
+    const fmtD = (d: Date | string | null | undefined) =>
+      d ? new Date(d).toISOString().slice(0, 10) : '';
+    const period = `${fmtD(contract.startDate)} ~ ${fmtD(contract.endDate)}`;
+    const signVars = {
+      caregiverName: (contract as any).caregiver?.user?.name || '',
+      guardianName: (contract as any).guardian?.user?.name || '',
+      patientName: (contract as any).careRequest?.patient?.name || '',
+      startDate: fmtD(contract.startDate),
+      endDate: fmtD(contract.endDate),
+      period,
+    };
     if (signerRole === 'GUARDIAN') {
       await sendFromTemplate({
         userId: contract.caregiver.userId,
         key: 'CONTRACT_SIGNED_GUARDIAN',
-        vars: {},
+        vars: signVars,
         fallbackTitle: '보호자가 계약서에 서명했습니다',
-        fallbackBody: '계약서 보호자 서명이 완료되었습니다. 본인도 서명 후 계약이 시작됩니다.',
+        fallbackBody: `계약서 보호자 서명이 완료되었습니다.\n▶ 환자: ${signVars.patientName}\n▶ 기간: ${period}\n본인도 서명 후 계약이 시작됩니다.`,
         fallbackType: 'CONTRACT',
         data: { contractId: id },
       }).catch(() => {});
@@ -1325,9 +1347,9 @@ export const signContract = async (req: AuthRequest, res: Response, next: NextFu
       await sendFromTemplate({
         userId: contract.guardian.userId,
         key: 'CONTRACT_SIGNED_CAREGIVER',
-        vars: {},
+        vars: signVars,
         fallbackTitle: '간병인이 계약서에 서명했습니다',
-        fallbackBody: '계약서 간병인 서명이 완료되었습니다. 본인도 서명 후 계약이 시작됩니다.',
+        fallbackBody: `계약서 간병인 서명이 완료되었습니다.\n▶ 간병인: ${signVars.caregiverName}\n▶ 기간: ${period}\n본인도 서명 후 계약이 시작됩니다.`,
         fallbackType: 'CONTRACT',
         data: { contractId: id },
       }).catch(() => {});

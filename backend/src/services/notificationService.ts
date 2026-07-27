@@ -329,6 +329,9 @@ export async function sendToAdmins(params: {
   key: string;
   vars?: TemplateVars;
   data?: Record<string, any>;
+  fallbackTitle?: string;
+  fallbackBody?: string;
+  fallbackType?: NotificationType;
 }) {
   const admins = await prisma.user.findMany({
     where: { role: 'ADMIN', isActive: true },
@@ -340,6 +343,9 @@ export async function sendToAdmins(params: {
         userId: a.id,
         key: params.key,
         vars: params.vars,
+        fallbackTitle: params.fallbackTitle,
+        fallbackBody: params.fallbackBody,
+        fallbackType: params.fallbackType,
         data: { ...(params.data || {}), adminAlert: true, forAdmin: true },
       }).catch(() => {}),
     ),

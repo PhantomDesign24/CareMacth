@@ -395,8 +395,10 @@ function GuardianDashboard() {
         let statusLabel: string;
         if (isVirtual) {
           statusLabel = formatCareStatus(crStatus);
-        } else if ((c.status === 'ACTIVE' || c.status === 'EXTENDED' || c.status === 'PENDING_SIGNATURE') && !isPaid && !isEscrow) {
-          // 매칭 직후 PENDING_SIGNATURE(결제 전) 계약도 결제 대기로 표시
+        } else if (c.status === 'PENDING_SIGNATURE') {
+          // 서명 완료 전에는 결제 불가 → 결제 대기가 아니라 서명 대기로 표시
+          statusLabel = '서명 대기';
+        } else if ((c.status === 'ACTIVE' || c.status === 'EXTENDED') && !isPaid && !isEscrow) {
           statusLabel = '결제 대기';
         } else if ((c.status === 'ACTIVE' || c.status === 'EXTENDED') && isEscrow) {
           statusLabel = '에스크로 보관중';
@@ -729,6 +731,8 @@ function GuardianDashboard() {
     switch (s) {
       case "결제 대기":
         return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">결제 대기</span>;
+      case "서명 대기":
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">✍️ 서명 대기</span>;
       case "active":
       case "진행 중":
         return <span className="badge-success">진행 중</span>;
@@ -1035,8 +1039,8 @@ function GuardianDashboard() {
                             ⏱ 간병인 서명 대기 중
                           </span>
                         )}
-                        {/* 결제 대기 중이면 결제 버튼 최우선 표시 (매칭 직후 PENDING_SIGNATURE 포함) */}
-                        {!care.isVirtual && (care.contractStatus === 'ACTIVE' || care.contractStatus === 'EXTENDED' || care.contractStatus === 'PENDING_SIGNATURE') && !care.isPaid && (
+                        {/* 결제 버튼 — 양측 서명 완료(ACTIVE/EXTENDED) 후에만 노출 (서명 전 결제는 백엔드에서도 차단) */}
+                        {!care.isVirtual && (care.contractStatus === 'ACTIVE' || care.contractStatus === 'EXTENDED') && !care.isPaid && (
                           <Link
                             href={`/dashboard/guardian/payment/${care.id}`}
                             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors"
@@ -2736,7 +2740,7 @@ function GuardianReviewsTab() {
     (async () => {
       try {
         const res = await reviewAPI.myWritten();
-        const list = res.data?.data?.reviews || res.data?.data || [];
+        const list = res.data?.reviews || [];
         setReviews(list);
       } catch {
         setReviews([]);

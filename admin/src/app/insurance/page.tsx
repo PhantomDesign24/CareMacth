@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiRequest } from "@/lib/api";
+import { formatPhone } from "@/lib/constants";
 
 interface InsuranceReq {
   id: string;
@@ -195,7 +196,7 @@ export default function InsuranceAdminPage() {
                   <tr key={r.id}>
                     <td className="py-3 px-4">
                       <div className="font-medium text-gray-900">{r.requester?.name || "-"}</div>
-                      <div className="text-xs text-gray-500">{r.requester?.phone || r.requester?.email || ""}</div>
+                      <div className="text-xs text-gray-500">{formatPhone(r.requester?.phone) || r.requester?.email || ""}</div>
                     </td>
                     <td className="py-3 px-4 text-gray-900">{r.patientName}</td>
                     <td className="py-3 px-4 text-gray-700">{r.insuranceCompany}</td>

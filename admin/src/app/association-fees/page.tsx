@@ -8,7 +8,7 @@ import {
   getPlatformConfig,
   AssociationFeeRow,
 } from "@/lib/api";
-import { caregiverStatusLabel, WORK_STATUSES } from "@/lib/constants";
+import { caregiverStatusLabel, WORK_STATUSES, formatPhone } from "@/lib/constants";
 
 type Filter = "all" | "paid" | "unpaid";
 
@@ -403,7 +403,7 @@ export default function AssociationFeesPage() {
                     {r.status === "APPROVED" ? "활동" : r.status === "SUSPENDED" ? "정지" : r.status}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 text-center text-gray-500 hidden sm:table-cell">{r.phone}</td>
+                <td className="px-3 py-2.5 text-center text-gray-500 hidden sm:table-cell">{formatPhone(r.phone)}</td>
                 <td className="px-3 py-2.5 text-center">
                   <button
                     onClick={() => togglePaid(r)}
@@ -583,7 +583,7 @@ export default function AssociationFeesPage() {
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between"><dt className="text-gray-500">상태</dt><dd>{caregiverStatusLabel(detailModal.status)}</dd></div>
               <div className="flex justify-between"><dt className="text-gray-500">근무상태</dt><dd>{WORK_STATUSES.find(w => w.value === detailModal.workStatus)?.label || detailModal.workStatus}</dd></div>
-              <div className="flex justify-between"><dt className="text-gray-500">연락처</dt><dd>{detailModal.phone}</dd></div>
+              <div className="flex justify-between"><dt className="text-gray-500">연락처</dt><dd>{formatPhone(detailModal.phone)}</dd></div>
               <div className="flex justify-between"><dt className="text-gray-500">이메일</dt><dd className="truncate max-w-[60%]">{detailModal.email}</dd></div>
               <div className="flex justify-between"><dt className="text-gray-500">협회비</dt><dd className={detailModal.feePaid ? "text-green-600 font-semibold" : "text-red-500"}>
                 {detailModal.feePaid ? `납부 완료 (${detailModal.feeAmount.toLocaleString()}원)` : "미납"}

@@ -226,6 +226,10 @@ export async function unverifyCertificate(caregiverId: string, certId: string) {
   return apiRequest(`/admin/caregivers/${caregiverId}/certificates/${certId}/verify`, { method: "DELETE" });
 }
 
+export async function deleteCertificateAdmin(caregiverId: string, certId: string) {
+  return apiRequest(`/admin/caregivers/${caregiverId}/certificates/${certId}`, { method: "DELETE" });
+}
+
 export async function verifyIdCard(caregiverId: string) {
   return apiRequest(`/admin/caregivers/${caregiverId}/verify-id-card`, { method: "PUT" });
 }
@@ -741,6 +745,58 @@ export async function getAdminSettlements(params?: { status?: string; period?: s
 
 export async function exportPayments(params?: { startDate?: string; endDate?: string; status?: string }) {
   return apiDownload("/admin/stats/export", params as Record<string, string>);
+}
+
+// ─── 직접결제 요청 ────────────────────────────────────────
+export interface DirectPaymentItem {
+  id: string;
+  status: string; // PENDING(이용료 미확인) | COMPLETED(입금확인 완료)
+  matchFee: number;
+  feePerDay: number;
+  days: number;
+  guardianName: string;
+  guardianPhone: string;
+  caregiverName: string;
+  caregiverPhone: string;
+  patientName: string;
+  contractId: string | null;
+  createdAt: string;
+  processedAt: string | null;
+}
+export interface DirectPaymentsResponse {
+  items: DirectPaymentItem[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+export async function getDirectPayments(params?: { status?: string; page?: number; limit?: number }) {
+  return apiRequest<DirectPaymentsResponse>("/admin/direct-payments", {
+    params: params as Record<string, string | number>,
+  });
+}
+export async function completeDirectPayment(id: string) {
+  return apiRequest(`/admin/direct-payments/${id}/complete`, { method: "POST" });
+}
+
+// ─── 병원·기업 제휴 문의 ────────────────────────────────
+export interface BusinessInquiryItem {
+  id: string;
+  companyName: string;
+  contactName: string;
+  phone: string;
+  email: string | null;
+  type: string;
+  message: string | null;
+  status: string; // PENDING | DONE
+  adminNote: string | null;
+  createdAt: string;
+  processedAt: string | null;
+}
+export async function getBusinessInquiries(params?: { status?: string }) {
+  return apiRequest<{ items: BusinessInquiryItem[] }>("/admin/business-inquiries", {
+    params: params as Record<string, string | number>,
+  });
+}
+export async function updateBusinessInquiry(id: string, data: { status?: string; adminNote?: string }) {
+  return apiRequest(`/admin/business-inquiries/${id}/status`, { method: "POST", body: data });
 }
 
 // ─── Types ────────────────────────────────────────────

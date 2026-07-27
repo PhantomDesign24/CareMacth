@@ -9,6 +9,7 @@ import {
   AlimtalkLogItem,
   NotificationTemplate,
 } from "@/lib/api";
+import { formatPhone } from "@/lib/constants";
 
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   SUCCESS: { label: "성공", cls: "bg-emerald-100 text-emerald-700" },
@@ -216,7 +217,7 @@ export default function AlimtalkLogsPage() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="text-gray-900">{it.userName || "-"}</div>
-                      <div className="text-xs text-gray-400">{it.phone}</div>
+                      <div className="text-xs text-gray-400">{formatPhone(it.phone)}</div>
                     </td>
                     <td className="px-3 py-2">
                       <div className="font-mono text-xs text-gray-700">{it.templateKey || "-"}</div>
@@ -291,7 +292,7 @@ export default function AlimtalkLogsPage() {
               <div>
                 <h3 className="text-lg font-bold text-gray-900">{previewItem.title || previewItem.templateKey || "알림톡 본문"}</h3>
                 <p className="mt-0.5 text-xs text-gray-500">
-                  {new Date(previewItem.createdAt).toLocaleString("ko-KR")} · {previewItem.phone}
+                  {new Date(previewItem.createdAt).toLocaleString("ko-KR")} · {formatPhone(previewItem.phone)}
                 </p>
               </div>
               <button

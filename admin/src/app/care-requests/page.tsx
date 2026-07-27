@@ -9,6 +9,7 @@ import {
   getAdminCareRequest,
   AdminCareRequestRow,
 } from "@/lib/api";
+import { formatPhone } from "@/lib/constants";
 
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   OPEN: { label: "공고중", cls: "bg-blue-100 text-blue-700" },
@@ -439,7 +440,7 @@ export default function CareRequestsPage() {
                     <div className="bg-blue-50 rounded-lg p-3">
                       <div className="text-xs text-blue-600">보호자</div>
                       <div className="font-semibold text-gray-900 mt-1">{detailData.guardian?.user?.name || "-"}</div>
-                      <div className="text-xs text-gray-500">{detailData.guardian?.user?.phone || "-"}</div>
+                      <div className="text-xs text-gray-500">{formatPhone(detailData.guardian?.user?.phone) || "-"}</div>
                     </div>
                     <div className="bg-purple-50 rounded-lg p-3">
                       <div className="text-xs text-purple-600">환자</div>
@@ -523,7 +524,7 @@ export default function CareRequestsPage() {
                                     {a.caregiver?.user?.name || "-"}
                                   </Link>
                                 </td>
-                                <td className="px-2 py-1.5">{a.caregiver?.user?.phone || "-"}</td>
+                                <td className="px-2 py-1.5">{formatPhone(a.caregiver?.user?.phone) || "-"}</td>
                                 <td className="px-2 py-1.5 text-right">
                                   {a.proposedRate
                                     ? `${a.proposedRate.toLocaleString()}원`

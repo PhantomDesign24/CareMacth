@@ -12,6 +12,7 @@ import {
 import {
   NOTIFICATION_TYPES as NOTIFICATION_TYPE_DEFS,
   NOTIFICATION_TARGETS,
+  formatPhone,
 } from "@/lib/constants";
 
 // ─── Helpers ───────────────────────────────────────────
@@ -281,7 +282,7 @@ export default function NotificationsPage() {
                               {u.name}
                               <span className="ml-2 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">{u.role}</span>
                             </span>
-                            <span className="text-xs text-gray-500 truncate">{u.email} · {u.phone}</span>
+                            <span className="text-xs text-gray-500 truncate">{u.email} · {formatPhone(u.phone)}</span>
                           </div>
                         </button>
                       ))}

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import DataTable, { Column } from "@/components/DataTable";
 import { getPatients, Patient } from "@/lib/api";
+import { formatPhone } from "@/lib/constants";
 
 export default function PatientsPage() {
   const [search, setSearch] = useState("");
@@ -327,7 +328,7 @@ export default function PatientsPage() {
                     <h4 className="font-semibold text-gray-900 mb-2">보호자 정보</h4>
                     <div className="bg-gray-50 rounded-xl p-3 text-sm">
                       <div>{detail.guardian?.user?.name || "-"}</div>
-                      <div className="text-gray-500">{detail.guardian?.user?.phone} / {detail.guardian?.user?.email}</div>
+                      <div className="text-gray-500">{formatPhone(detail.guardian?.user?.phone)} / {detail.guardian?.user?.email}</div>
                     </div>
                   </div>
                   {Array.isArray(detail.careRequests) && detail.careRequests.length > 0 && (

@@ -102,8 +102,8 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
 
     // Normalize enum values
     const careTypeMap: Record<string, string> = {
-      hospital: 'INDIVIDUAL', home: 'FAMILY', visit: 'INDIVIDUAL', daily: 'INDIVIDUAL',
-      individual: 'INDIVIDUAL', family: 'FAMILY',
+      hospital: 'INDIVIDUAL', home: 'INDIVIDUAL', family: 'FAMILY', visit: 'INDIVIDUAL', daily: 'INDIVIDUAL',
+      individual: 'INDIVIDUAL',
     };
     const scheduleTypeMap: Record<string, string> = {
       '24h': 'FULL_TIME', hourly: 'PART_TIME', parttime: 'PART_TIME',
@@ -707,8 +707,8 @@ export const updateCareRequest = async (req: AuthRequest, res: Response, next: N
 
     // Normalize enum values for updates
     const careTypeMap: Record<string, string> = {
-      hospital: 'INDIVIDUAL', home: 'FAMILY', visit: 'INDIVIDUAL', daily: 'INDIVIDUAL',
-      individual: 'INDIVIDUAL', family: 'FAMILY',
+      hospital: 'INDIVIDUAL', home: 'INDIVIDUAL', family: 'FAMILY', visit: 'INDIVIDUAL', daily: 'INDIVIDUAL',
+      individual: 'INDIVIDUAL',
     };
     const scheduleTypeMap: Record<string, string> = {
       '24h': 'FULL_TIME', hourly: 'PART_TIME', parttime: 'PART_TIME',

@@ -88,7 +88,7 @@ export default function EducationListPage() {
             href="/dashboard/caregiver"
             className="text-xs text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
           >
-            ← 대시보드
+            ← 마이페이지
           </Link>
         </div>
 

@@ -11,6 +11,7 @@ import {
   toggleBadge,
   addPenalty,
   addMemo,
+  deleteCertificateAdmin,
   verifyCertificate,
   verifyIdCard,
   verifyCriminalCheck,
@@ -22,6 +23,7 @@ import {
   caregiverStatusLabel as statusLabel,
   caregiverStatusBadge as statusBadge,
   PENALTY_TYPES,
+  formatPhone,
 } from "@/lib/constants";
 
 // ─── Helpers ───────────────────────────────────────────
@@ -522,7 +524,7 @@ export default function CaregiverDetailPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <p className="text-xs font-medium text-gray-400">연락처</p>
-                <p className="mt-0.5 text-sm text-gray-900">{data.user.phone || "-"}</p>
+                <p className="mt-0.5 text-sm text-gray-900">{formatPhone(data.user.phone) || "-"}</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-400">이메일</p>
@@ -728,6 +730,21 @@ export default function CaregiverDetailPage() {
                         보기
                       </a>
                     )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm(`'${cert.name}' 자격증을 삭제할까요?`)) return;
+                        try {
+                          await deleteCertificateAdmin(String(id), cert.id);
+                          await fetchData();
+                        } catch (e: any) {
+                          alert(e?.message || "삭제 실패");
+                        }
+                      }}
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
+                    >
+                      삭제
+                    </button>
                   </div>
                 </div>
               ))

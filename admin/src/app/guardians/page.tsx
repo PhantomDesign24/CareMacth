@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import DataTable, { Column } from "@/components/DataTable";
 import { getGuardians, getGuardianDetail, Guardian } from "@/lib/api";
+import { formatPhone } from "@/lib/constants";
 
 export default function GuardiansPage() {
   const [search, setSearch] = useState("");
@@ -108,7 +109,7 @@ export default function GuardiansPage() {
       render: (_v, row) => (
         <div>
           <p className="font-medium text-gray-900">{row.name}</p>
-          <p className="text-xs text-gray-500">{row.email} | {row.phone}</p>
+          <p className="text-xs text-gray-500">{row.email} | {formatPhone(row.phone)}</p>
         </div>
       ),
     },
@@ -318,7 +319,7 @@ export default function GuardiansPage() {
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <div><span className="text-gray-500">이름:</span> {detail.name}</div>
                         <div><span className="text-gray-500">이메일:</span> {detail.email}</div>
-                        <div><span className="text-gray-500">전화:</span> {detail.phone}</div>
+                        <div><span className="text-gray-500">전화:</span> {formatPhone(detail.phone)}</div>
                         <div><span className="text-gray-500">가입방식:</span> {detail.authProvider === 'KAKAO' ? '카카오' : detail.authProvider === 'NAVER' ? '네이버' : detail.authProvider === 'APPLE' ? '애플' : '이메일'}</div>
                       </div>
                     )}

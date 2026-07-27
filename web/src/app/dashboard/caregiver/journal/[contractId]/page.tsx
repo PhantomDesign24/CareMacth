@@ -283,39 +283,11 @@ function JournalPage() {
           <div className="bg-white rounded-xl p-4 border border-gray-100 text-sm">
             <div className="grid grid-cols-2 gap-2">
               <InfoRow label="환자명" value={contract.careRequest?.patient?.name || "-"} />
-              <InfoRow label="병원명" value={contract.careRequest?.hospitalName || contract.careRequest?.address || "-"} />
+              <InfoRow label="병원명" value={contract.careRequest?.hospitalName || "-"} />
               <InfoRow label="간병 시작일" value={contract.startDate ? new Date(contract.startDate).toLocaleDateString("ko-KR") : "-"} />
               <InfoRow label="간병 종료일" value={contract.endDate ? new Date(contract.endDate).toLocaleDateString("ko-KR") : "-"} />
             </div>
-            {/* 이 계약에서 사용된 법인명 (간병일지 PDF에 반영) */}
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <label className="block text-xs text-gray-500 mb-1">
-                간병인 사용 법인명 <span className="text-gray-400">(이 간병건 한정, 비워두면 프로필 기본값 사용)</span>
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={contractCorporateName}
-                  onChange={(e) => setContractCorporateName(e.target.value)}
-                  placeholder="파견 법인명 (선택)"
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await contractAPI.updateCorporateName(contractId, contractCorporateName);
-                      showToast("법인명 저장됨", "success");
-                    } catch {
-                      showToast("저장 실패", "error");
-                    }
-                  }}
-                  className="px-3 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800"
-                >
-                  저장
-                </button>
-              </div>
-            </div>
+            {/* 법인명은 간병일지 PDF에 '케어매치 주식회사'로 일괄 표기됨 — 개별 입력 UI 제거 (2026-07-20 요청) */}
           </div>
         )}
 

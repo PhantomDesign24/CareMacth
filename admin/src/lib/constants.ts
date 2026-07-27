@@ -2,6 +2,19 @@
  * 관리자 공통 상수 — 여러 페이지에서 반복되는 enum/옵션을 한 곳에서 관리
  */
 
+// 전화번호 — '-' 유무와 무관하게 010-0000-0000 형식으로 통일 표시
+export function formatPhone(phone: string | null | undefined): string {
+  if (!phone) return "";
+  const d = String(phone).replace(/\D/g, "");
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10) {
+    if (d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+    return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  }
+  if (d.length === 9 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+  return phone;
+}
+
 // ────────────────────────────────────────
 // 지역
 // ────────────────────────────────────────
@@ -54,6 +67,7 @@ export const WORK_STATUSES = [
   { value: "WORKING", label: "근무중" },
   { value: "AVAILABLE", label: "근무 가능" },
   { value: "IMMEDIATE", label: "즉시 가능" },
+  { value: "ON_LEAVE", label: "휴직 중" },
 ] as const;
 
 export const WORK_STATUS_OPTIONS = [

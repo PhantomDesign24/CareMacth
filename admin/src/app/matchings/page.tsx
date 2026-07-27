@@ -5,6 +5,7 @@ import Link from "next/link";
 import DataTable, { Column } from "@/components/DataTable";
 import StatsCard from "@/components/StatsCard";
 import { getAdminPayments, AdminPayment, apiRequest } from "@/lib/api";
+import { formatPhone } from "@/lib/constants";
 
 interface MatchingRow {
   id: string;
@@ -506,12 +507,12 @@ export default function MatchingsPage() {
                     <div className="bg-blue-50 rounded-lg p-3">
                       <div className="text-xs text-blue-600">보호자</div>
                       <div className="font-semibold text-gray-900 mt-1">{detailData.guardian?.user?.name || "-"}</div>
-                      <div className="text-xs text-gray-500">{detailData.guardian?.user?.phone || "-"}</div>
+                      <div className="text-xs text-gray-500">{formatPhone(detailData.guardian?.user?.phone) || "-"}</div>
                     </div>
                     <div className="bg-green-50 rounded-lg p-3">
                       <div className="text-xs text-green-600">간병인</div>
                       <div className="font-semibold text-gray-900 mt-1">{detailData.caregiver?.user?.name || "-"}</div>
-                      <div className="text-xs text-gray-500">{detailData.caregiver?.user?.phone || "-"}</div>
+                      <div className="text-xs text-gray-500">{formatPhone(detailData.caregiver?.user?.phone) || "-"}</div>
                       {detailData.caregiver?.id && (
                         <Link
                           href={`/caregivers/${detailData.caregiver.id}`}

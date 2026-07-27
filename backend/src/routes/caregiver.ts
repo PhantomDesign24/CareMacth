@@ -28,9 +28,12 @@ router.post('/certificates', uploadPrivate.single('image'), verifyUploadMagicNum
   body('issueDate').notEmpty().isISO8601().withMessage('유효한 발급일을 입력해주세요.'),
 ], caregiverController.addCertificate);
 
+// DELETE /certificates/:id - 자격증 삭제 (본인 소유)
+router.delete('/certificates/:id', caregiverController.deleteCertificate);
+
 // PUT /work-status - 근무 상태 변경
 router.put('/work-status', [
-  body('workStatus').notEmpty().isIn(['WORKING', 'AVAILABLE', 'IMMEDIATE']).withMessage('유효한 근무 상태를 입력해주세요. (WORKING, AVAILABLE, IMMEDIATE)'),
+  body('workStatus').notEmpty().isIn(['WORKING', 'AVAILABLE', 'IMMEDIATE', 'ON_LEAVE']).withMessage('유효한 근무 상태를 입력해주세요. (WORKING, AVAILABLE, IMMEDIATE, ON_LEAVE)'),
 ], caregiverController.updateWorkStatus);
 
 // GET /earnings - 수익 조회

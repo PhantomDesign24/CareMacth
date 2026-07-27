@@ -352,6 +352,12 @@ const CARE_TYPES = [
     desc: "자택에서 받는 전문 재택 간병",
     emoji: "🏠",
   },
+  {
+    value: "family",
+    label: "가족간병",
+    desc: "가족처럼 세심하게 돌보는 가족 간병",
+    emoji: "👨‍👩‍👧",
+  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -713,9 +719,9 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
   ) => {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
-      // careType 변경 시 locationType 자동 동기화 (hospital → hospital, home → home)
-      if (field === 'careType' && (value === 'hospital' || value === 'home')) {
-        next.locationType = value as string;
+      // careType 변경 시 locationType 자동 동기화 (hospital → hospital, home/family → home)
+      if (field === 'careType' && (value === 'hospital' || value === 'home' || value === 'family')) {
+        next.locationType = value === 'hospital' ? 'hospital' : 'home'; // 가족간병은 자택 기본
         // 다른 유형으로 바꾸면 이전 장소명도 초기화 (사용자 혼선 방지)
         if (prev.careType !== value) {
           next.locationName = '';
@@ -1572,6 +1578,11 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               </select>
             </div>
           </div>
+          {(parseInt(form.duration) || 0) > 0 && (
+            <p className="mt-2 text-sm text-gray-600">
+              총 <b className="text-orange-600">{(parseInt(form.duration) || 0) * (form.durationUnit === "weeks" ? 7 : form.durationUnit === "months" ? 30 : 1)}일</b>
+            </p>
+          )}
         </div>
       )}
 
@@ -1616,23 +1627,6 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                 <option value="">무관</option>
                 <option value="male">남성</option>
                 <option value="female">여성</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                선호 국적
-              </label>
-              <select
-                className="input-field"
-                value={form.preferredNationality}
-                onChange={(e) =>
-                  update("preferredNationality", e.target.value)
-                }
-              >
-                <option value="">무관</option>
-                <option value="korean">한국인</option>
-                <option value="chinese">중국 (조선족)</option>
-                <option value="other">기타</option>
               </select>
             </div>
           </div>

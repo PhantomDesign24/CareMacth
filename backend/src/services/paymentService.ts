@@ -15,7 +15,8 @@ export async function settleEarning(contractId: string) {
   const contract = await prisma.contract.findUnique({
     where: { id: contractId },
     include: {
-      payments: { where: { status: { in: ['ESCROW', 'COMPLETED'] } } },
+      // 직접결제(DIRECT)는 간병비가 플랫폼을 거치지 않고 간병사에게 직접 지급되므로 정산 대상에서 제외
+      payments: { where: { status: { in: ['ESCROW', 'COMPLETED'] }, method: { not: 'DIRECT' } } },
       careRequest: true,
       additionalFees: { where: { approvedByGuardian: true, paid: true } },
       earnings: true,

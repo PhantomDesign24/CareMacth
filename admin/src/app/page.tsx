@@ -5,6 +5,7 @@ import StatsCard from "@/components/StatsCard";
 import DataTable, { Column } from "@/components/DataTable";
 import { getDashboard, getStats, approveCaregiver, rejectCaregiver, DashboardData, Caregiver, Dispute, MonthlyStats } from "@/lib/api";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { formatPhone } from "@/lib/constants";
 
 function formatKoreanDate(v: unknown): string {
   if (!v) return "-";
@@ -102,7 +103,7 @@ export default function DashboardPage() {
   const pendingCaregivers: Caregiver[] = rawPending.map((cg: any) => ({
     ...cg,
     name: cg.name || cg.user?.name || "",
-    phone: cg.phone || cg.user?.phone || "",
+    phone: formatPhone(cg.phone || cg.user?.phone || ""),
     email: cg.email || cg.user?.email || "",
   }));
   const rawDisputes: Dispute[] = (data as any)?.recentDisputes || [];

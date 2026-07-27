@@ -1746,6 +1746,10 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
       careFeeSurchargeHeavy,
       careFeeSurchargeDiaper,
       careFeeAvgDays,
+      // 무통장입금 입금계좌
+      depositBankName,
+      depositAccountNumber,
+      depositAccountHolder,
     } = req.body;
 
     // 간병비 룰 금액 검증 (모두 0 이상의 정수)
@@ -1819,6 +1823,9 @@ export const updatePlatformConfig = async (req: AuthRequest, res: Response, next
         ...(careFeeSurchargeHeavy !== undefined && { careFeeSurchargeHeavy: parseInt(careFeeSurchargeHeavy) }),
         ...(careFeeSurchargeDiaper !== undefined && { careFeeSurchargeDiaper: parseInt(careFeeSurchargeDiaper) }),
         ...(careFeeAvgDays !== undefined && { careFeeAvgDays: parseFloat(careFeeAvgDays) }),
+        ...(depositBankName !== undefined && { depositBankName: depositBankName === '' ? null : String(depositBankName) }),
+        ...(depositAccountNumber !== undefined && { depositAccountNumber: depositAccountNumber === '' ? null : String(depositAccountNumber) }),
+        ...(depositAccountHolder !== undefined && { depositAccountHolder: depositAccountHolder === '' ? null : String(depositAccountHolder) }),
       },
       create: {
         id: 'default',
@@ -2164,6 +2171,118 @@ export const getSettlements = async (req: AuthRequest, res: Response, next: Next
         },
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /direct-payments - 직접결제 요청 목록 (보호자가 간병사에게 직접 지급 + 플랫폼 이용료만 수취)
+export const getDirectPayments = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+    const status = req.query.status as string | undefined; // 'PENDING' | 'COMPLETED'
+
+    const where: any = { method: 'DIRECT' };
+    if (status === 'PENDING' || status === 'COMPLETED') where.status = status;
+
+    const [rows, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: {
+          guardian: { include: { user: { select: { name: true, phone: true } } } },
+          contract: {
+            include: {
+              careRequest: { include: { patient: { select: { name: true } } } },
+              caregiver: { include: { user: { select: { name: true, phone: true } } } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.payment.count({ where }),
+    ]);
+
+    const items = rows.map((p) => {
+      const c: any = p.contract;
+      const days = c
+        ? Math.max(1, Math.ceil((new Date(c.endDate).getTime() - new Date(c.startDate).getTime()) / 86400000))
+        : 0;
+      return {
+        id: p.id,
+        status: p.status, // PENDING(이용료 미확인) | COMPLETED(입금확인 완료)
+        matchFee: p.totalAmount,
+        // 단가 = 요청 시점에 청구된 이용료 ÷ 일수 (생성 당시 설정값 기준)
+        feePerDay: days > 0 ? Math.round(p.totalAmount / days) : 0,
+        days,
+        guardianName: p.guardian?.user?.name || '-',
+        guardianPhone: p.guardian?.user?.phone || '',
+        caregiverName: c?.caregiver?.user?.name || '-',
+        caregiverPhone: c?.caregiver?.user?.phone || '',
+        patientName: c?.careRequest?.patient?.name || '-',
+        contractId: p.contractId,
+        createdAt: p.createdAt.toISOString(),
+        processedAt: p.paidAt ? p.paidAt.toISOString() : null,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: { items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /direct-payments/:id/complete - 이용료 입금확인(처리완료)
+export const completeDirectPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const payment = await prisma.payment.findFirst({ where: { id, method: 'DIRECT' } });
+    if (!payment) throw new AppError('직접결제 요청을 찾을 수 없습니다.', 404);
+    const updated = await prisma.payment.update({
+      where: { id },
+      data: { status: 'COMPLETED', paidAt: payment.paidAt || new Date() },
+    });
+
+    // 입금확인(완료) 시 간병인·보호자에게 매칭 확정 알림 발송
+    const contract = payment.contractId
+      ? await prisma.contract.findUnique({
+          where: { id: payment.contractId },
+          include: {
+            caregiver: { include: { user: { select: { id: true, name: true } } } },
+            guardian: { include: { user: { select: { id: true } } } },
+            careRequest: { include: { patient: { select: { name: true } } } },
+          },
+        })
+      : null;
+    if (contract) {
+      const c = contract as any;
+      const patientName = c.careRequest?.patient?.name || '';
+      const caregiverName = c.caregiver?.user?.name || '';
+      // 간병인
+      sendUserNotification({
+        userId: c.caregiver.userId,
+        type: 'CONTRACT',
+        title: '매칭이 확정되었습니다',
+        body: `${patientName ? patientName + ' 환자 ' : ''}간병 매칭이 확정되었습니다. 근무 일정을 확인해주세요.`,
+        data: { url: '/dashboard/caregiver', contractId: c.id },
+      }).catch(() => {});
+      // 보호자
+      sendUserNotification({
+        userId: c.guardian.userId,
+        type: 'CONTRACT',
+        title: '매칭이 확정되었습니다',
+        body: `${caregiverName ? caregiverName + ' 간병인과 ' : ''}매칭이 확정되었습니다. 간병 현황에서 확인해주세요.`,
+        data: { url: '/dashboard/guardian', contractId: c.id },
+      }).catch(() => {});
+    }
+
+    res.json({ success: true, data: { id: updated.id, status: updated.status } });
   } catch (error) {
     next(error);
   }
@@ -2686,6 +2805,8 @@ export const getSidebarBadges = async (req: AuthRequest, res: Response, next: Ne
       pendingRefunds,
       pendingPayments,
       pendingAdditionalFees,
+      pendingDirectPayments,
+      pendingBusinessInquiries,
     ] = await Promise.all([
       prisma.caregiver.count({ where: { status: 'PENDING' } }),
       prisma.report.count({ where: { status: { in: ['PENDING', 'REVIEWING'] } } }),
@@ -2694,6 +2815,10 @@ export const getSidebarBadges = async (req: AuthRequest, res: Response, next: Ne
       prisma.payment.count({ where: { refundRequestStatus: 'PENDING' } }),
       prisma.payment.count({ where: { status: 'PENDING' } }),
       prisma.additionalFee.count({ where: { approvedByGuardian: false } }),
+      // 직접결제 이용료 입금확인 대기(PENDING)
+      prisma.payment.count({ where: { method: 'DIRECT', status: 'PENDING' } }),
+      // 제휴 문의 미확인
+      prisma.businessInquiry.count({ where: { status: 'PENDING' } }),
     ]);
 
     res.json({
@@ -2706,6 +2831,8 @@ export const getSidebarBadges = async (req: AuthRequest, res: Response, next: Ne
         refunds: pendingRefunds,
         payments: pendingPayments,
         additionalFees: pendingAdditionalFees,
+        directPayments: pendingDirectPayments,
+        businessInquiries: pendingBusinessInquiries,
       },
     });
   } catch (error) {
@@ -3012,6 +3139,19 @@ export const unverifyCertificate = async (req: AuthRequest, res: Response, next:
     }).catch((e) => console.error('[unverifyCertificate] notify fail:', e?.message || e));
 
     res.json({ success: true, message: '자격증 검증이 취소되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /caregivers/:caregiverId/certificates/:certId - 자격증 삭제 (관리자)
+export const deleteCertificateAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { caregiverId, certId } = req.params;
+    const certificate = await prisma.certificate.findFirst({ where: { id: certId, caregiverId } });
+    if (!certificate) throw new AppError('자격증을 찾을 수 없습니다.', 404);
+    await prisma.certificate.delete({ where: { id: certId } });
+    res.json({ success: true, message: '자격증이 삭제되었습니다.' });
   } catch (error) {
     next(error);
   }
@@ -3948,7 +4088,11 @@ export const exportAssociationFees = async (req: AuthRequest, res: Response, nex
 // ──────────────────────────────────────────────
 
 const DEFAULT_TEMPLATES = [
-  { key: 'MATCHING_NEW', type: 'MATCHING', name: '신규 매칭 알림', title: '새로운 간병 요청', body: '{region} 지역에 새 간병 요청이 있습니다. 일당 {dailyRate}원', description: '변수: {region}, {dailyRate}' },
+  // 주의: 변수는 {{이중중괄호}} — notificationService.renderVars 가 {{var}} 만 치환함
+  { key: 'MATCHING_NEW', type: 'MATCHING', name: '신규 매칭 알림', title: '새로운 간병 요청', body: '{{address}}에서 {{scheduleType}} 간병인을 찾고 있습니다.', description: '변수: {{address}}, {{scheduleType}}' },
+  { key: 'DIRECT_PAYMENT_REQUEST_ADMIN', type: 'PAYMENT', name: '직접결제 요청 접수(관리자)', title: '직접결제 요청 접수', body: '직접결제 요청이 접수되었습니다. 매칭 이용료 {{matchFee}}원 ({{days}}일). 관리자 > 직접결제 요청에서 확인하세요.', description: '변수: {{matchFee}}, {{days}}' },
+  { key: 'BUSINESS_INQUIRY_ADMIN', type: 'SYSTEM', name: '제휴 문의 접수(관리자)', title: '새 제휴 문의 접수', body: '{{companyName}}({{contactName}}, {{phone}})에서 제휴 문의가 접수되었습니다. 관리자 > 제휴 문의에서 확인하세요.', description: '변수: {{companyName}}, {{contactName}}, {{phone}}' },
+  { key: 'BANK_TRANSFER_GUIDE', type: 'PAYMENT', name: '무통장입금 안내(보호자)', title: '무통장입금 안내', body: '입금 계좌: {{account}}\n입금액: {{amount}}원\n입금 확인 후 결제가 완료됩니다.', description: '변수: {{account}}, {{amount}}, {{orderId}}' },
   { key: 'APPLICATION_ACCEPTED', type: 'APPLICATION', name: '지원 수락', title: '지원 수락됨', body: '{patientName} 환자 간병 지원이 수락되었습니다.', description: '변수: {patientName}' },
   { key: 'APPLICATION_REJECTED', type: 'APPLICATION', name: '지원 미선택', title: '지원 미선택', body: '이번 공고는 다른 간병사가 선정되었습니다.', description: '' },
   { key: 'CONTRACT_CREATED', type: 'CONTRACT', name: '계약 성사', title: '매칭 완료', body: '{caregiverName}님과 매칭되었습니다. 기간: {startDate} ~ {endDate}', description: '변수: {caregiverName}, {startDate}, {endDate}' },

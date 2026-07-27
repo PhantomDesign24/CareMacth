@@ -188,6 +188,24 @@ export const addCertificate = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
+// DELETE /certificates/:id - 자격증 삭제 (본인 소유만)
+export const deleteCertificate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+    if (!caregiver) throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+
+    const { id } = req.params;
+    const cert = await prisma.certificate.findUnique({ where: { id } });
+    if (!cert || cert.caregiverId !== caregiver.id) {
+      throw new AppError('자격증을 찾을 수 없습니다.', 404);
+    }
+    await prisma.certificate.delete({ where: { id } });
+    res.json({ success: true, message: '자격증이 삭제되었습니다.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // PUT /work-status - 근무 상태 변경
 export const updateWorkStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -209,11 +227,12 @@ export const updateWorkStatus = async (req: AuthRequest, res: Response, next: Ne
     // Normalize workStatus: frontend may send lowercase or alternate names
     const workStatusMap: Record<string, string> = {
       working: 'WORKING', available: 'AVAILABLE', immediate: 'IMMEDIATE', immediately: 'IMMEDIATE',
+      on_leave: 'ON_LEAVE', leave: 'ON_LEAVE',
     };
     workStatus = workStatusMap[workStatus?.toLowerCase()] || workStatus?.toUpperCase() || workStatus;
 
-    if (!workStatus || !['WORKING', 'AVAILABLE', 'IMMEDIATE'].includes(workStatus)) {
-      throw new AppError('유효한 근무 상태를 입력해주세요. (WORKING, AVAILABLE, IMMEDIATE)', 400);
+    if (!workStatus || !['WORKING', 'AVAILABLE', 'IMMEDIATE', 'ON_LEAVE'].includes(workStatus)) {
+      throw new AppError('유효한 근무 상태를 입력해주세요. (WORKING, AVAILABLE, IMMEDIATE, ON_LEAVE)', 400);
     }
 
     if (caregiver.status !== 'APPROVED') {

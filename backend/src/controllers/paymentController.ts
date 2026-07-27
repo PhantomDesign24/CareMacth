@@ -50,15 +50,11 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       throw new AppError('계약 ID와 결제 방법은 필수입니다.', 400);
     }
 
-    // 운영 환경에서는 DIRECT/testMode 우회 차단 (ADMIN 만 허용)
+    // 운영 환경에서는 testMode 우회 차단 (ADMIN 만 허용)
+    // 직접결제(DIRECT)는 정식 기능이므로 보호자도 사용 가능 (아래 전용 분기에서 처리)
     const isAdmin = req.user!.role === 'ADMIN';
-    if (IS_PRODUCTION && !isAdmin) {
-      if (method === 'DIRECT') {
-        throw new AppError('직접 결제(DIRECT)는 운영 환경에서 사용할 수 없습니다.', 403);
-      }
-      if (testMode === true) {
-        throw new AppError('테스트 결제는 운영 환경에서 사용할 수 없습니다.', 403);
-      }
+    if (IS_PRODUCTION && !isAdmin && testMode === true) {
+      throw new AppError('테스트 결제는 운영 환경에서 사용할 수 없습니다.', 403);
     }
 
     // 계약 확인
@@ -66,14 +62,104 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       where: {
         id: contractId,
         guardianId: guardian.id,
-        status: { in: ['ACTIVE', 'EXTENDED'] },
       },
-      include: { careRequest: { select: { durationDays: true } } },
+      include: { careRequest: { select: { durationDays: true, careType: true } } },
     });
 
     if (!contract) {
       throw new AppError('유효한 계약을 찾을 수 없습니다.', 404);
     }
+    if (contract.status === 'PENDING_SIGNATURE') {
+      throw new AppError('간병인과 보호자 간 계약서 서명이 완료되어야 결제가 가능합니다.', 400);
+    }
+    if (!['ACTIVE', 'EXTENDED'].includes(contract.status)) {
+      throw new AppError('결제 가능한 계약 상태가 아닙니다.', 400);
+    }
+
+    // ── 직접결제(DIRECT) ──────────────────────────────────────────────
+    // 보호자가 간병비는 간병사에게 '직접' 지급하고, 플랫폼은 매칭 이용료(정액수수료 platformFeeFixed × 일수)만 수취.
+    // → 간병인 정산(Earning) 미생성(간병비가 플랫폼을 거치지 않음), 매칭/진행 즉시 확정, 관리자 알림.
+    //   이용료 입금확인은 관리자 '직접결제 요청' 페이지에서 처리(PENDING → COMPLETED).
+    if (method === 'DIRECT') {
+      // 연장/주차 결제는 직접결제 미지원 — 연장 확정 로직(endDate 갱신 등)을 우회하게 되므로 명시 차단
+      if (extensionId || (isRecurring && recurringWeek)) {
+        throw new AppError('연장·주차 결제는 직접결제를 지원하지 않습니다. 카드 또는 무통장입금을 이용해주세요.', 400);
+      }
+      // 다른 결제수단으로 이미 진행/완료된 결제가 있으면 이중청구 차단
+      const otherActive = await prisma.payment.findFirst({
+        where: {
+          contractId,
+          method: { not: 'DIRECT' },
+          status: { in: [...ACTIVE_PAYMENT_STATUSES] },
+        },
+      });
+      if (otherActive) {
+        throw new AppError('이미 다른 결제수단으로 진행 중이거나 완료된 결제가 있습니다.', 400);
+      }
+      const directDays = Math.max(1, Math.ceil(
+        (new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / 86400000,
+      ));
+      // 매칭 이용료 단가 = 현재 수수료 설정의 정액수수료(careType별). 계약 저장값이 아닌 '현재 설정' 사용.
+      const cfg = await prisma.platformConfig.findUnique({ where: { id: 'default' } });
+      const careType = (contract as any).careRequest?.careType;
+      const feePerDay = careType === 'INDIVIDUAL'
+        ? (cfg?.individualFeeFixed ?? 0)
+        : (cfg?.familyFeeFixed ?? 0);
+      const matchFee = feePerDay * directDays;
+
+      const directPayment = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Contract" WHERE id = ${contractId} FOR UPDATE`;
+        // 중복 방지: 이미 이 계약의 직접결제 요청이 있으면 그대로 반환
+        const dup = await tx.payment.findFirst({
+          where: { contractId, method: 'DIRECT', status: { in: ['PENDING', 'COMPLETED'] } },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (dup) return dup;
+        const p = await tx.payment.create({
+          data: {
+            contractId,
+            guardianId: guardian.id,
+            amount: matchFee,
+            vatAmount: 0,
+            totalAmount: matchFee,
+            method: 'DIRECT',
+            pointsUsed: 0,
+            tossOrderId: generateOrderId(),
+            status: 'PENDING', // 이용료 입금확인 대기 (관리자가 처리완료 표시)
+          },
+        });
+        // 매칭/진행 즉시 확정
+        await tx.careRequest.update({
+          where: { id: contract.careRequestId },
+          data: { status: 'IN_PROGRESS' },
+        });
+        return p;
+      });
+
+      // 관리자 알림 (best-effort)
+      sendToAdmins({
+        key: 'DIRECT_PAYMENT_REQUEST_ADMIN',
+        vars: { matchFee: matchFee.toLocaleString(), days: String(directDays) },
+        fallbackTitle: '직접결제 요청 접수',
+        fallbackBody: `직접결제 요청이 접수되었습니다. 매칭 이용료 ${matchFee.toLocaleString()}원 (${directDays}일).`,
+        fallbackType: 'PAYMENT',
+        data: { paymentId: directPayment.id, contractId, directPayment: true },
+      }).catch(() => {});
+
+      return res.status(201).json({
+        success: true,
+        data: {
+          payment: directPayment,
+          orderId: directPayment.tossOrderId,
+          amount: matchFee,
+          direct: true,
+          days: directDays,
+          feePerDay,
+          matchFee,
+        },
+      });
+    }
+    // ──────────────────────────────────────────────────────────────────
 
     // 연장 결제 모드: extension 검증
     let extension: any = null;
@@ -123,6 +209,10 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       where: purposeWhere,
       orderBy: { createdAt: 'desc' },
     });
+    // 기존 활성 결제가 직접결제(이용료 금액)인데 다른 수단으로 재시도 → 금액이 달라 '중복 반환' 불가. 명시 차단.
+    if (recentPending && recentPending.method === 'DIRECT') {
+      throw new AppError('직접결제 요청이 진행 중인 계약입니다. 결제수단 변경은 고객센터로 문의해주세요.', 400);
+    }
     if (recentPending) {
       return res.status(200).json({
         success: true,
@@ -173,8 +263,8 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
     }
 
     // VAT 별도 계산 — 카드결제만 공급가액(amount) 기준 10% 부과.
-    // 무통장입금(BANK_TRANSFER)·직접결제(DIRECT)·테스트모드는 VAT 미부과(0원).
-    const vatAmount = (testMode === true || method !== 'CARD') ? 0 : Math.round(amount * 0.1);
+    // 카드·무통장입금은 공급가(amount)의 VAT 10% 가산. 직접결제(DIRECT)·테스트모드는 미부과(0원).
+    const vatAmount = (testMode === true || (method !== 'CARD' && method !== 'BANK_TRANSFER')) ? 0 : Math.round(amount * 0.1);
     const totalAmount = amount + vatAmount;
 
     if (totalAmount <= 0 && amount > 0) {
@@ -183,10 +273,11 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
 
     const orderId = generateOrderId();
 
-    // 0원 결제(전액 포인트 차감) 또는 DIRECT 결제: Toss 호출 없이 즉시 COMPLETED
-    // 그 외 (CARD/BANK_TRANSFER) 는 PENDING 으로 생성하고 Toss confirm 단계에서 ESCROW 전이
+    // 0원 결제(전액 포인트 차감): PG 호출 없이 즉시 COMPLETED
+    // 그 외 (CARD/BANK_TRANSFER) 는 PENDING 으로 생성하고 confirm 단계에서 ESCROW 전이
+    // (DIRECT 는 위 전용 분기에서 이미 return — 여기 도달하지 않음)
     const isFullyCoveredByPoints = amount === 0 && actualPointsUsed > 0;
-    const isImmediateComplete = method === 'DIRECT' || isFullyCoveredByPoints;
+    const isImmediateComplete = isFullyCoveredByPoints;
 
     const payment = await prisma.$transaction(async (tx) => {
       // 트랜지션 락: contract 행 잠금 + 트랜잭션 내부 재검증
@@ -211,6 +302,9 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
         where: txPurposeWhere,
         orderBy: { createdAt: 'desc' },
       });
+      if (dupCheck && dupCheck.method === 'DIRECT') {
+        throw new AppError('직접결제 요청이 진행 중인 계약입니다. 결제수단 변경은 고객센터로 문의해주세요.', 400);
+      }
       if (dupCheck) {
         // 동시 요청에서 먼저 만들어진 결제 있으면 그것을 반환
         return dupCheck;
@@ -279,7 +373,7 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
             platformFeePercent: contract.platformFee,
             platformFeeFixed: (contract as any).platformFeeFixed || 0,
             durationDays: settleDays,
-            taxRate: method === 'DIRECT' ? 0 : contract.taxRate,
+            taxRate: contract.taxRate,
           });
           // 협회비 미납 간병사 → 첫 정산에서 협회비 차감
           const assocRaw = await computeAssociationDeduction(tx, contract.caregiverId);
@@ -341,6 +435,31 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       return newPayment;
     });
 
+    // 무통장입금: 관리자 설정의 입금계좌를 응답에 포함 + 보호자에게 입금 안내 알림 발송
+    let depositAccount: { bankName: string; accountNumber: string; accountHolder: string } | null = null;
+    if (method === 'BANK_TRANSFER') {
+      const pc = await prisma.platformConfig.findUnique({ where: { id: 'default' } });
+      if (pc?.depositAccountNumber) {
+        depositAccount = {
+          bankName: pc.depositBankName || '',
+          accountNumber: pc.depositAccountNumber,
+          accountHolder: pc.depositAccountHolder || '',
+        };
+      }
+      const acctText = depositAccount
+        ? `${depositAccount.bankName} ${depositAccount.accountNumber}${depositAccount.accountHolder ? ` (예금주: ${depositAccount.accountHolder})` : ''}`
+        : '고객센터로 문의해주세요';
+      sendFromTemplate({
+        userId: req.user!.id,
+        key: 'BANK_TRANSFER_GUIDE',
+        vars: { amount: payment.totalAmount.toLocaleString(), account: acctText, orderId: payment.tossOrderId },
+        fallbackTitle: '무통장입금 안내',
+        fallbackBody: `입금 계좌: ${acctText}\n입금액: ${payment.totalAmount.toLocaleString()}원\n입금 확인 후 결제가 완료됩니다.`,
+        fallbackType: 'PAYMENT',
+        data: { paymentId: payment.id, bankTransfer: true },
+      }).catch(() => {});
+    }
+
     // 응답: 트랜잭션이 dedup 으로 기존 결제 반환했을 수도 있음 → 항상 payment 자체의 값 사용.
     res.status(201).json({
       success: true,
@@ -348,6 +467,7 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
         payment,
         orderId: payment.tossOrderId,
         amount: payment.totalAmount,
+        ...(depositAccount && { depositAccount }),
       },
     });
   } catch (error) {

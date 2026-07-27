@@ -16,10 +16,29 @@ export default function BusinessPage() {
     message: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    if (submitting) return;
+    if (!form.companyName.trim() || !form.contactName.trim() || !form.phone.trim()) {
+      alert("업체명, 담당자명, 연락처를 입력해주세요.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/business-inquiries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error();
+      setSubmitted(true);
+    } catch {
+      alert("문의 접수 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const partnerTypes = [

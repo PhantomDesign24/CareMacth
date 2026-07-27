@@ -11,9 +11,7 @@ router.post('/register', [
   authLimiter,
   body('email').isEmail().normalizeEmail().withMessage('유효한 이메일을 입력해주세요.'),
   body('password')
-    .isLength({ min: 8 }).withMessage('비밀번호는 8자 이상이어야 합니다.')
-    .matches(/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9])/)
-    .withMessage('비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.'),
+    .isLength({ min: 8 }).withMessage('비밀번호는 8자 이상이어야 합니다.'),
   body('name').notEmpty().trim().isLength({ min: 1, max: 50 }).withMessage('이름을 입력해주세요. (1~50자)'),
   body('phone')
     .notEmpty().withMessage('전화번호를 입력해주세요.')
@@ -92,9 +90,7 @@ router.post('/reset-password/confirm', [
   authLimiter,
   body('token').notEmpty().withMessage('재설정 토큰이 필요합니다.'),
   body('newPassword')
-    .isLength({ min: 8 }).withMessage('비밀번호는 8자 이상이어야 합니다.')
-    .matches(/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9])/)
-    .withMessage('비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.'),
+    .isLength({ min: 8 }).withMessage('비밀번호는 8자 이상이어야 합니다.'),
 ], authController.confirmResetPassword);
 
 export default router;

@@ -35,7 +35,10 @@ export const prepareInicisPayment = async (req: AuthRequest, res: Response, next
       include: { careRequest: { include: { patient: { select: { name: true } } } } },
     });
     if (!contract) throw new AppError('계약을 찾을 수 없습니다.', 404);
-    if (!['PENDING_SIGNATURE', 'ACTIVE', 'EXTENDED'].includes(contract.status)) {
+    if (contract.status === 'PENDING_SIGNATURE') {
+      throw new AppError('간병인과 보호자 간 계약서 서명이 완료되어야 결제가 가능합니다.', 400);
+    }
+    if (!['ACTIVE', 'EXTENDED'].includes(contract.status)) {
       throw new AppError('결제 가능한 계약 상태가 아닙니다.', 400);
     }
 
@@ -44,6 +47,11 @@ export const prepareInicisPayment = async (req: AuthRequest, res: Response, next
       where: { contractId: contract.id, status: { in: ['ESCROW', 'COMPLETED'] } },
     });
     if (paid) throw new AppError('이미 결제가 완료된 계약입니다.', 400);
+    // 직접결제 요청(관리자 확인 대기)이 걸려있으면 카드결제 중복 차단
+    const directPending = await prisma.payment.findFirst({
+      where: { contractId: contract.id, method: 'DIRECT', status: 'PENDING' },
+    });
+    if (directPending) throw new AppError('직접결제 요청이 진행 중인 계약입니다. 결제수단 변경은 고객센터로 문의해주세요.', 400);
 
     // 포인트 차감 + 구매자 정보
     const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { points: true, name: true, phone: true, email: true } });

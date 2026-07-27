@@ -304,7 +304,7 @@ export default function FindWorkPage() {
               </div>
               <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <Link
-                  href="/auth/register"
+                  href="/auth/register?role=caregiver"
                   className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white text-orange-600 font-bold rounded-2xl text-sm sm:text-base hover:bg-gray-50 transition-all shadow-xl w-full sm:w-auto"
                 >
                   간병인 등록하기
@@ -392,7 +392,7 @@ export default function FindWorkPage() {
               안정적인 수입과 체계적인 교육, 케어매치가 함께합니다.
             </p>
             <Link
-              href="/auth/register"
+              href="/auth/register?role=caregiver"
               className="inline-flex items-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white text-orange-600 font-bold rounded-2xl text-sm sm:text-base hover:bg-gray-50 transition-all shadow-xl"
             >
               간병인 등록하기

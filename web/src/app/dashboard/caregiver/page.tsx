@@ -122,7 +122,7 @@ interface CaregiverSummary {
   penaltyScore: number;
 }
 
-type Status = "working" | "available" | "immediately";
+type Status = "working" | "available" | "immediately" | "on_leave";
 
 type TabKey = "earnings" | "activity" | "applications" | "journal" | "penalties" | "requests" | "reviews" | "referral" | "settings";
 
@@ -150,7 +150,7 @@ function CaregiverDashboard() {
   const loadReceivedReviews = useCallback(async () => {
     try {
       const res = await reviewAPI.myReceived();
-      setReceivedReviews(res.data?.data?.reviews || []);
+      setReceivedReviews(res.data?.reviews || []);
     } catch {}
   }, []);
 
@@ -180,7 +180,7 @@ function CaregiverDashboard() {
   };
 
   // Delete account state
-  const [corporateName, setCorporateName] = useState("");
+  // corporateName 설정 UI 제거됨 (간병일지 법인명 '케어매치 주식회사' 일괄 표기) — state 도 삭제
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
@@ -264,9 +264,8 @@ function CaregiverDashboard() {
         referralCode: user.referralCode || '',
         penaltyScore: profile.penaltyCount || 0,
       });
-      setCorporateName(profile.corporateName || '');
       if (profile.workStatus) {
-        const statusMap: Record<string, Status> = { WORKING: 'working', AVAILABLE: 'available', IMMEDIATE: 'immediately' };
+        const statusMap: Record<string, Status> = { WORKING: 'working', AVAILABLE: 'available', IMMEDIATE: 'immediately', ON_LEAVE: 'on_leave' };
         setCurrentStatus(statusMap[profile.workStatus] || 'available');
       }
 
@@ -577,6 +576,7 @@ function CaregiverDashboard() {
     { value: "working", label: "근무 중", color: "bg-blue-50 text-blue-700 border-blue-200", dotColor: "bg-blue-500" },
     { value: "available", label: "근무 가능", color: "bg-green-50 text-green-700 border-green-200", dotColor: "bg-green-500" },
     { value: "immediately", label: "즉시 가능", color: "bg-amber-50 text-amber-700 border-amber-200", dotColor: "bg-amber-500 animate-pulse" },
+    { value: "on_leave", label: "휴직 중", color: "bg-gray-50 text-gray-600 border-gray-200", dotColor: "bg-gray-400" },
   ];
 
   const statusBadge = (status: string) => {
@@ -680,7 +680,7 @@ function CaregiverDashboard() {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          <p className="text-gray-500">대시보드를 불러오는 중...</p>
+          <p className="text-gray-500">마이페이지를 불러오는 중...</p>
         </div>
       </div>
     );
@@ -791,6 +791,24 @@ function CaregiverDashboard() {
             </div>
           </div>
         </div>
+
+        {/* 교육 센터 배너 — 눈에 띄게 */}
+        <Link
+          href="/dashboard/caregiver/education"
+          className="flex items-center gap-3 sm:gap-4 mb-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-primary-500 to-orange-400 text-white shadow-md hover:shadow-lg hover:from-primary-600 hover:to-orange-500 transition-all"
+        >
+          <span className="text-3xl sm:text-4xl flex-shrink-0">📚</span>
+          <div className="min-w-0 flex-1">
+            <div className="font-bold text-base sm:text-lg">간병 교육 센터</div>
+            <div className="text-xs sm:text-sm text-white/85 mt-0.5">온라인 교육 영상을 수강하고 수료증을 받아보세요</div>
+          </div>
+          <span className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white/20 backdrop-blur text-xs sm:text-sm font-bold">
+            교육 보기
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+            </svg>
+          </span>
+        </Link>
 
         {/* 통계 카드 */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mb-4">
@@ -1307,15 +1325,15 @@ function CaregiverDashboard() {
             <div className="divide-y divide-gray-100">
               <div className="p-6">
                 <h3 className="text-lg font-bold text-gray-900 mb-2">간병일지 작성</h3>
-                <p className="text-sm text-gray-500">진행 중인 간병 건을 선택해 일지를 작성하세요.</p>
+                <p className="text-sm text-gray-500">진행 중이거나 최근 완료된 간병 건을 선택해 일지를 작성하세요.</p>
               </div>
-              {activityHistory.filter((a) => a.contractStatus === 'ACTIVE' || a.contractStatus === 'EXTENDED').length === 0 && (
+              {activityHistory.filter((a) => a.contractStatus === 'ACTIVE' || a.contractStatus === 'EXTENDED' || a.contractStatus === 'COMPLETED').length === 0 && (
                 <div className="p-12 text-center text-gray-400">
-                  진행 중인 간병이 없습니다.
+                  작성할 간병 건이 없습니다.
                 </div>
               )}
               {activityHistory
-                .filter((a) => a.contractStatus === 'ACTIVE' || a.contractStatus === 'EXTENDED')
+                .filter((a) => a.contractStatus === 'ACTIVE' || a.contractStatus === 'EXTENDED' || a.contractStatus === 'COMPLETED')
                 .map((a) => {
                   const missingToday = needsJournalToday(a);
                   return (
@@ -1445,7 +1463,7 @@ function CaregiverDashboard() {
                           ⏱ 보호자 서명 대기 중
                         </span>
                       )}
-                      {(activity.contractStatus === 'ACTIVE' || activity.contractStatus === 'EXTENDED') && (
+                      {(activity.contractStatus === 'ACTIVE' || activity.contractStatus === 'EXTENDED' || activity.contractStatus === 'COMPLETED') && (
                         <>
                           <Link
                             href={`/dashboard/caregiver/journal/${activity.id}`}
@@ -1587,37 +1605,7 @@ function CaregiverDashboard() {
                 <p className="text-sm text-gray-500">계정 관련 설정을 변경합니다.</p>
               </div>
 
-              {/* 간병일지 정보 설정 */}
-              <div className="border border-gray-200 bg-white rounded-2xl p-6">
-                <h4 className="font-bold text-gray-900 mb-1">간병일지 PDF 정보</h4>
-                <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                  보험사 제출용 간병일지 PDF에 자동으로 포함됩니다. 한 번 저장하면 다음부터는 자동으로 채워집니다.
-                </p>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  간병인 사용 법인명
-                </label>
-                <input
-                  type="text"
-                  value={corporateName}
-                  onChange={(e) => setCorporateName(e.target.value)}
-                  placeholder="예: ○○케어 주식회사"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await caregiverAPI.updateProfile({ corporateName });
-                      showToast("저장되었습니다.", "success");
-                    } catch {
-                      showToast("저장에 실패했습니다.", "error");
-                    }
-                  }}
-                  className="mt-3 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800"
-                >
-                  저장
-                </button>
-              </div>
+              {/* 간병일지 법인명은 '케어매치 주식회사'로 일괄 표기됨 — 개별 입력 UI 제거 (2026-07-20 요청) */}
 
               {/* 알림 설정 — 별도 페이지로 분리 (모바일 UX) */}
               <Link

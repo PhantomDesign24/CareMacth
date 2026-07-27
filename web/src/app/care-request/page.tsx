@@ -150,8 +150,7 @@ export default function CareRequestPage() {
       }
 
       // 2. 간병 요청 생성
-      // CareType mapping: form sends "hospital"/"home"/"visit"/"daily", Prisma expects "INDIVIDUAL"/"FAMILY"
-      const careTypeMap: Record<string, string> = { hospital: 'INDIVIDUAL', home: 'FAMILY', visit: 'INDIVIDUAL', daily: 'INDIVIDUAL' };
+      // careType 매핑은 백엔드(careRequestController.careTypeMap)가 단일 소스로 처리 — raw 값 그대로 전송
       // Schedule mapping: form sends "24h"/"hourly", Prisma expects "FULL_TIME"/"PART_TIME"
       const scheduleMap: Record<string, string> = { '24h': 'FULL_TIME', hourly: 'PART_TIME', parttime: 'PART_TIME' };
       // Location mapping: form sends "hospital"/"home", Prisma expects "HOSPITAL"/"HOME"
@@ -189,7 +188,7 @@ export default function CareRequestPage() {
 
       const requestPayload: Record<string, unknown> = {
         patientId,
-        careType: careTypeMap[data.careType] || 'INDIVIDUAL',
+        careType: data.careType || 'hospital',
         scheduleType: scheduleMap[data.careSchedule] || 'FULL_TIME',
         location: locationMap[data.locationType] || 'HOSPITAL',
         hospitalName,

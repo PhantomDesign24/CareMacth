@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { FiPhone, FiMenu, FiX, FiChevronDown, FiUser, FiLogOut, FiSearch, FiBriefcase, FiHome, FiHeart, FiBell, FiLogIn, FiUserPlus, FiClock, FiChevronRight, FiSettings } from "react-icons/fi";
 import { SITE } from "@/config/site";
+import { formatPhone } from "@/lib/format";
 import NotificationBell from "@/components/NotificationBell";
 
 const ROLE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
@@ -36,7 +37,16 @@ export default function Header() {
 
   useEffect(() => {
     try {
+      // 토큰 없이 user 키만 남은 경우(앱 네이티브 로그아웃 등) 잔존 상태 정리 — 로그아웃 안 되는 것처럼 보이는 버그 방지
+      const token = localStorage.getItem("cm_access_token");
       const stored = localStorage.getItem("user");
+      if (!token && stored) {
+        localStorage.removeItem("user");
+        localStorage.removeItem("cm_user");
+        sessionStorage.removeItem("cm_app_login_sent");
+        setUser(null);
+        return;
+      }
       setUser(stored ? JSON.parse(stored) : null);
     } catch { setUser(null); }
   }, [pathname]);
@@ -84,8 +94,10 @@ export default function Header() {
     switch (user.role) {
       case "ADMIN": return "/dashboard/guardian";
       case "GUARDIAN": return "/dashboard/guardian";
+      case "HOSPITAL": return "/dashboard/guardian";
       case "CAREGIVER": return "/dashboard/caregiver";
-      default: return "/";
+      // role 이 어중간해도 홈(/)으로 보내면 홈에서 무반응 → 보호자 대시보드로 폴백
+      default: return "/dashboard/guardian";
     }
   };
 
@@ -97,7 +109,6 @@ export default function Header() {
     { href: "/care-request", label: "간병인 찾기", icon: FiSearch, desc: "지금 간병인 매칭하기", roles: ["GUARDIAN", "HOSPITAL", "ADMIN"] },
     { href: "/find-work", label: "간병 일감 찾기", icon: FiBriefcase, desc: "간병인이 일감 탐색", roles: ["CAREGIVER", "ADMIN"] },
     { href: "/business", label: "병원·기업회원", icon: FiHome, desc: "기업 단체 매칭 서비스" },
-    { href: "/home-care", label: "방문요양", icon: FiHeart, desc: "장기요양 방문서비스" },
     { href: "/notices", label: "공지사항", icon: FiBell, desc: "서비스 공지·안내" },
   ];
   const navItems = allNavItems.filter((item) => {
@@ -218,7 +229,7 @@ export default function Header() {
                 </button>
                 {showUserMenu && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
-                    <Link href={getDashboardLink()} className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                    <Link href={getDashboardLink()} onClick={() => setShowUserMenu(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
                       <FiUser className="w-4 h-4" /> 마이페이지
                     </Link>
                     {user.role === "ADMIN" && (
@@ -230,7 +241,7 @@ export default function Header() {
                           <FiUser className="w-4 h-4" /> 보호자 대시보드
                         </Link>
                         <Link href="/dashboard/caregiver" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                          <FiUser className="w-4 h-4" /> 간병인 대시보드
+                          <FiUser className="w-4 h-4" /> 간병인 마이페이지
                         </Link>
                       </>
                     )}
@@ -329,19 +340,21 @@ export default function Header() {
                     )}
                   </div>
                   <div className="text-xs text-gray-500 mt-0.5 truncate">
-                    {user.email || user.phone || "로그인됨"}
+                    {user.email || formatPhone(user.phone) || "로그인됨"}
                   </div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 mt-4">
                 <Link
                   href={getDashboardLink()}
+                  onClick={() => setMobileOpen(false)}
                   className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold text-primary-600 bg-white border border-primary-200 hover:bg-primary-50 transition-colors"
                 >
                   <FiUser className="w-4 h-4" /> 마이페이지
                 </Link>
                 <Link
                   href="/dashboard/notifications"
+                  onClick={() => setMobileOpen(false)}
                   className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
                 >
                   <FiBell className="w-4 h-4" /> 알림
@@ -446,7 +459,7 @@ export default function Header() {
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-green-50 text-green-500 flex-shrink-0">
                       <FiUser className="w-4 h-4" />
                     </div>
-                    <span className="flex-1 text-[15px] font-semibold text-gray-900">간병인 대시보드</span>
+                    <span className="flex-1 text-[15px] font-semibold text-gray-900">간병인 마이페이지</span>
                     <FiChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
                   </Link>
                 </li>
