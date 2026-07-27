@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   getBusinessInquiries,
   updateBusinessInquiry,
+  deleteBusinessInquiry,
   BusinessInquiryItem,
 } from "@/lib/api";
 import { formatPhone } from "@/lib/constants";
@@ -61,6 +62,20 @@ export default function BusinessInquiriesPage() {
       await load();
     } catch (e: any) {
       alert(e?.message || "처리 실패");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("이 문의를 삭제할까요? (스팸·봇 문의 정리용, 복구 불가)")) return;
+    setProcessing(id);
+    try {
+      await deleteBusinessInquiry(id);
+      setToast("삭제되었습니다.");
+      await load();
+    } catch (e: any) {
+      alert(e?.message || "삭제 실패");
     } finally {
       setProcessing(null);
     }
@@ -135,17 +150,26 @@ export default function BusinessInquiriesPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {it.status === "PENDING" ? (
+                      <div className="flex items-center justify-center gap-2">
+                        {it.status === "PENDING" ? (
+                          <button
+                            onClick={() => handleComplete(it.id)}
+                            disabled={processing === it.id}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50"
+                          >
+                            {processing === it.id ? "처리 중..." : "처리완료"}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-400">{fmtDateTime(it.processedAt)}</span>
+                        )}
                         <button
-                          onClick={() => handleComplete(it.id)}
+                          onClick={() => handleDelete(it.id)}
                           disabled={processing === it.id}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50"
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50"
                         >
-                          {processing === it.id ? "처리 중..." : "처리완료"}
+                          삭제
                         </button>
-                      ) : (
-                        <span className="text-xs text-gray-400">{fmtDateTime(it.processedAt)}</span>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}

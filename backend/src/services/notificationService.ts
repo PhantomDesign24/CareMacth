@@ -492,3 +492,47 @@ async function sendEmailForTemplate(userId: string, title: string, body: string)
     console.error('[EMAIL] 템플릿 이메일 sendEmail 실패:', { userId, email: user.email, error });
   });
 }
+
+// 결제 확정(ESCROW/COMPLETED) 시 간병사에게 예상 정산금액 안내.
+//  - 계산: (일당 - 매칭수수료 정액) × 일수 = 수수료 제외 금액, 여기서 3.3% 원천징수 차감
+//  - 협회비는 오프라인 수납이므로 여기서 차감하지 않음 (클라이언트 요청 2026-07)
+//  - 계약에 저장된 platformFeeFixed / taxRate 를 그대로 사용 (계약 시점 기준 일치)
+export async function notifyCaregiverSettlementEstimate(contractId: string): Promise<void> {
+  try {
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId },
+      include: {
+        caregiver: { select: { userId: true } },
+        careRequest: { select: { durationDays: true } },
+      },
+    });
+    if (!contract) return;
+    const c: any = contract;
+    const dailyRate: number = c.dailyRate || 0;
+    const feePerDay: number = c.platformFeeFixed || 0;
+    const taxRate: number = c.taxRate ?? 3.3;
+    const days: number = Math.max(1, c.careRequest?.durationDays || Math.round((c.totalAmount || dailyRate) / (dailyRate || 1)) || 1);
+    if (dailyRate <= 0) return;
+
+    const perDayNet = Math.max(0, dailyRate - feePerDay);       // 수수료 제외 1일 단가
+    const afterFee = perDayNet * days;                          // 수수료 제외 총액
+    const tax = Math.round(afterFee * (taxRate / 100));         // 3.3% 원천징수
+    const finalAmount = Math.max(0, afterFee - tax);            // 실지급 예정액
+
+    const body =
+      `총 간병비 안내드립니다.\n` +
+      `${perDayNet.toLocaleString()}원 × ${days}일 = ${afterFee.toLocaleString()}원\n` +
+      `${afterFee.toLocaleString()}원 − ${tax.toLocaleString()}원(${taxRate}%) = ${finalAmount.toLocaleString()}원\n\n` +
+      `간병 종료일 이후 간병비 ${finalAmount.toLocaleString()}원이 지급될 예정입니다.`;
+
+    await sendNotification({
+      userId: contract.caregiver.userId,
+      type: 'PAYMENT',
+      title: '예상 정산금액 안내',
+      body,
+      data: { url: '/dashboard/caregiver?tab=activity', contractId },
+    });
+  } catch (e: any) {
+    console.error('[notifyCaregiverSettlementEstimate] fail:', e?.message || e);
+  }
+}

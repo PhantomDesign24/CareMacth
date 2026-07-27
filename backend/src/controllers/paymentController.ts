@@ -10,7 +10,7 @@ import { generateOrderId } from '../utils/generateCode';
 import { refundInicis } from '../utils/inicis';
 import { calculateEarning, computeAssociationDeduction } from '../utils/earning';
 import { sendEmail, emailPaymentCompleted } from '../services/emailService';
-import { sendFromTemplate, renderTemplate, sendToAdmins } from '../services/notificationService';
+import { sendFromTemplate, renderTemplate, sendToAdmins, notifyCaregiverSettlementEstimate } from '../services/notificationService';
 
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
@@ -714,6 +714,11 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
         data: { paymentId: payment.id, manualReconcile: true },
       }).catch(() => {});
       throw new AppError('결제는 승인되었으나 후속 처리 중 오류가 발생했습니다. 관리자가 확인 중입니다.', 500);
+    }
+
+    // 간병사에게 예상 정산금액 안내 (최초 매칭 결제 시 — 연장 결제는 제외)
+    if (payment.contractId && !linkedExtension) {
+      notifyCaregiverSettlementEstimate(payment.contractId).catch(() => {});
     }
 
     // 이메일 통지 (보호자) — best-effort

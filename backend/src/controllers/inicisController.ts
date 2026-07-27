@@ -4,6 +4,7 @@ import { config } from '../config';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { buildPaymentHashes, buildMobileChkfake, requestApproval, requestMobileApproval, netCancel } from '../utils/inicis';
+import { notifyCaregiverSettlementEstimate } from '../services/notificationService';
 
 const WEB_BASE = process.env.WEB_BASE_URL || 'https://cm.phantomdesign.kr';
 const API_BASE = process.env.API_BASE_URL || 'https://cm.phantomdesign.kr/api';
@@ -230,6 +231,9 @@ export const inicisReturn = async (req: Request, res: Response) => {
       }).catch(() => {});
     }
 
+    // 간병사 예상 정산금액 안내
+    if (payment.contractId) notifyCaregiverSettlementEstimate(payment.contractId).catch(() => {});
+
     return res.redirect(`${webBase}/payment/success?provider=inicis&oid=${encodeURIComponent(oid)}`);
   } catch (e: any) {
     return fail('결제 처리 중 오류가 발생했습니다.');
@@ -271,6 +275,8 @@ async function finalizeInicisPayment(paymentId: string, tid?: string) {
       data: { status: 'ESCROW', paidAt: new Date(), tossPaymentKey: tid || null },
     }).catch(() => {});
   }
+  // 간병사 예상 정산금액 안내
+  if (payment.contractId) notifyCaregiverSettlementEstimate(payment.contractId).catch(() => {});
 }
 
 // POST /payments/inicis/mobile-return — 모바일 결제결과 수신 (P_NEXT_URL)

@@ -798,6 +798,9 @@ export async function getBusinessInquiries(params?: { status?: string }) {
 export async function updateBusinessInquiry(id: string, data: { status?: string; adminNote?: string }) {
   return apiRequest(`/admin/business-inquiries/${id}/status`, { method: "POST", body: data });
 }
+export async function deleteBusinessInquiry(id: string) {
+  return apiRequest(`/admin/business-inquiries/${id}`, { method: "DELETE" });
+}
 
 // ─── Types ────────────────────────────────────────────
 

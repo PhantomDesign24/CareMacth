@@ -15,6 +15,8 @@ export default function BusinessPage() {
     type: "hospital",
     message: "",
   });
+  // 허니팟: 사람에겐 안 보이는 필드. 봇이 채우면 서버가 스팸으로 무시
+  const [website, setWebsite] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -30,7 +32,7 @@ export default function BusinessPage() {
       const res = await fetch("/api/business-inquiries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, website }),
       });
       if (!res.ok) throw new Error();
       setSubmitted(true);
@@ -198,6 +200,17 @@ export default function BusinessPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+              {/* 허니팟(봇 차단) — 화면·스크린리더에서 숨김. 사람은 못 보고 봇만 채움 */}
+              <input
+                type="text"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0 }}
+              />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">기관명</label>

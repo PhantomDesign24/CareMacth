@@ -127,6 +127,7 @@ router.post('/direct-payments/:id/complete', adminController.completeDirectPayme
 // 병원·기업 제휴 문의
 router.get('/business-inquiries', businessInquiryController.getBusinessInquiries);
 router.post('/business-inquiries/:id/status', businessInquiryController.updateBusinessInquiry);
+router.delete('/business-inquiries/:id', businessInquiryController.deleteBusinessInquiry);
 
 // 중간정산
 router.get('/contracts/active-for-settlement', adminController.getActiveContractsForSettlement);
