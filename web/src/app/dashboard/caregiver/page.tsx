@@ -140,6 +140,10 @@ function CaregiverDashboard() {
   const tabFromUrl = searchParams.get("tab") as TabKey | null;
   const [activeTab, setActiveTab] = useState<TabKey>(tabFromUrl || "earnings");
 
+  // 개인정보 (마이페이지 조회·수정)
+  const [pInfo, setPInfo] = useState({ name: "", phone: "", email: "" });
+  const [pInfoSaving, setPInfoSaving] = useState(false);
+
   // 리뷰 + 신고
   const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
   const [reportTarget, setReportTarget] = useState<any>(null);
@@ -264,6 +268,7 @@ function CaregiverDashboard() {
         referralCode: user.referralCode || '',
         penaltyScore: profile.penaltyCount || 0,
       });
+      setPInfo({ name: user.name || '', phone: user.phone || '', email: user.email || '' });
       if (profile.workStatus) {
         const statusMap: Record<string, Status> = { WORKING: 'working', AVAILABLE: 'available', IMMEDIATE: 'immediately', ON_LEAVE: 'on_leave' };
         setCurrentStatus(statusMap[profile.workStatus] || 'available');
@@ -1606,7 +1611,61 @@ function CaregiverDashboard() {
                 <p className="text-sm text-gray-500">계정 관련 설정을 변경합니다.</p>
               </div>
 
-              {/* 간병일지 법인명은 '케어매치 주식회사'로 일괄 표기됨 — 개별 입력 UI 제거 (2026-07-20 요청) */}
+              {/* 개인정보 조회·수정 */}
+              <div className="border border-gray-200 bg-white rounded-2xl p-6">
+                <h4 className="font-bold text-gray-900 mb-1">개인정보</h4>
+                <p className="text-xs text-gray-500 mb-4">이름과 연락처를 수정할 수 있습니다. (이메일은 로그인 계정이라 변경 불가)</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">이름</label>
+                    <input
+                      type="text"
+                      value={pInfo.name}
+                      onChange={(e) => setPInfo({ ...pInfo, name: e.target.value })}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">연락처</label>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={pInfo.phone}
+                      onChange={(e) => setPInfo({ ...pInfo, phone: e.target.value })}
+                      placeholder="010-0000-0000"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
+                    <input
+                      type="email"
+                      value={pInfo.email}
+                      disabled
+                      className="w-full border border-gray-100 bg-gray-50 text-gray-400 rounded-lg px-3 py-2.5 text-sm"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={pInfoSaving}
+                  onClick={async () => {
+                    if (!pInfo.name.trim()) { showToast("이름을 입력해주세요.", "error"); return; }
+                    setPInfoSaving(true);
+                    try {
+                      await caregiverAPI.updateProfile({ name: pInfo.name.trim(), phone: pInfo.phone.trim() });
+                      showToast("개인정보가 저장되었습니다.", "success");
+                    } catch (err: any) {
+                      showToast(err?.response?.data?.message || "저장에 실패했습니다.", "error");
+                    } finally {
+                      setPInfoSaving(false);
+                    }
+                  }}
+                  className="mt-4 px-5 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-800 disabled:opacity-50"
+                >
+                  {pInfoSaving ? "저장 중..." : "저장"}
+                </button>
+              </div>
 
               {/* 알림 설정 — 별도 페이지로 분리 (모바일 UX) */}
               <Link

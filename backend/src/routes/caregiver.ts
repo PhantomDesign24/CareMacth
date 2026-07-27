@@ -19,6 +19,7 @@ router.put('/profile', [
   body('latitude').optional().isFloat({ min: -90, max: 90 }).withMessage('유효한 위도를 입력해주세요.'),
   body('longitude').optional().isFloat({ min: -180, max: 180 }).withMessage('유효한 경도를 입력해주세요.'),
   body('name').optional().trim().isLength({ min: 1, max: 50 }).withMessage('이름은 1~50자 이내여야 합니다.'),
+  body('phone').optional().matches(/^(01[016789]-?\d{3,4}-?\d{4})$/).withMessage('유효한 휴대폰 번호를 입력해주세요.'),
 ], caregiverController.updateProfile);
 
 // POST /certificates - 자격증 등록 (민감 파일 — 비공개)

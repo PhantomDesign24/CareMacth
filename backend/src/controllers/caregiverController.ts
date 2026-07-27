@@ -57,6 +57,8 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
     }
 
     const {
+      name,
+      phone,
       gender,
       nationality,
       birthDate,
@@ -73,6 +75,25 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
       corporateName,
       hasCriminalRecord,
     } = req.body;
+
+    // 이름·연락처(User) 수정 — 마이페이지 개인정보 관리. 이메일은 로그인 식별자라 변경 불가.
+    if (name !== undefined || phone !== undefined) {
+      const userData: any = {};
+      if (name !== undefined && String(name).trim()) userData.name = String(name).trim().slice(0, 50);
+      if (phone !== undefined && String(phone).trim()) {
+        const normalizedPhone = String(phone).replace(/\s/g, '');
+        // 다른 사용자가 이미 쓰는 번호면 차단
+        const dup = await prisma.user.findFirst({
+          where: { phone: normalizedPhone, id: { not: req.user!.id } },
+          select: { id: true },
+        });
+        if (dup) throw new AppError('이미 사용 중인 연락처입니다.', 409);
+        userData.phone = normalizedPhone;
+      }
+      if (Object.keys(userData).length > 0) {
+        await prisma.user.update({ where: { id: req.user!.id }, data: userData });
+      }
+    }
 
     // Normalize gender: frontend may send "male"/"female", Prisma expects "M"/"F"
     const genderMap: Record<string, string> = { male: 'M', female: 'F', m: 'M', f: 'F', '남성': 'M', '여성': 'F' };
