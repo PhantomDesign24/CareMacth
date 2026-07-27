@@ -207,6 +207,8 @@ router.delete('/notification-templates/:id', adminController.deleteNotificationT
 router.get('/association-fees', adminController.getAssociationFees);
 router.get('/association-fees/export', adminController.exportAssociationFees);
 router.delete('/association-fees/:paymentId', adminController.deleteAssociationFee);
+router.post('/association-fees/:caregiverId/exempt-month', adminController.exemptAssociationFeeMonth);
+router.put('/caregivers/:id/fee-exempt', adminController.setCaregiverFeeExempt);
 router.put('/association-fees/:caregiverId', [
   body('year').isInt({ min: 2020 }).withMessage('유효한 연도를 입력해주세요.'),
   body('month').isInt({ min: 1, max: 12 }).withMessage('유효한 월을 입력해주세요.'),

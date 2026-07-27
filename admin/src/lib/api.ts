@@ -846,6 +846,13 @@ export async function exportCaregiverRoster() {
 export async function exportMatchingsCsv() {
   return apiDownload("/admin/matchings/export");
 }
+// 협회비 면제/제외
+export async function exemptAssociationFeeMonth(caregiverId: string, year: number, month: number) {
+  return apiRequest(`/admin/association-fees/${caregiverId}/exempt-month`, { method: "POST", body: { year, month } });
+}
+export async function setCaregiverFeeExempt(caregiverId: string, exempt: boolean) {
+  return apiRequest(`/admin/caregivers/${caregiverId}/fee-exempt`, { method: "PUT", body: { exempt } });
+}
 
 // ─── Types ────────────────────────────────────────────
 

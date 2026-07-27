@@ -5,6 +5,8 @@ import {
   getAssociationFees,
   updateAssociationFee,
   exportAssociationFees,
+  exemptAssociationFeeMonth,
+  setCaregiverFeeExempt,
   getPlatformConfig,
   AssociationFeeRow,
 } from "@/lib/api";
@@ -445,6 +447,30 @@ export default function AssociationFeesPage() {
                       title="메모"
                     >
                       메모
+                    </button>
+                    {!r.feePaid && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`${r.name} 간병사의 ${year}년 ${month}월 협회비를 면제할까요?`)) return;
+                          try { await exemptAssociationFeeMonth(r.caregiverId, year, month); setToast("이번 달 면제 처리됨"); await load(); }
+                          catch (e: any) { alert(e?.message || "면제 실패"); }
+                        }}
+                        className="px-2 h-7 text-xs bg-amber-50 text-amber-700 rounded hover:bg-amber-100"
+                        title="이번 달 협회비 면제"
+                      >
+                        면제
+                      </button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`${r.name} 간병사를 협회비 대상에서 영구 제외할까요?\n이후 협회비 목록에서 제외됩니다. (계정은 유지)`)) return;
+                        try { await setCaregiverFeeExempt(r.caregiverId, true); setToast("영구 제외 처리됨"); await load(); }
+                        catch (e: any) { alert(e?.message || "제외 실패"); }
+                      }}
+                      className="px-2 h-7 text-xs border border-red-200 bg-red-50 text-red-600 rounded hover:bg-red-100"
+                      title="협회비 영구 제외"
+                    >
+                      제외
                     </button>
                   </div>
                 </td>

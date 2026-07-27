@@ -141,7 +141,7 @@ export const getGuardians = async (req: AuthRequest, res: Response, next: NextFu
     const search = req.query.search as string | undefined;
     const authProvider = req.query.authProvider as string | undefined;
 
-    const userWhere: any = { role: { in: ['GUARDIAN', 'HOSPITAL'] } };
+    const userWhere: any = { role: { in: ['GUARDIAN', 'HOSPITAL'] }, deletedAt: null }; // 탈퇴회원 제외
     if (search && search.length <= 100) {
       userWhere.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -360,7 +360,7 @@ export const getCaregivers = async (req: AuthRequest, res: Response, next: NextF
     const minExp = req.query.minExp as string | undefined;
     const maxExp = req.query.maxExp as string | undefined;
 
-    const whereClause: any = {};
+    const whereClause: any = { user: { is: { deletedAt: null } } }; // 탈퇴회원 제외
 
     if (status) {
       whereClause.status = status;
@@ -3903,7 +3903,12 @@ export const getAssociationFees = async (req: AuthRequest, res: Response, next: 
     const month = parseInt(req.query.month as string) || (new Date().getMonth() + 1);
 
     const caregivers = await prisma.caregiver.findMany({
-      where: { status: { in: ['APPROVED', 'SUSPENDED'] } },
+      // 탈퇴(삭제)·영구 면제 간병인은 협회비 목록에서 제외
+      where: {
+        status: { in: ['APPROVED', 'SUSPENDED'] },
+        associationFeeExempt: false,
+        user: { is: { deletedAt: null } },
+      },
       include: {
         user: { select: { id: true, name: true, email: true, phone: true } },
         feePayments: {
@@ -5236,5 +5241,45 @@ export const exportMatchings = async (_req: AuthRequest, res: Response, next: Ne
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="carematch-matchings-${new Date().toISOString().slice(0, 10)}.csv"`);
     res.send('﻿' + csv);
+  } catch (e) { next(e); }
+};
+
+// POST /admin/association-fees/:caregiverId/exempt-month - 해당 월 협회비 면제
+// body: { year, month }
+export const exemptAssociationFeeMonth = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { caregiverId } = req.params;
+    const year = parseInt(req.body?.year) || new Date().getFullYear();
+    const month = parseInt(req.body?.month) || (new Date().getMonth() + 1);
+    const cg = await prisma.caregiver.findUnique({ where: { id: caregiverId } });
+    if (!cg) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    // 이미 납부확정(paid=true, amount>0)이면 면제로 덮지 않음
+    const existing = await prisma.associationFeePayment.findUnique({
+      where: { caregiverId_year_month: { caregiverId, year, month } },
+    });
+    if (existing && existing.paid && existing.amount > 0) {
+      throw new AppError('이미 납부 확정된 건은 면제 처리할 수 없습니다.', 400);
+    }
+    await prisma.associationFeePayment.upsert({
+      where: { caregiverId_year_month: { caregiverId, year, month } },
+      create: { caregiverId, year, month, amount: 0, paid: true, paidAt: new Date(), note: '면제(관리자)' },
+      update: { amount: 0, paid: true, paidAt: new Date(), note: '면제(관리자)' },
+    });
+    await logAdminAction(req, 'ASSOCIATION_FEE_EXEMPT_MONTH', { targetType: 'Caregiver', targetId: caregiverId, payload: { year, month } });
+    res.json({ success: true, message: `${year}년 ${month}월 협회비가 면제 처리되었습니다.` });
+  } catch (e) { next(e); }
+};
+
+// PUT /admin/caregivers/:id/fee-exempt - 협회비 영구 제외/해제
+// body: { exempt: boolean }
+export const setCaregiverFeeExempt = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const exempt = req.body?.exempt === true || req.body?.exempt === 'true';
+    const cg = await prisma.caregiver.findUnique({ where: { id } });
+    if (!cg) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    await prisma.caregiver.update({ where: { id }, data: { associationFeeExempt: exempt } });
+    await logAdminAction(req, 'CAREGIVER_FEE_EXEMPT', { targetType: 'Caregiver', targetId: id, payload: { exempt } });
+    res.json({ success: true, message: exempt ? '협회비 영구 제외되었습니다.' : '협회비 제외가 해제되었습니다.' });
   } catch (e) { next(e); }
 };

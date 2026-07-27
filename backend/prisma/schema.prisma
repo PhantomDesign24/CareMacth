@@ -143,6 +143,7 @@ model Caregiver {
 
   // 협회비
   associationFee    Int       @default(0)
+  associationFeeExempt Boolean @default(false) // 협회비 영구 제외(탈퇴 예정·특수 사유). 목록에서 제외
   associationPaidAt DateTime?
 
   // 교육
