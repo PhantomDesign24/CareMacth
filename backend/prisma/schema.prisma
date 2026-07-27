@@ -1223,3 +1223,15 @@ model BusinessInquiry {
 
   @@index([status, createdAt])
 }
+
+// 이용약관·개인정보처리방침 등 법적 문서 (관리자 편집 CMS)
+// type 단위 단일 문서(upsert). content 는 관리자만 편집하므로 HTML 허용.
+model LegalDocument {
+  id            String    @id @default(uuid())
+  type          String    @unique // "terms" | "privacy" | "location_terms"
+  title         String
+  content       String // 본문 (HTML)
+  effectiveDate DateTime? // 시행일
+  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime  @default(now())
+}

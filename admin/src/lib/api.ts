@@ -802,6 +802,21 @@ export async function deleteBusinessInquiry(id: string) {
   return apiRequest(`/admin/business-inquiries/${id}`, { method: "DELETE" });
 }
 
+// ─── 약관·개인정보 CMS ───
+export interface LegalDocItem {
+  type: string;
+  title: string;
+  content: string;
+  effectiveDate: string | null;
+  updatedAt: string | null;
+}
+export async function getLegalDocs() {
+  return apiRequest<{ items: LegalDocItem[] }>("/admin/legal");
+}
+export async function updateLegalDoc(type: string, data: { title?: string; content: string; effectiveDate?: string | null }) {
+  return apiRequest(`/admin/legal/${type}`, { method: "PUT", body: data });
+}
+
 // ─── Types ────────────────────────────────────────────
 
 export interface DashboardData {

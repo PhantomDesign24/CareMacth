@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import { authenticate, authorize } from '../middlewares/auth';
 import * as adminController from '../controllers/adminController';
 import * as businessInquiryController from '../controllers/businessInquiryController';
+import * as legalController from '../controllers/legalController';
 import * as reportController from '../controllers/reportController';
 import * as noticeController from '../controllers/noticeController';
 import { upload, uploadNotice, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
@@ -128,6 +129,10 @@ router.post('/direct-payments/:id/complete', adminController.completeDirectPayme
 router.get('/business-inquiries', businessInquiryController.getBusinessInquiries);
 router.post('/business-inquiries/:id/status', businessInquiryController.updateBusinessInquiry);
 router.delete('/business-inquiries/:id', businessInquiryController.deleteBusinessInquiry);
+
+// 약관·개인정보처리방침 CMS
+router.get('/legal', legalController.getLegalDocumentsAdmin);
+router.put('/legal/:type', legalController.upsertLegalDocument);
 
 // 중간정산
 router.get('/contracts/active-for-settlement', adminController.getActiveContractsForSettlement);

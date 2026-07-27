@@ -1,4 +1,34 @@
-export default function PrivacyPage() {
+// 개인정보처리방침 — 관리자 CMS(DB) 내용이 있으면 그걸 렌더, 없으면 아래 기본(정적) 내용 폴백
+async function getLegal(type: string) {
+  try {
+    const res = await fetch(`http://localhost:4000/api/legal/${type}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j?.data || null;
+  } catch {
+    return null;
+  }
+}
+
+export default async function PrivacyPage() {
+  const doc = await getLegal("privacy");
+
+  if (doc?.content) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-10 sm:py-16 md:py-24">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6 sm:mb-8">{doc.title || "개인정보처리방침"}</h1>
+        {doc.effectiveDate && (
+          <p className="text-sm text-gray-400 mb-6">시행일: {doc.effectiveDate}</p>
+        )}
+        <div
+          className="prose prose-gray max-w-none space-y-8 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-gray-900 [&_h2]:mb-3 [&_p]:text-gray-600 [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:list-inside [&_ul]:text-gray-600 [&_ul]:space-y-1 [&_section]:block"
+          dangerouslySetInnerHTML={{ __html: doc.content }}
+        />
+      </div>
+    );
+  }
+
+  // ── 폴백: 기본 정적 내용 (DB 미등록 시) ──
   return (
     <div className="max-w-4xl mx-auto px-4 py-10 sm:py-16 md:py-24">
       <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6 sm:mb-8">개인정보처리방침</h1>
