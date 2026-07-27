@@ -429,11 +429,12 @@ export interface AssociationFeeRow {
   feeNote: string;
   careCount: number;
   penaltyCount: number;
+  feeExempt?: boolean;
 }
-export async function getAssociationFees(year?: number, month?: number) {
+export async function getAssociationFees(year?: number, month?: number, exempt?: boolean) {
   return apiRequest<{ year: number; month: number; rows: AssociationFeeRow[] }>(
     "/admin/association-fees",
-    { params: { ...(year && { year }), ...(month && { month }) } }
+    { params: { ...(year && { year }), ...(month && { month }), ...(exempt && { exempt: 1 }) } }
   );
 }
 export async function updateAssociationFee(caregiverId: string, data: { year: number; month: number; paid: boolean; amount?: number; note?: string }) {

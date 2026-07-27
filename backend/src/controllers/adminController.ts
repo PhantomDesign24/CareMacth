@@ -3901,12 +3901,14 @@ export const getAssociationFees = async (req: AuthRequest, res: Response, next: 
   try {
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
     const month = parseInt(req.query.month as string) || (new Date().getMonth() + 1);
+    // exempt=1 이면 영구 제외된 간병인만 조회 (제외됨 보기)
+    const showExempt = req.query.exempt === '1' || req.query.exempt === 'true';
 
     const caregivers = await prisma.caregiver.findMany({
-      // 탈퇴(삭제)·영구 면제 간병인은 협회비 목록에서 제외
+      // 기본: 탈퇴·영구제외 제외 / exempt 조회: 영구제외된 건만
       where: {
         status: { in: ['APPROVED', 'SUSPENDED'] },
-        associationFeeExempt: false,
+        associationFeeExempt: showExempt,
         user: { is: { deletedAt: null } },
       },
       include: {
@@ -3939,6 +3941,7 @@ export const getAssociationFees = async (req: AuthRequest, res: Response, next: 
         feeNote: fee?.note || '',
         careCount: cg._count.contracts,
         penaltyCount: cg.penaltyCount,
+        feeExempt: cg.associationFeeExempt,
       };
     });
 

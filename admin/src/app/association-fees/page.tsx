@@ -22,6 +22,7 @@ export default function AssociationFeesPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
+  const [showExempt, setShowExempt] = useState(false); // 제외됨 보기
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [defaultAmount, setDefaultAmount] = useState<number | null>(null); // PlatformConfig 로드 후 설정
@@ -37,7 +38,7 @@ export default function AssociationFeesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getAssociationFees(year, month);
+      const res = await getAssociationFees(year, month, showExempt);
       setRows(res.rows || []);
       setSelected(new Set());
     } catch (e) {
@@ -45,7 +46,7 @@ export default function AssociationFeesPage() {
     } finally {
       setLoading(false);
     }
-  }, [year, month]);
+  }, [year, month, showExempt]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -68,14 +69,16 @@ export default function AssociationFeesPage() {
 
   const filteredRows = useMemo(() => {
     let r = rows;
-    if (filter === "paid") r = r.filter((x) => x.feePaid);
-    else if (filter === "unpaid") r = r.filter((x) => !x.feePaid);
+    if (!showExempt) {
+      if (filter === "paid") r = r.filter((x) => x.feePaid);
+      else if (filter === "unpaid") r = r.filter((x) => !x.feePaid);
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       r = r.filter((x) => x.name.toLowerCase().includes(q) || x.phone.includes(q));
     }
     return r;
-  }, [rows, filter, search]);
+  }, [rows, filter, search, showExempt]);
 
   const stats = useMemo(() => {
     const paid = rows.filter((r) => r.feePaid).length;
@@ -331,7 +334,8 @@ export default function AssociationFeesPage() {
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              disabled={showExempt}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 ${
                 filter === f ? "bg-orange-500 text-white" : "bg-gray-50 text-gray-600 hover:bg-gray-100"
               }`}
             >
@@ -339,6 +343,14 @@ export default function AssociationFeesPage() {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => setShowExempt((v) => !v)}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
+            showExempt ? "bg-red-500 text-white border-red-500" : "bg-white text-red-600 border-red-200 hover:bg-red-50"
+          }`}
+        >
+          {showExempt ? "← 일반 목록" : "제외됨 보기"}
+        </button>
         <input
           type="text"
           value={search}
@@ -448,30 +460,46 @@ export default function AssociationFeesPage() {
                     >
                       메모
                     </button>
-                    {!r.feePaid && (
+                    {showExempt ? (
                       <button
                         onClick={async () => {
-                          if (!confirm(`${r.name} 간병사의 ${year}년 ${month}월 협회비를 면제할까요?`)) return;
-                          try { await exemptAssociationFeeMonth(r.caregiverId, year, month); setToast("이번 달 면제 처리됨"); await load(); }
-                          catch (e: any) { alert(e?.message || "면제 실패"); }
+                          if (!confirm(`${r.name} 간병사의 협회비 제외를 해제할까요?\n다시 협회비 납부 대상이 됩니다.`)) return;
+                          try { await setCaregiverFeeExempt(r.caregiverId, false); setToast("제외 해제됨"); await load(); }
+                          catch (e: any) { alert(e?.message || "해제 실패"); }
                         }}
-                        className="px-2 h-7 text-xs bg-amber-50 text-amber-700 rounded hover:bg-amber-100"
-                        title="이번 달 협회비 면제"
+                        className="px-2 h-7 text-xs border border-green-200 bg-green-50 text-green-700 rounded hover:bg-green-100"
+                        title="협회비 제외 해제"
                       >
-                        면제
+                        제외 해제
                       </button>
+                    ) : (
+                      <>
+                        {!r.feePaid && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`${r.name} 간병사의 ${year}년 ${month}월 협회비를 면제할까요?`)) return;
+                              try { await exemptAssociationFeeMonth(r.caregiverId, year, month); setToast("이번 달 면제 처리됨"); await load(); }
+                              catch (e: any) { alert(e?.message || "면제 실패"); }
+                            }}
+                            className="px-2 h-7 text-xs bg-amber-50 text-amber-700 rounded hover:bg-amber-100"
+                            title="이번 달 협회비 면제"
+                          >
+                            면제
+                          </button>
+                        )}
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`${r.name} 간병사를 협회비 대상에서 영구 제외할까요?\n이후 협회비 목록에서 제외됩니다. (계정은 유지)`)) return;
+                            try { await setCaregiverFeeExempt(r.caregiverId, true); setToast("영구 제외 처리됨"); await load(); }
+                            catch (e: any) { alert(e?.message || "제외 실패"); }
+                          }}
+                          className="px-2 h-7 text-xs border border-red-200 bg-red-50 text-red-600 rounded hover:bg-red-100"
+                          title="협회비 영구 제외"
+                        >
+                          제외
+                        </button>
+                      </>
                     )}
-                    <button
-                      onClick={async () => {
-                        if (!confirm(`${r.name} 간병사를 협회비 대상에서 영구 제외할까요?\n이후 협회비 목록에서 제외됩니다. (계정은 유지)`)) return;
-                        try { await setCaregiverFeeExempt(r.caregiverId, true); setToast("영구 제외 처리됨"); await load(); }
-                        catch (e: any) { alert(e?.message || "제외 실패"); }
-                      }}
-                      className="px-2 h-7 text-xs border border-red-200 bg-red-50 text-red-600 rounded hover:bg-red-100"
-                      title="협회비 영구 제외"
-                    >
-                      제외
-                    </button>
                   </div>
                 </td>
               </tr>
