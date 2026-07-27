@@ -416,8 +416,9 @@ function CaregiverDashboard() {
           region: r.region || '',
           startDate: formatDate(r.startDate),
           duration: r.durationDays ? `${r.durationDays}일` : '-',
-          dailyRate: r.dailyRate || 0,
-          estimatedEarnings: (r.dailyRate || 0) * (r.durationDays || 30),
+          // 간병인에게는 매칭 수수료 제외 금액 노출 (백엔드 netDailyRate)
+          dailyRate: (typeof r.netDailyRate === 'number' ? r.netDailyRate : r.dailyRate) || 0,
+          estimatedEarnings: ((typeof r.netDailyRate === 'number' ? r.netDailyRate : r.dailyRate) || 0) * (r.durationDays || 30),
           urgency: daysUntilStart <= 3 ? '급구' : '일반',
           mobilityStatus: r.patient?.mobilityStatus || '',
           hasDementia: !!r.patient?.hasDementia,
@@ -1170,7 +1171,7 @@ function CaregiverDashboard() {
                     </div>
                     <div className="flex md:flex-col items-center md:items-stretch gap-3 shrink-0 md:w-44">
                       <div className="flex-1 md:flex-none bg-orange-50 rounded-xl px-4 py-3 text-center">
-                        <div className="text-xs text-orange-600">일당</div>
+                        <div className="text-xs text-orange-600">일당 (수수료 제외)</div>
                         <div className="text-base font-bold text-orange-600">
                           {req.dailyRate ? `${req.dailyRate.toLocaleString()}원` : "협의"}
                         </div>

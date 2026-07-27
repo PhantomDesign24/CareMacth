@@ -648,34 +648,36 @@ export default function FindWorkPage() {
 
                     {/* Rate + Actions */}
                     <div className="sm:w-56 shrink-0 flex flex-col items-stretch gap-3">
-                      {/* Daily rate - prominent */}
+                      {/* 수수료 제외 일당(간병인 수령 기준) — 백엔드가 매칭수수료 제외 금액 제공 */}
                       <div className="bg-orange-50 rounded-xl px-4 py-3 text-center">
-                        <span className="text-xs text-orange-600 font-medium block">보호자 제시 일당</span>
-                        <span className="text-xl sm:text-2xl font-extrabold text-orange-600">
-                          {req.dailyRate ? `${req.dailyRate.toLocaleString()}원` : "협의"}
-                        </span>
-                        {req.dailyRate && req.durationDays && (() => {
-                          const gross = req.dailyRate * req.durationDays;
-                          // 기본 수수료 10%, 세율 3.3% (실제 계약 시 재계산)
-                          const fee = Math.round(gross * 0.1);
-                          const tax = Math.round((gross - fee) * 0.033);
-                          const net = gross - fee - tax;
+                        {(() => {
+                          const netDaily = (req as any).netDailyRate ?? req.dailyRate ?? 0;
+                          return (
+                            <>
+                              <span className="text-xs text-orange-600 font-medium block">예상 일당 (수수료 제외)</span>
+                              <span className="text-xl sm:text-2xl font-extrabold text-orange-600">
+                                {netDaily ? `${netDaily.toLocaleString()}원` : "협의"}
+                              </span>
+                            </>
+                          );
+                        })()}
+                        {(req as any).netDailyRate && req.durationDays && (() => {
+                          const netDaily = (req as any).netDailyRate;
+                          const afterFee = netDaily * req.durationDays;   // 수수료 제외 총액
+                          const tax = Math.round(afterFee * 0.033);       // 3.3% 원천징수
+                          const net = afterFee - tax;
                           return (
                             <div className="mt-2 pt-2 border-t border-orange-200 text-[11px] text-left space-y-0.5">
                               <div className="flex justify-between">
-                                <span className="text-gray-500">총액 ({req.durationDays}일)</span>
-                                <span className="text-gray-700 font-medium">{gross.toLocaleString()}원</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-500">수수료 10%</span>
-                                <span className="text-gray-400">-{fee.toLocaleString()}</span>
+                                <span className="text-gray-500">수수료 제외 ({req.durationDays}일)</span>
+                                <span className="text-gray-700 font-medium">{afterFee.toLocaleString()}원</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-500">세금 3.3%</span>
                                 <span className="text-gray-400">-{tax.toLocaleString()}</span>
                               </div>
                               <div className="flex justify-between pt-1 border-t border-orange-100">
-                                <span className="text-orange-700 font-semibold">실수령</span>
+                                <span className="text-orange-700 font-semibold">예상 실수령</span>
                                 <span className="text-orange-700 font-bold">{net.toLocaleString()}원</span>
                               </div>
                             </div>

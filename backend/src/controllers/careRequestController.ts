@@ -332,6 +332,13 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
     // 간병인 view: 결제 전 개인정보 마스킹
     // - 환자명/생년월일/진단명, 보호자명, 정확한 주소, 좌표 제거
     // - 시·구 단위 주소, 연령대(10단위), 성별, 거동 상태만 노출
+    // 간병인에게는 매칭 수수료(플랫폼 정액)를 제외한 금액을 노출 (클라이언트 요청 2026-07)
+    const feeCfg = req.user!.role === 'CAREGIVER'
+      ? await prisma.platformConfig.findUnique({
+          where: { id: 'default' },
+          select: { individualFeeFixed: true, familyFeeFixed: true, taxRate: true },
+        })
+      : null;
     const sanitized =
       req.user!.role === 'CAREGIVER'
         ? careRequests.map((cr: any) => {
@@ -339,6 +346,11 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
             const ageBucket = birthY
               ? Math.floor((new Date().getFullYear() - birthY) / 10) * 10
               : null;
+            // 매칭 수수료(정액/일) — careType별. 수수료 제외 일당 = 일당 - 수수료
+            const feePerDay = cr.careType === 'FAMILY'
+              ? (feeCfg?.familyFeeFixed ?? 0)
+              : (feeCfg?.individualFeeFixed ?? 0);
+            const netDailyRate = Math.max(0, (cr.dailyRate || 0) - feePerDay);
             return {
               id: cr.id,
               careType: cr.careType,
@@ -352,6 +364,8 @@ export const getCareRequests = async (req: AuthRequest, res: Response, next: Nex
               endDate: cr.endDate,
               durationDays: cr.durationDays,
               dailyRate: cr.dailyRate,
+              feePerDay,                 // 매칭 수수료(정액/일)
+              netDailyRate,              // 수수료 제외 일당 (간병인 표시용)
               hourlyRate: cr.hourlyRate ?? null,
               status: cr.status,
               medicalActAgreed: cr.medicalActAgreed,
