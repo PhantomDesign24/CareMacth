@@ -817,6 +817,36 @@ export async function updateLegalDoc(type: string, data: { title?: string; conte
   return apiRequest(`/admin/legal/${type}`, { method: "PUT", body: data });
 }
 
+// ─── 회원 관리 확장 (G) ───
+export async function deleteCaregiverMember(id: string) {
+  return apiRequest(`/admin/caregivers/${id}`, { method: "DELETE" });
+}
+export async function resetCaregiverPassword(id: string, newPassword: string) {
+  return apiRequest(`/admin/caregivers/${id}/reset-password`, { method: "POST", body: { newPassword } });
+}
+export async function deleteGuardianMember(id: string) {
+  return apiRequest(`/admin/guardians/${id}`, { method: "DELETE" });
+}
+export async function resetGuardianPassword(id: string, newPassword: string) {
+  return apiRequest(`/admin/guardians/${id}/reset-password`, { method: "POST", body: { newPassword } });
+}
+export async function deleteConsultMemo(memoId: string) {
+  return apiRequest(`/admin/consult-memos/${memoId}`, { method: "DELETE" });
+}
+export async function deleteCareRequestAdmin(id: string) {
+  return apiRequest(`/admin/care-requests/${id}`, { method: "DELETE" });
+}
+export async function deleteAssociationFee(paymentId: string) {
+  return apiRequest(`/admin/association-fees/${paymentId}`, { method: "DELETE" });
+}
+// 간병인 명부 / 매칭 CSV 다운로드 (실제 명부·계약 데이터)
+export async function exportCaregiverRoster() {
+  return apiDownload("/admin/caregivers/export");
+}
+export async function exportMatchingsCsv() {
+  return apiDownload("/admin/matchings/export");
+}
+
 // ─── Types ────────────────────────────────────────────
 
 export interface DashboardData {

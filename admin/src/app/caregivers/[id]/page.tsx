@@ -11,6 +11,9 @@ import {
   toggleBadge,
   addPenalty,
   addMemo,
+  deleteCaregiverMember,
+  resetCaregiverPassword,
+  deleteConsultMemo,
   deleteCertificateAdmin,
   verifyCertificate,
   verifyIdCard,
@@ -282,6 +285,45 @@ export default function CaregiverDetailPage() {
       alert(err?.message || "블랙리스트 등록 중 오류가 발생했습니다.");
     } finally {
       setActionLoading(false);
+    }
+  }
+
+  async function handleDeleteMember() {
+    if (!confirm("이 간병인 회원을 삭제할까요?\n계정이 비활성화되고 개인정보가 익명 처리됩니다. (계약·정산 기록은 보존)")) return;
+    try {
+      setActionLoading(true);
+      await deleteCaregiverMember(id);
+      alert("회원이 삭제(익명화)되었습니다.");
+      window.location.href = "/caregivers";
+    } catch (err: any) {
+      alert(err?.message || "회원 삭제 중 오류가 발생했습니다.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    const pw = prompt("새 비밀번호를 입력하세요 (8자 이상)");
+    if (pw === null) return;
+    if (pw.length < 8) { alert("비밀번호는 8자 이상이어야 합니다."); return; }
+    try {
+      setActionLoading(true);
+      await resetCaregiverPassword(id, pw);
+      alert("비밀번호가 재설정되었습니다.");
+    } catch (err: any) {
+      alert(err?.message || "비밀번호 재설정 중 오류가 발생했습니다.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleDeleteMemo(memoId: string) {
+    if (!confirm("이 메모를 삭제할까요?")) return;
+    try {
+      await deleteConsultMemo(memoId);
+      await fetchData();
+    } catch (err: any) {
+      alert(err?.message || "메모 삭제 실패");
     }
   }
 
@@ -652,6 +694,20 @@ export default function CaregiverDetailPage() {
                 </button>
               </>
             )}
+            <button
+              onClick={handleResetPassword}
+              disabled={actionLoading}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              비밀번호 재설정
+            </button>
+            <button
+              onClick={handleDeleteMember}
+              disabled={actionLoading}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
+            >
+              회원 삭제
+            </button>
           </div>
         </div>
       </div>
@@ -1151,7 +1207,15 @@ export default function CaregiverDetailPage() {
             ) : (
               memos.map((memo) => (
                 <div key={memo.id} className="card">
-                  <p className="text-sm text-gray-700">{memo.content}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-sm text-gray-700 flex-1 whitespace-pre-wrap">{memo.content}</p>
+                    <button
+                      onClick={() => handleDeleteMemo(memo.id)}
+                      className="shrink-0 text-xs text-red-500 hover:text-red-600 underline"
+                    >
+                      삭제
+                    </button>
+                  </div>
                   <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
                     <span>관리자</span>
                     <span>|</span>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import DataTable, { Column } from "@/components/DataTable";
-import { getGuardians, getGuardianDetail, Guardian } from "@/lib/api";
+import { getGuardians, getGuardianDetail, deleteGuardianMember, resetGuardianPassword, Guardian } from "@/lib/api";
 import { formatPhone } from "@/lib/constants";
 
 export default function GuardiansPage() {
@@ -266,12 +266,36 @@ export default function GuardiansPage() {
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="font-semibold text-gray-900">기본 정보</h3>
                       {!editing ? (
-                        <button
-                          onClick={() => setEditing(true)}
-                          className="text-xs px-3 py-1 rounded bg-primary-100 text-primary-700 hover:bg-primary-200"
-                        >
-                          수정
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setEditing(true)}
+                            className="text-xs px-3 py-1 rounded bg-primary-100 text-primary-700 hover:bg-primary-200"
+                          >
+                            수정
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const pw = prompt("새 비밀번호를 입력하세요 (8자 이상)");
+                              if (pw === null) return;
+                              if (pw.length < 8) { alert("비밀번호는 8자 이상이어야 합니다."); return; }
+                              try { await resetGuardianPassword(detailId!, pw); alert("비밀번호가 재설정되었습니다."); }
+                              catch (e: any) { alert(e?.message || "재설정 실패"); }
+                            }}
+                            className="text-xs px-3 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          >
+                            비번 재설정
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!confirm("이 보호자 회원을 삭제할까요?\n계정 비활성화+개인정보 익명화 처리됩니다. (계약 기록은 보존)")) return;
+                              try { await deleteGuardianMember(detailId!); alert("삭제되었습니다."); setDetailId(null); await fetchData(); }
+                              catch (e: any) { alert(e?.message || "삭제 실패"); }
+                            }}
+                            className="text-xs px-3 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
+                          >
+                            회원 삭제
+                          </button>
+                        </div>
                       ) : (
                         <div className="flex gap-2">
                           <button

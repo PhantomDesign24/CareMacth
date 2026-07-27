@@ -22,6 +22,7 @@ router.get('/audit-logs', adminController.getAuditLogs);
 
 // 간병인 관리
 router.get('/caregivers', adminController.getCaregivers);
+router.get('/caregivers/export', adminController.exportCaregiversRoster); // :id 보다 먼저
 router.get('/caregivers/:id', adminController.getCaregiverDetail);
 
 // 보호자 관리
@@ -32,6 +33,8 @@ router.put('/guardians/:id', [
   body('email').optional().isEmail(),
   body('phone').optional().trim().matches(/^(01[016789]-?\d{3,4}-?\d{4}|0\d{1,2}-?\d{3,4}-?\d{4})$/),
 ], adminController.updateGuardian);
+router.delete('/guardians/:id', adminController.deleteGuardianMember);
+router.post('/guardians/:id/reset-password', adminController.resetGuardianPassword);
 router.put('/caregivers/:id/approve', adminController.approveCaregiver);
 router.put('/caregivers/:id/reject', adminController.rejectCaregiver);
 router.put('/caregivers/:id/blacklist', adminController.blacklistCaregiver);
@@ -46,6 +49,10 @@ router.post('/caregivers/:id/memo', [
 router.put('/caregivers/:caregiverId/certificates/:certId/verify', adminController.verifyCertificate);
 router.delete('/caregivers/:caregiverId/certificates/:certId/verify', adminController.unverifyCertificate);
 router.delete('/caregivers/:caregiverId/certificates/:certId', adminController.deleteCertificateAdmin);
+// 회원 관리 확장 (G)
+router.delete('/caregivers/:id', adminController.deleteCaregiverMember);
+router.post('/caregivers/:id/reset-password', adminController.resetCaregiverPassword);
+router.delete('/consult-memos/:memoId', adminController.deleteConsultMemo);
 router.put('/caregivers/:id/verify-id-card', adminController.verifyIdCard);
 router.delete('/caregivers/:id/verify-id-card', adminController.unverifyIdCard);
 router.put('/caregivers/:id/verify-criminal-check', adminController.verifyCriminalCheck);
@@ -66,6 +73,8 @@ router.delete('/notifications/unsent', adminController.deleteUnsentNotifications
 // 간병 일감(요청) 관리
 router.get('/care-requests', adminController.getCareRequests);
 router.get('/care-requests/:id', adminController.getCareRequestDetail);
+router.delete('/care-requests/:id', adminController.deleteCareRequestAdmin);
+router.get('/matchings/export', adminController.exportMatchings);
 
 // 환자 관리
 router.get('/patients', adminController.getPatients);
@@ -197,6 +206,7 @@ router.delete('/notification-templates/:id', adminController.deleteNotificationT
 // 협회비 월별 관리
 router.get('/association-fees', adminController.getAssociationFees);
 router.get('/association-fees/export', adminController.exportAssociationFees);
+router.delete('/association-fees/:paymentId', adminController.deleteAssociationFee);
 router.put('/association-fees/:caregiverId', [
   body('year').isInt({ min: 2020 }).withMessage('유효한 연도를 입력해주세요.'),
   body('month').isInt({ min: 1, max: 12 }).withMessage('유효한 월을 입력해주세요.'),

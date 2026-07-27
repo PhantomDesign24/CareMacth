@@ -5,6 +5,7 @@ import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { logAdminAction } from '../services/auditLog';
+import bcrypt from 'bcryptjs';
 import { sendFromTemplate, renderTemplate, colorForRole, NOTIF_COLOR_PATIENT, NOTIF_COLOR_CAREGIVER, sendNotification as sendUserNotification } from '../services/notificationService';
 import { calculateEarning } from '../utils/earning';
 
@@ -5051,4 +5052,189 @@ export const deleteAlimtalkOnAligo = async (req: AuthRequest, res: Response, nex
   } catch (error) {
     next(error);
   }
+};
+
+// ============================================================
+// 관리자 회원·데이터 관리 확장 (G)
+// ============================================================
+
+// 회원 익명화+비활성화 (하드삭제 대신 — FK로 얽힌 계약·결제·정산 기록 보존)
+async function anonymizeUser(userId: string) {
+  const ts = Date.now();
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        isActive: false,
+        deletedAt: new Date(),
+        tokenVersion: { increment: 1 },
+        email: `deleted_${ts}_${userId.slice(0, 8)}@deleted.local`,
+        phone: `DELETED_${ts}_${userId.slice(0, 6)}`,
+        name: '(삭제회원)',
+        password: null,
+        profileImage: null,
+        fcmToken: null,
+        socialId: null,
+      },
+    });
+    await tx.deviceToken.updateMany({ where: { userId }, data: { userId: null } });
+  });
+}
+
+// DELETE /admin/caregivers/:id - 간병인 회원 삭제(비활성화+익명화)
+export const deleteCaregiverMember = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const caregiver = await prisma.caregiver.findUnique({ where: { id }, include: { user: true } });
+    if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    if (caregiver.user.deletedAt) throw new AppError('이미 삭제된 회원입니다.', 400);
+    const active = await prisma.contract.count({ where: { caregiverId: id, status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] } } });
+    if (active > 0) throw new AppError(`진행 중인 계약이 ${active}건 있어 삭제할 수 없습니다. 계약 종료/취소 후 진행하세요.`, 400);
+    const unpaid = await prisma.earning.count({ where: { caregiverId: id, isPaid: false } });
+    if (unpaid > 0) throw new AppError(`미정산 수익이 ${unpaid}건 있습니다. 정산 완료 후 삭제 가능합니다.`, 400);
+    await anonymizeUser(caregiver.userId);
+    await logAdminAction(req, 'CAREGIVER_DELETE', { targetType: 'Caregiver', targetId: id, payload: { userId: caregiver.userId } });
+    res.json({ success: true, message: '간병인 회원이 삭제(익명화)되었습니다.' });
+  } catch (e) { next(e); }
+};
+
+// DELETE /admin/guardians/:id - 보호자 회원 삭제(비활성화+익명화)
+export const deleteGuardianMember = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const guardian = await prisma.guardian.findUnique({ where: { id }, include: { user: true } });
+    if (!guardian) throw new AppError('보호자를 찾을 수 없습니다.', 404);
+    if (guardian.user.deletedAt) throw new AppError('이미 삭제된 회원입니다.', 400);
+    const active = await prisma.contract.count({ where: { guardianId: id, status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] } } });
+    if (active > 0) throw new AppError(`진행 중인 계약이 ${active}건 있어 삭제할 수 없습니다. 계약 종료/취소 후 진행하세요.`, 400);
+    await anonymizeUser(guardian.userId);
+    await logAdminAction(req, 'GUARDIAN_DELETE', { targetType: 'Guardian', targetId: id, payload: { userId: guardian.userId } });
+    res.json({ success: true, message: '보호자 회원이 삭제(익명화)되었습니다.' });
+  } catch (e) { next(e); }
+};
+
+// 비밀번호 재설정 공통
+async function resetUserPassword(userId: string, newPassword: string) {
+  if (!newPassword || String(newPassword).length < 8) throw new AppError('새 비밀번호는 8자 이상이어야 합니다.', 400);
+  const hashed = await bcrypt.hash(String(newPassword), 10);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { password: hashed, tokenVersion: { increment: 1 } }, // 기존 세션 무효화
+  });
+}
+
+// POST /admin/caregivers/:id/reset-password - 간병인 비밀번호 관리자 재설정
+export const resetCaregiverPassword = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body as { newPassword: string };
+    const caregiver = await prisma.caregiver.findUnique({ where: { id }, include: { user: true } });
+    if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    if (caregiver.user.authProvider !== 'LOCAL') throw new AppError('소셜 로그인 계정은 비밀번호를 설정할 수 없습니다.', 400);
+    await resetUserPassword(caregiver.userId, newPassword);
+    await logAdminAction(req, 'CAREGIVER_PASSWORD_RESET', { targetType: 'Caregiver', targetId: id, payload: { userId: caregiver.userId } });
+    res.json({ success: true, message: '비밀번호가 재설정되었습니다.' });
+  } catch (e) { next(e); }
+};
+
+// POST /admin/guardians/:id/reset-password - 보호자 비밀번호 관리자 재설정
+export const resetGuardianPassword = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body as { newPassword: string };
+    const guardian = await prisma.guardian.findUnique({ where: { id }, include: { user: true } });
+    if (!guardian) throw new AppError('보호자를 찾을 수 없습니다.', 404);
+    if (guardian.user.authProvider !== 'LOCAL') throw new AppError('소셜 로그인 계정은 비밀번호를 설정할 수 없습니다.', 400);
+    await resetUserPassword(guardian.userId, newPassword);
+    await logAdminAction(req, 'GUARDIAN_PASSWORD_RESET', { targetType: 'Guardian', targetId: id, payload: { userId: guardian.userId } });
+    res.json({ success: true, message: '비밀번호가 재설정되었습니다.' });
+  } catch (e) { next(e); }
+};
+
+// DELETE /admin/consult-memos/:memoId - 상담 메모 삭제
+export const deleteConsultMemo = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { memoId } = req.params;
+    const memo = await prisma.consultMemo.findUnique({ where: { id: memoId } });
+    if (!memo) throw new AppError('메모를 찾을 수 없습니다.', 404);
+    await prisma.consultMemo.delete({ where: { id: memoId } });
+    res.json({ success: true, message: '메모가 삭제되었습니다.' });
+  } catch (e) { next(e); }
+};
+
+// DELETE /admin/care-requests/:id - 일감(공고) 삭제 (진행 계약 없는 건만)
+export const deleteCareRequestAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const cr = await prisma.careRequest.findUnique({ where: { id } });
+    if (!cr) throw new AppError('공고를 찾을 수 없습니다.', 404);
+    const liveContract = await prisma.contract.count({ where: { careRequestId: id, status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE', 'COMPLETED'] } } });
+    if (liveContract > 0) throw new AppError('계약이 연결된 공고는 삭제할 수 없습니다. (기록 보존)', 400);
+    await prisma.$transaction(async (tx) => {
+      await tx.careApplication.deleteMany({ where: { careRequestId: id } });
+      await tx.contract.deleteMany({ where: { careRequestId: id, status: 'CANCELLED' } });
+      await tx.careRequest.delete({ where: { id } });
+    });
+    await logAdminAction(req, 'CARE_REQUEST_DELETE', { targetType: 'CareRequest', targetId: id });
+    res.json({ success: true, message: '공고가 삭제되었습니다.' });
+  } catch (e) { next(e); }
+};
+
+// DELETE /admin/association-fees/:paymentId - 협회비 납부 이력 1건 삭제
+export const deleteAssociationFee = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { paymentId } = req.params;
+    const row = await prisma.associationFeePayment.findUnique({ where: { id: paymentId } });
+    if (!row) throw new AppError('협회비 내역을 찾을 수 없습니다.', 404);
+    await prisma.associationFeePayment.delete({ where: { id: paymentId } });
+    await logAdminAction(req, 'ASSOCIATION_FEE_DELETE', { targetType: 'AssociationFeePayment', targetId: paymentId });
+    res.json({ success: true, message: '협회비 내역이 삭제되었습니다.' });
+  } catch (e) { next(e); }
+};
+
+// GET /admin/caregivers/export - 간병인 명부 CSV
+export const exportCaregiversRoster = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const cgs = await prisma.caregiver.findMany({
+      include: { user: { select: { name: true, email: true, phone: true, createdAt: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const header = ['이름', '이메일', '연락처', '상태', '근무상태', '경력(년)', '평점', '총매칭', '가입일'];
+    const rows = cgs.map((c: any) => [
+      c.user?.name || '', c.user?.email || '', c.user?.phone || '',
+      c.status, c.workStatus, c.experienceYears ?? 0, c.avgRating ?? 0, c.totalMatches ?? 0,
+      c.user?.createdAt ? new Date(c.user.createdAt).toISOString().slice(0, 10) : '',
+    ]);
+    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="carematch-caregivers-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send('﻿' + csv);
+  } catch (e) { next(e); }
+};
+
+// GET /admin/matchings/export - 매칭(계약) CSV
+export const exportMatchings = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const contracts = await prisma.contract.findMany({
+      include: {
+        guardian: { include: { user: { select: { name: true } } } },
+        caregiver: { include: { user: { select: { name: true } } } },
+        careRequest: { include: { patient: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const header = ['계약ID', '환자', '보호자', '간병인', '상태', '시작일', '종료일', '총액', '생성일'];
+    const rows = contracts.map((c: any) => [
+      c.id.slice(0, 8), c.careRequest?.patient?.name || '', c.guardian?.user?.name || '', c.caregiver?.user?.name || '',
+      c.status,
+      c.startDate ? new Date(c.startDate).toISOString().slice(0, 10) : '',
+      c.endDate ? new Date(c.endDate).toISOString().slice(0, 10) : '',
+      c.totalAmount ?? 0,
+      c.createdAt ? new Date(c.createdAt).toISOString().slice(0, 10) : '',
+    ]);
+    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="carematch-matchings-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send('﻿' + csv);
+  } catch (e) { next(e); }
 };

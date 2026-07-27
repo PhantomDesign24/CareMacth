@@ -11,6 +11,7 @@ import {
   toggleBadge,
   addPenalty,
   addMemo,
+  exportCaregiverRoster,
   Caregiver,
 } from "@/lib/api";
 
@@ -433,9 +434,27 @@ export default function CaregiversPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">간병인 관리</h1>
-        <p className="mt-1 text-sm text-gray-500">간병인 승인, 인증, 블랙리스트 관리를 수행합니다.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">간병인 관리</h1>
+          <p className="mt-1 text-sm text-gray-500">간병인 승인, 인증, 블랙리스트 관리를 수행합니다.</p>
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              const blob = await exportCaregiverRoster();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `carematch-간병인명부-${new Date().toISOString().slice(0, 10)}.csv`;
+              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              window.URL.revokeObjectURL(url);
+            } catch (e: any) { alert(e?.message || "다운로드 실패"); }
+          }}
+          className="shrink-0 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          엑셀 다운로드
+        </button>
       </div>
 
       {/* 통계 카드 — 현재 검색 결과 기준 */}

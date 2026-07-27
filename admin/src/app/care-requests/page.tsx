@@ -7,6 +7,7 @@ import StatsCard from "@/components/StatsCard";
 import {
   getAdminCareRequests,
   getAdminCareRequest,
+  deleteCareRequestAdmin,
   AdminCareRequestRow,
 } from "@/lib/api";
 import { formatPhone } from "@/lib/constants";
@@ -260,13 +261,31 @@ export default function CareRequestsPage() {
       label: "관리",
       align: "center",
       render: (_v, row) => (
-        <button
-          type="button"
-          onClick={() => openDetail(row as AdminCareRequestRow)}
-          className="text-xs px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 font-medium"
-        >
-          상세
-        </button>
+        <div className="flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => openDetail(row as AdminCareRequestRow)}
+            className="text-xs px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 font-medium"
+          >
+            상세
+          </button>
+          <button
+            type="button"
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!confirm("이 공고를 삭제할까요? (계약이 연결된 공고는 삭제 불가 — 기록 보존)")) return;
+              try {
+                await deleteCareRequestAdmin((row as AdminCareRequestRow).id);
+                await fetchData();
+              } catch (err: any) {
+                alert(err?.message || "삭제 실패");
+              }
+            }}
+            className="text-xs px-3 py-1.5 border border-red-200 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium"
+          >
+            삭제
+          </button>
+        </div>
       ),
     },
   ];

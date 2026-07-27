@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import DataTable, { Column } from "@/components/DataTable";
 import StatsCard from "@/components/StatsCard";
-import { getAdminPayments, AdminPayment, apiRequest } from "@/lib/api";
+import { getAdminPayments, AdminPayment, apiRequest, exportMatchingsCsv } from "@/lib/api";
 import { formatPhone } from "@/lib/constants";
 
 interface MatchingRow {
@@ -389,9 +389,27 @@ export default function MatchingsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">매칭 관리</h1>
-        <p className="mt-1 text-sm text-gray-500">간병 매칭(계약) 현황을 관리합니다.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">매칭 관리</h1>
+          <p className="mt-1 text-sm text-gray-500">간병 매칭(계약) 현황을 관리합니다.</p>
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              const blob = await exportMatchingsCsv();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `carematch-매칭-${new Date().toISOString().slice(0, 10)}.csv`;
+              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              window.URL.revokeObjectURL(url);
+            } catch (e: any) { alert(e?.message || "다운로드 실패"); }
+          }}
+          className="shrink-0 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          엑셀 다운로드
+        </button>
       </div>
 
       {/* Summary */}
