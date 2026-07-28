@@ -204,7 +204,7 @@ export default function CareRequestPage() {
           ? new Date(`${data.endDate}T${data.startTime || '09:00'}:00`).toISOString()
           : undefined,
         durationDays: (data.startDate && data.endDate)
-          ? Math.max(1, Math.floor((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / 86400000) + 1)
+          ? Math.max(1, Math.ceil((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / 86400000))
           : (data.duration ? parseInt(data.duration) * (data.durationUnit === 'months' || data.durationUnit === '개월' ? 30 : data.durationUnit === 'weeks' || data.durationUnit === '주' ? 7 : 1) : undefined),
         dailyRate: data.dailyRate ? parseInt(data.dailyRate) : undefined,
         preferredGender: data.preferredGender ? (preferredGenderMap[data.preferredGender.toLowerCase()] || undefined) : undefined,

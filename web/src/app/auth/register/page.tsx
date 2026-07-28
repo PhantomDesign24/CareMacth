@@ -165,8 +165,8 @@ function RegisterPageInner() {
     }
 
     if (!isSocialMode) {
-      if (!/^[a-zA-Z0-9_]{4,20}$/.test(username)) {
-        setFieldErrors({ username: "아이디는 영문·숫자 4~20자여야 합니다." });
+      if (!/^(?=.*[a-zA-Z])[a-zA-Z0-9_]{4,20}$/.test(username)) {
+        setFieldErrors({ username: "아이디는 영문·숫자 4~20자이며 영문을 최소 1자 포함해야 합니다." });
         return;
       }
       const pwOk = password.length >= 8;
@@ -644,10 +644,10 @@ function RegisterPageInner() {
                 <input
                   type="text"
                   className="input-field"
-                  placeholder="영문·숫자 4~20자"
+                  placeholder="영문·숫자 4~20자 (영문 필수)"
                   value={username}
                   autoComplete="username"
-                  onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                  onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())}
                   required
                 />
                 <p className="mt-1 text-xs text-gray-400">로그인에 사용할 아이디입니다. (영문·숫자 4~20자)</p>

@@ -797,8 +797,8 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
       if (!form.startTime) return "간병 시작 시간을 선택해주세요.";
       if (!form.endDate) return "종료일을 선택해주세요.";
       const end = new Date(form.endDate);
-      const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
-      if (!Number.isFinite(days) || days <= 0) return "종료일은 시작일 이후여야 합니다.";
+      // 24시간 카운팅: 종료일은 시작일 다음 날 이후여야 함 (백엔드 계약 산정과 동일)
+      if (!(end.getTime() > start.getTime())) return "종료일은 시작일 다음 날 이후로 선택해주세요.";
       return null;
     }
     if (s === 4) {
@@ -1591,7 +1591,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
           {(() => {
             if (!form.startDate || !form.endDate) return null;
             const s = new Date(form.startDate), e = new Date(form.endDate);
-            const days = Math.floor((e.getTime() - s.getTime()) / 86400000) + 1; // 시작·종료일 포함
+            const days = Math.max(1, Math.ceil((e.getTime() - s.getTime()) / 86400000)); // 24시간 카운팅 (계약 산정과 동일)
             if (!Number.isFinite(days) || days <= 0) return (
               <p className="mt-2 text-sm text-red-500">종료일은 시작일 이후여야 합니다.</p>
             );

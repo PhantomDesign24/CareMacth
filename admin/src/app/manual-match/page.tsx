@@ -285,6 +285,19 @@ export default function ManualMatchPage() {
         </p>
       </div>
 
+      {/* 신규 계정 발급 정보 — 계정 생성 즉시 노출(매칭 실패해도 유실 방지) */}
+      {creds.length > 0 && (
+        <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="mb-2 text-sm font-semibold text-amber-800">발급된 로그인 정보 (지금 전달하세요 · 재확인 불가)</p>
+          {creds.map((c) => (
+            <div key={c.userId} className="mb-1 text-sm text-gray-800">
+              <span className="font-medium">{c.name}</span> · 아이디 <code className="rounded bg-white px-1.5 py-0.5">{c.loginId}</code> · 비번 <code className="rounded bg-white px-1.5 py-0.5">{c.tempPassword}</code>
+            </div>
+          ))}
+          <p className="mt-2 text-[11px] text-amber-700">임시 비밀번호는 재확인이 불가합니다. 분실 시 회원관리에서 비밀번호를 재발급하세요.</p>
+        </div>
+      )}
+
       <div className="space-y-5">
         {/* 1. 보호자 */}
         <section className="rounded-xl border border-gray-200 bg-white p-4">

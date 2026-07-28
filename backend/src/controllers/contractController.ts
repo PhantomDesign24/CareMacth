@@ -1111,13 +1111,15 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     const ff = (contract as any).platformFeeFixed || 0;
     const feeText = (ff > 0 && pf > 0)
       ? `${pf}% + ${ff.toLocaleString()}원/일`
-      : (ff > 0 ? `${ff.toLocaleString()}원/일 (정액)` : `${pf}%`);
+      : (ff > 0 ? `${ff.toLocaleString()}원/일 (정액)` : (pf > 0 ? `${pf}%` : '없음'));
+    // 갑(보호자/병원)측 = 결제 주체. 을(간병사) = 정산 수령 주체.
+    const isPayerSide = role === 'GUARDIAN' || role === 'HOSPITAL';
     // 간병사(을) 계약서에는 플랫폼 수수료 미표시
     if (role !== 'CAREGIVER') {
       drawTableRow('플랫폼 수수료', feeText);
     }
-    // 보호자(갑) 계약서에는 원천징수(세율) 미표시
-    if (role !== 'GUARDIAN') {
+    // 갑(보호자·병원) 계약서에는 원천징수(세율) 미표시
+    if (!isPayerSide) {
       drawTableRow('세율 (원천징수)', `${contract.taxRate}%`);
     }
     y += 20;
@@ -1134,8 +1136,8 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
       },
       {
         t: '제2조 (결제 및 정산)',
-        // 보호자(갑) 계약서에는 원천징수 문구 제외
-        b: role === 'GUARDIAN'
+        // 갑(보호자·병원) 계약서에는 원천징수 문구 제외
+        b: isPayerSide
           ? '보호자(갑)는 계약 체결과 동시에 케어매치 에스크로를 통해 선결제하며, 간병 종료 익일 간병인(을)에게 정산금이 지급됩니다.'
           : '보호자(갑)는 계약 체결과 동시에 케어매치 에스크로를 통해 선결제하며, 간병 종료 익일 간병인(을)에게 정산금(총액 - 플랫폼 수수료 - 원천징수 세액 3.3%)이 지급됩니다.',
       },

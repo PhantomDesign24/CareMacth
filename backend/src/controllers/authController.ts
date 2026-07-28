@@ -8,6 +8,7 @@ import { config } from '../config';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { generateReferralCode } from '../utils/generateCode';
+import { normalizePhone, phoneVariants } from '../utils/phone';
 import { sendEmail, emailPasswordReset } from '../services/emailService';
 import { sendToAdmins, sendFromTemplate } from '../services/notificationService';
 import { jwtVerify, createRemoteJWKSet } from 'jose';
@@ -113,10 +114,12 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     if (!rawEmail && !username) {
       throw new AppError('아이디 또는 이메일을 입력해주세요.', 400);
     }
+    // 전화번호는 숫자만 저장 (전화 로그인·중복검사 정합성). 표시용 하이픈은 프론트 formatPhone 담당.
+    const phoneDigits = normalizePhone(phone);
     // 이메일 없으면 아이디/전화 기반 placeholder 생성 (email 컬럼 NOT NULL 유지)
     const email = rawEmail
       ? String(rawEmail).trim().toLowerCase()
-      : `id_${username || String(phone).replace(/\D/g, '')}@id.carematch.local`;
+      : `id_${username || phoneDigits}@id.carematch.local`;
 
     // Normalize role: frontend may send lowercase "guardian"/"caregiver"/"hospital"
     const roleMap: Record<string, string> = { guardian: 'GUARDIAN', caregiver: 'CAREGIVER', hospital: 'HOSPITAL' };
@@ -130,7 +133,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       where: {
         OR: [
           { email },
-          { phone },
+          { phone: { in: phoneVariants(phone) } },
           ...(username ? [{ username }] : []),
         ],
       },
@@ -186,7 +189,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
             username,
             password: hashedPassword,
             name,
-            phone,
+            phone: phoneDigits,
             role,
             referralCode,
             referredBy: referrerUserId,
@@ -266,13 +269,15 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const { email, password } = req.body;
     // email 파라미터로 아이디/이메일/전화 무엇이든 허용 (기존 이메일 회원 + 신규 아이디 회원 공용)
     const loginId = String(email || '').trim();
+    const lowerId = loginId.toLowerCase(); // 아이디·이메일은 소문자로 저장되므로 소문자 변형도 대조
     const normalizedPhone = loginId.replace(/[^0-9]/g, '');
 
     const user = await prisma.user.findFirst({
       where: {
         OR: [
           { email: loginId },
-          { username: loginId },
+          { email: lowerId },
+          { username: lowerId },
           ...(normalizedPhone.length >= 10 ? [{ phone: normalizedPhone }] : []),
         ],
       },

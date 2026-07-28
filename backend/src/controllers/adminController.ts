@@ -6,6 +6,7 @@ import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { logAdminAction } from '../services/auditLog';
 import { generateReferralCode } from '../utils/generateCode';
+import { phoneVariants } from '../utils/phone';
 import bcrypt from 'bcryptjs';
 import { sendFromTemplate, renderTemplate, colorForRole, NOTIF_COLOR_PATIENT, NOTIF_COLOR_CAREGIVER, sendNotification as sendUserNotification } from '../services/notificationService';
 import { calculateEarning } from '../utils/earning';
@@ -5414,32 +5415,40 @@ const genUsername = async (prefix: string): Promise<string> => {
 // POST /admin/manual/guardian — 보호자 계정 직접 생성 (임시 로그인정보 반환)
 export const adminCreateGuardian = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const vErrors = validationResult(req);
+    if (!vErrors.isEmpty()) throw new AppError(vErrors.array()[0].msg || '입력값이 올바르지 않습니다.', 400);
     const name = String(req.body.name || '').trim();
     const phone = normPhone(req.body.phone);
     if (!name) throw new AppError('이름을 입력해주세요.', 400);
     if (phone.length < 10) throw new AppError('유효한 전화번호를 입력해주세요.', 400);
 
-    // 이미 같은 전화번호로 가입된 계정이 있으면 신규 생성 대신 안내
-    const dup = await prisma.user.findUnique({ where: { phone } });
+    // 이미 같은 전화번호로 가입된 계정이 있으면 신규 생성 대신 안내 (하이픈/숫자 저장형식 모두 대조)
+    const dup = await prisma.user.findFirst({ where: { phone: { in: phoneVariants(req.body.phone) } } });
     if (dup) throw new AppError('이미 해당 전화번호로 가입된 계정이 있습니다. 목록에서 선택해주세요.', 409);
 
-    const username = req.body.username?.trim() || (await genUsername('g'));
+    const username = req.body.username?.trim().toLowerCase() || (await genUsername('g'));
     const usernameDup = await prisma.user.findUnique({ where: { username } });
     if (usernameDup) throw new AppError('이미 사용 중인 아이디입니다.', 409);
 
     const tempPassword = String(req.body.password || '').trim() || genTempPassword();
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
-    const email = req.body.email?.trim() || `id_${username}@id.carematch.local`;
+    const email = req.body.email?.trim().toLowerCase() || `id_${username}@id.carematch.local`;
     const referralCode = generateReferralCode();
 
-    const user = await prisma.user.create({
-      data: {
-        email, username, phone, name, role: 'GUARDIAN',
-        password: hashedPassword, referralCode,
-        guardian: { create: {} },
-      },
-      include: { guardian: true },
-    });
+    let user;
+    try {
+      user = await prisma.user.create({
+        data: {
+          email, username, phone, name, role: 'GUARDIAN',
+          password: hashedPassword, referralCode,
+          guardian: { create: {} },
+        },
+        include: { guardian: true },
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') throw new AppError('이미 사용 중인 이메일·아이디·전화번호입니다.', 409);
+      throw err;
+    }
 
     await logAdminAction(req, 'ADMIN_CREATE_GUARDIAN', {
       targetType: 'guardian', targetId: user.guardian!.id, payload: { userId: user.id, name, phone },
@@ -5461,21 +5470,23 @@ export const adminCreateGuardian = async (req: AuthRequest, res: Response, next:
 // POST /admin/manual/caregiver — 간병인 계정 직접 생성 (즉시 APPROVED, 임시 로그인정보 반환)
 export const adminCreateCaregiver = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const vErrors = validationResult(req);
+    if (!vErrors.isEmpty()) throw new AppError(vErrors.array()[0].msg || '입력값이 올바르지 않습니다.', 400);
     const name = String(req.body.name || '').trim();
     const phone = normPhone(req.body.phone);
     if (!name) throw new AppError('이름을 입력해주세요.', 400);
     if (phone.length < 10) throw new AppError('유효한 전화번호를 입력해주세요.', 400);
 
-    const dup = await prisma.user.findUnique({ where: { phone } });
+    const dup = await prisma.user.findFirst({ where: { phone: { in: phoneVariants(req.body.phone) } } });
     if (dup) throw new AppError('이미 해당 전화번호로 가입된 계정이 있습니다. 목록에서 선택해주세요.', 409);
 
-    const username = req.body.username?.trim() || (await genUsername('c'));
+    const username = req.body.username?.trim().toLowerCase() || (await genUsername('c'));
     const usernameDup = await prisma.user.findUnique({ where: { username } });
     if (usernameDup) throw new AppError('이미 사용 중인 아이디입니다.', 409);
 
     const tempPassword = String(req.body.password || '').trim() || genTempPassword();
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
-    const email = req.body.email?.trim() || `id_${username}@id.carematch.local`;
+    const email = req.body.email?.trim().toLowerCase() || `id_${username}@id.carematch.local`;
     const referralCode = generateReferralCode();
 
     const gender = req.body.gender ? (String(req.body.gender).toUpperCase() === 'F' ? 'F' : 'M') : undefined;
@@ -5493,14 +5504,20 @@ export const adminCreateCaregiver = async (req: AuthRequest, res: Response, next
       }),
     };
 
-    const user = await prisma.user.create({
-      data: {
-        email, username, phone, name, role: 'CAREGIVER',
-        password: hashedPassword, referralCode,
-        caregiver: { create: caregiverData },
-      },
-      include: { caregiver: true },
-    });
+    let user;
+    try {
+      user = await prisma.user.create({
+        data: {
+          email, username, phone, name, role: 'CAREGIVER',
+          password: hashedPassword, referralCode,
+          caregiver: { create: caregiverData },
+        },
+        include: { caregiver: true },
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') throw new AppError('이미 사용 중인 이메일·아이디·전화번호입니다.', 409);
+      throw err;
+    }
 
     await logAdminAction(req, 'ADMIN_CREATE_CAREGIVER', {
       targetType: 'caregiver', targetId: user.caregiver!.id, payload: { userId: user.id, name, phone },
@@ -5522,6 +5539,8 @@ export const adminCreateCaregiver = async (req: AuthRequest, res: Response, next
 // POST /admin/manual/match — 수동 매칭 (환자 생성/재사용 + CareRequest + Contract 즉시 ACTIVE)
 export const adminCreateManualMatch = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const vErrors = validationResult(req);
+    if (!vErrors.isEmpty()) throw new AppError(vErrors.array()[0].msg || '입력값이 올바르지 않습니다.', 400);
     const {
       guardianId, caregiverId, patientId,
       careType, scheduleType, location,
@@ -5544,8 +5563,11 @@ export const adminCreateManualMatch = async (req: AuthRequest, res: Response, ne
 
     const guardian = await prisma.guardian.findUnique({ where: { id: guardianId }, include: { user: true } });
     if (!guardian) throw new AppError('보호자를 찾을 수 없습니다.', 404);
+    if (guardian.user.deletedAt || !guardian.user.isActive) throw new AppError('탈퇴·비활성 보호자에게는 매칭할 수 없습니다.', 400);
     const caregiver = await prisma.caregiver.findUnique({ where: { id: caregiverId }, include: { user: true } });
     if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    if (caregiver.user.deletedAt || !caregiver.user.isActive) throw new AppError('탈퇴·비활성 간병인에게는 매칭할 수 없습니다.', 400);
+    if (caregiver.status !== 'APPROVED') throw new AppError('승인 완료된 간병인만 매칭할 수 있습니다. (현재 상태: ' + caregiver.status + ')', 400);
 
     const cType = careType === 'FAMILY' ? 'FAMILY' : 'INDIVIDUAL';
     const sType = scheduleType === 'PART_TIME' ? 'PART_TIME' : 'FULL_TIME';
@@ -5609,7 +5631,9 @@ export const adminCreateManualMatch = async (req: AuthRequest, res: Response, ne
           startDate: start, endDate: end, durationDays,
           dailyRate: rate,
           medicalActAgreed: true, medicalActAgreedAt: now,
-          status: 'MATCHED',
+          // 계약이 즉시 ACTIVE 이므로 요청도 진행중 상태로 둔다.
+          // (MATCHED 로 두면 부분 유니크 인덱스에 걸려 해당 환자 재예약이 영구 차단됨)
+          status: 'IN_PROGRESS',
         },
       });
 
