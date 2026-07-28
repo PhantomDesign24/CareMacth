@@ -5,6 +5,7 @@ import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { logAdminAction } from '../services/auditLog';
+import { generateReferralCode } from '../utils/generateCode';
 import bcrypt from 'bcryptjs';
 import { sendFromTemplate, renderTemplate, colorForRole, NOTIF_COLOR_PATIENT, NOTIF_COLOR_CAREGIVER, sendNotification as sendUserNotification } from '../services/notificationService';
 import { calculateEarning } from '../utils/earning';
@@ -5382,4 +5383,292 @@ export const getDuplicateAccounts = async (_req: AuthRequest, res: Response, nex
       .sort((a, b) => b.count - a.count);
     res.json({ success: true, data: { groups, total: groups.length } });
   } catch (e) { next(e); }
+};
+
+// ==========================================
+// ① 관리자 직접등록 + 수동 매칭
+//    - 전화(내방/유선)로 접수한 건을 관리자가 계정 생성 후 공고 없이 바로 계약
+// ==========================================
+
+// 전화번호 정규화 (숫자만) — 유니크 컬럼 저장/조회 통일
+const normPhone = (p: any): string => String(p || '').replace(/[^0-9]/g, '');
+// 임시 비밀번호 생성 (영문대소+숫자 10자, 손으로 불러주기 쉬운 문자만)
+const genTempPassword = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const buf = require('crypto').randomBytes(10);
+  let out = '';
+  for (let i = 0; i < 10; i++) out += chars[buf[i] % chars.length];
+  return out;
+};
+// 로그인 아이디 자동 생성 (prefix + 숫자8) — 중복 회피 재시도
+const genUsername = async (prefix: string): Promise<string> => {
+  for (let i = 0; i < 12; i++) {
+    const n = require('crypto').randomBytes(4).readUInt32BE(0) % 100000000;
+    const candidate = `${prefix}${String(n).padStart(8, '0')}`;
+    const exists = await prisma.user.findUnique({ where: { username: candidate } });
+    if (!exists) return candidate;
+  }
+  return `${prefix}${Date.now().toString().slice(-9)}`;
+};
+
+// POST /admin/manual/guardian — 보호자 계정 직접 생성 (임시 로그인정보 반환)
+export const adminCreateGuardian = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const name = String(req.body.name || '').trim();
+    const phone = normPhone(req.body.phone);
+    if (!name) throw new AppError('이름을 입력해주세요.', 400);
+    if (phone.length < 10) throw new AppError('유효한 전화번호를 입력해주세요.', 400);
+
+    // 이미 같은 전화번호로 가입된 계정이 있으면 신규 생성 대신 안내
+    const dup = await prisma.user.findUnique({ where: { phone } });
+    if (dup) throw new AppError('이미 해당 전화번호로 가입된 계정이 있습니다. 목록에서 선택해주세요.', 409);
+
+    const username = req.body.username?.trim() || (await genUsername('g'));
+    const usernameDup = await prisma.user.findUnique({ where: { username } });
+    if (usernameDup) throw new AppError('이미 사용 중인 아이디입니다.', 409);
+
+    const tempPassword = String(req.body.password || '').trim() || genTempPassword();
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
+    const email = req.body.email?.trim() || `id_${username}@id.carematch.local`;
+    const referralCode = generateReferralCode();
+
+    const user = await prisma.user.create({
+      data: {
+        email, username, phone, name, role: 'GUARDIAN',
+        password: hashedPassword, referralCode,
+        guardian: { create: {} },
+      },
+      include: { guardian: true },
+    });
+
+    await logAdminAction(req, 'ADMIN_CREATE_GUARDIAN', {
+      targetType: 'guardian', targetId: user.guardian!.id, payload: { userId: user.id, name, phone },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        guardianId: user.guardian!.id,
+        userId: user.id,
+        name, phone,
+        loginId: username,
+        tempPassword, // 관리자가 보호자에게 전달할 임시 로그인정보 (평문 1회 노출)
+      },
+    });
+  } catch (e) { next(e); }
+};
+
+// POST /admin/manual/caregiver — 간병인 계정 직접 생성 (즉시 APPROVED, 임시 로그인정보 반환)
+export const adminCreateCaregiver = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const name = String(req.body.name || '').trim();
+    const phone = normPhone(req.body.phone);
+    if (!name) throw new AppError('이름을 입력해주세요.', 400);
+    if (phone.length < 10) throw new AppError('유효한 전화번호를 입력해주세요.', 400);
+
+    const dup = await prisma.user.findUnique({ where: { phone } });
+    if (dup) throw new AppError('이미 해당 전화번호로 가입된 계정이 있습니다. 목록에서 선택해주세요.', 409);
+
+    const username = req.body.username?.trim() || (await genUsername('c'));
+    const usernameDup = await prisma.user.findUnique({ where: { username } });
+    if (usernameDup) throw new AppError('이미 사용 중인 아이디입니다.', 409);
+
+    const tempPassword = String(req.body.password || '').trim() || genTempPassword();
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
+    const email = req.body.email?.trim() || `id_${username}@id.carematch.local`;
+    const referralCode = generateReferralCode();
+
+    const gender = req.body.gender ? (String(req.body.gender).toUpperCase() === 'F' ? 'F' : 'M') : undefined;
+    const caregiverData: any = {
+      // 관리자가 대면/유선 확인 후 등록하므로 즉시 승인
+      status: 'APPROVED',
+      workStatus: 'AVAILABLE',
+      ...(gender && { gender }),
+      ...(req.body.birthDate && { birthDate: new Date(req.body.birthDate) }),
+      ...(req.body.nationality && { nationality: String(req.body.nationality) }),
+      ...(req.body.address && { address: String(req.body.address) }),
+      ...(req.body.corporateName && { corporateName: String(req.body.corporateName) }),
+      ...(req.body.experienceYears !== undefined && !isNaN(parseInt(req.body.experienceYears)) && {
+        experienceYears: parseInt(req.body.experienceYears),
+      }),
+    };
+
+    const user = await prisma.user.create({
+      data: {
+        email, username, phone, name, role: 'CAREGIVER',
+        password: hashedPassword, referralCode,
+        caregiver: { create: caregiverData },
+      },
+      include: { caregiver: true },
+    });
+
+    await logAdminAction(req, 'ADMIN_CREATE_CAREGIVER', {
+      targetType: 'caregiver', targetId: user.caregiver!.id, payload: { userId: user.id, name, phone },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        caregiverId: user.caregiver!.id,
+        userId: user.id,
+        name, phone,
+        loginId: username,
+        tempPassword,
+      },
+    });
+  } catch (e) { next(e); }
+};
+
+// POST /admin/manual/match — 수동 매칭 (환자 생성/재사용 + CareRequest + Contract 즉시 ACTIVE)
+export const adminCreateManualMatch = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const {
+      guardianId, caregiverId, patientId,
+      careType, scheduleType, location,
+      hospitalName, address,
+      startDate, endDate, dailyRate,
+      corporateName,
+      patient, // { name, birthDate, gender, mobilityStatus, ... }
+    } = req.body;
+
+    if (!guardianId) throw new AppError('보호자를 선택해주세요.', 400);
+    if (!caregiverId) throw new AppError('간병인을 선택해주세요.', 400);
+    if (!startDate || !endDate) throw new AppError('간병 시작일·종료일을 입력해주세요.', 400);
+    const rate = parseInt(dailyRate);
+    if (!rate || rate <= 0) throw new AppError('일당(원)을 올바르게 입력해주세요.', 400);
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) throw new AppError('날짜 형식이 올바르지 않습니다.', 400);
+    if (end.getTime() < start.getTime()) throw new AppError('종료일은 시작일 이후여야 합니다.', 400);
+
+    const guardian = await prisma.guardian.findUnique({ where: { id: guardianId }, include: { user: true } });
+    if (!guardian) throw new AppError('보호자를 찾을 수 없습니다.', 404);
+    const caregiver = await prisma.caregiver.findUnique({ where: { id: caregiverId }, include: { user: true } });
+    if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+
+    const cType = careType === 'FAMILY' ? 'FAMILY' : 'INDIVIDUAL';
+    const sType = scheduleType === 'PART_TIME' ? 'PART_TIME' : 'FULL_TIME';
+    const loc = location === 'HOME' ? 'HOME' : 'HOSPITAL';
+
+    // 환자: patientId 있으면 재사용, 없으면 생성 (guardianId+name+birthDate 유니크 → upsert)
+    let resolvedPatientId: string;
+    if (patientId) {
+      const p = await prisma.patient.findFirst({ where: { id: patientId, guardianId } });
+      if (!p) throw new AppError('환자를 찾을 수 없습니다.', 404);
+      resolvedPatientId = p.id;
+    } else {
+      const pName = String(patient?.name || '').trim();
+      if (!pName) throw new AppError('환자 이름을 입력해주세요.', 400);
+      if (!patient?.birthDate) throw new AppError('환자 생년월일을 입력해주세요.', 400);
+      const pBirth = new Date(patient.birthDate);
+      if (isNaN(pBirth.getTime())) throw new AppError('환자 생년월일 형식이 올바르지 않습니다.', 400);
+      const pGender = String(patient?.gender || '').toUpperCase() === 'F' ? 'F' : 'M';
+      const mobility = ['INDEPENDENT', 'PARTIAL', 'DEPENDENT'].includes(patient?.mobilityStatus)
+        ? patient.mobilityStatus : 'PARTIAL';
+
+      const existing = await prisma.patient.findUnique({
+        where: { guardianId_name_birthDate: { guardianId, name: pName, birthDate: pBirth } },
+      });
+      if (existing) {
+        resolvedPatientId = existing.id;
+      } else {
+        const created = await prisma.patient.create({
+          data: {
+            guardianId, name: pName, birthDate: pBirth, gender: pGender,
+            mobilityStatus: mobility as any,
+            ...(patient?.diagnosis && { diagnosis: String(patient.diagnosis) }),
+            ...(patient?.medicalNotes && { medicalNotes: String(patient.medicalNotes) }),
+          },
+        });
+        resolvedPatientId = created.id;
+      }
+    }
+
+    // 수수료
+    const platformConfig = await prisma.platformConfig.findUnique({ where: { id: 'default' } });
+    const feePercent = cType === 'INDIVIDUAL'
+      ? (platformConfig?.individualFeePercent ?? 10)
+      : (platformConfig?.familyFeePercent ?? 15);
+    const feeFixed = cType === 'INDIVIDUAL'
+      ? (platformConfig?.individualFeeFixed ?? 0)
+      : (platformConfig?.familyFeeFixed ?? 0);
+
+    const durationDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+    const totalAmount = rate * durationDays;
+    const now = new Date();
+
+    // CareRequest + Contract 를 한 트랜잭션으로 생성 (관리자 대행 서명 → 즉시 ACTIVE)
+    const result = await prisma.$transaction(async (tx) => {
+      const careRequest = await tx.careRequest.create({
+        data: {
+          guardianId, patientId: resolvedPatientId,
+          careType: cType as any, scheduleType: sType as any, location: loc as any,
+          hospitalName: loc === 'HOSPITAL' ? (hospitalName ? String(hospitalName) : null) : null,
+          address: String(address || hospitalName || '관리자 수동 등록'),
+          startDate: start, endDate: end, durationDays,
+          dailyRate: rate,
+          medicalActAgreed: true, medicalActAgreedAt: now,
+          status: 'MATCHED',
+        },
+      });
+
+      const contract = await tx.contract.create({
+        data: {
+          careRequestId: careRequest.id,
+          guardianId, caregiverId,
+          startDate: start, endDate: end,
+          dailyRate: rate, totalAmount,
+          platformFee: feePercent, platformFeeFixed: feeFixed,
+          taxRate: platformConfig?.taxRate ?? 3.3,
+          medicalActClause: true,
+          ...(corporateName ? { corporateName: String(corporateName) } : (caregiver.corporateName ? { corporateName: caregiver.corporateName } : {})),
+          // 관리자 대행 서명 → 양측 서명 완료 처리 → ACTIVE
+          guardianSignature: 'ADMIN_PROXY', guardianSignedAt: now,
+          caregiverSignature: 'ADMIN_PROXY', caregiverSignedAt: now,
+          status: 'ACTIVE',
+        },
+      });
+
+      await tx.caregiver.update({
+        where: { id: caregiverId },
+        data: { workStatus: 'WORKING', totalMatches: { increment: 1 } },
+      });
+
+      return { careRequest, contract };
+    });
+
+    // 양측 알림
+    await sendUserNotification({
+      userId: caregiver.userId, type: 'CONTRACT',
+      title: '관리자 수동 매칭 완료',
+      body: `관리자가 간병 계약을 등록했습니다. 계약 내용을 확인해주세요. (기간 ${startDate?.slice?.(0, 10) || ''} ~ ${endDate?.slice?.(0, 10) || ''})`,
+      data: { contractId: result.contract.id },
+    }).catch(() => {});
+    await sendUserNotification({
+      userId: guardian.userId, type: 'CONTRACT',
+      title: '관리자 수동 매칭 완료',
+      body: `관리자가 간병 계약을 등록했습니다. 계약 내용을 확인해주세요.`,
+      data: { contractId: result.contract.id },
+    }).catch(() => {});
+
+    await logAdminAction(req, 'ADMIN_MANUAL_MATCH', {
+      targetType: 'contract', targetId: result.contract.id,
+      payload: { guardianId, caregiverId, patientId: resolvedPatientId, dailyRate: rate, totalAmount, durationDays },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        contractId: result.contract.id,
+        careRequestId: result.careRequest.id,
+        patientId: resolvedPatientId,
+        totalAmount, durationDays,
+        status: result.contract.status,
+      },
+    });
+  } catch (e: any) {
+    if (e?.code === 'P2002') return next(new AppError('중복된 등록입니다. 이미 동일한 환자/계약이 존재합니다.', 409));
+    next(e);
+  }
 };

@@ -1189,12 +1189,17 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     doc.lineWidth(0.6).strokeColor('#D1D5DB').rect(MARGIN, sigBoxY, sigBoxW, sigBoxH).stroke();
     doc.font('KorBold').fontSize(9).fillColor(COLOR_SUB).text('갑 (보호자) 서명', MARGIN + 8, sigBoxY + 6);
     if ((contract as any).guardianSignature) {
-      try {
-        const sig = (contract as any).guardianSignature as string;
-        const base64 = sig.includes(',') ? sig.split(',')[1] : sig;
-        const buf = Buffer.from(base64, 'base64');
-        doc.image(buf, MARGIN + 10, sigBoxY + 22, { fit: [sigBoxW - 20, sigBoxH - 40] });
-      } catch {}
+      const sig = (contract as any).guardianSignature as string;
+      if (sig === 'ADMIN_PROXY') {
+        doc.font('KorBold').fontSize(11).fillColor('#374151')
+          .text('관리자 대행 확인', MARGIN, sigBoxY + 34, { width: sigBoxW, align: 'center' });
+      } else {
+        try {
+          const base64 = sig.includes(',') ? sig.split(',')[1] : sig;
+          const buf = Buffer.from(base64, 'base64');
+          doc.image(buf, MARGIN + 10, sigBoxY + 22, { fit: [sigBoxW - 20, sigBoxH - 40] });
+        } catch {}
+      }
       const signedAt = (contract as any).guardianSignedAt;
       if (signedAt) {
         doc.font('Kor').fontSize(7).fillColor('#9CA3AF')
@@ -1209,12 +1214,17 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     doc.lineWidth(0.6).strokeColor('#D1D5DB').rect(sigX2, sigBoxY, sigBoxW, sigBoxH).stroke();
     doc.font('KorBold').fontSize(9).fillColor(COLOR_SUB).text('을 (간병인) 서명', sigX2 + 8, sigBoxY + 6);
     if ((contract as any).caregiverSignature) {
-      try {
-        const sig = (contract as any).caregiverSignature as string;
-        const base64 = sig.includes(',') ? sig.split(',')[1] : sig;
-        const buf = Buffer.from(base64, 'base64');
-        doc.image(buf, sigX2 + 10, sigBoxY + 22, { fit: [sigBoxW - 20, sigBoxH - 40] });
-      } catch {}
+      const sig = (contract as any).caregiverSignature as string;
+      if (sig === 'ADMIN_PROXY') {
+        doc.font('KorBold').fontSize(11).fillColor('#374151')
+          .text('관리자 대행 확인', sigX2, sigBoxY + 34, { width: sigBoxW, align: 'center' });
+      } else {
+        try {
+          const base64 = sig.includes(',') ? sig.split(',')[1] : sig;
+          const buf = Buffer.from(base64, 'base64');
+          doc.image(buf, sigX2 + 10, sigBoxY + 22, { fit: [sigBoxW - 20, sigBoxH - 40] });
+        } catch {}
+      }
       const signedAt = (contract as any).caregiverSignedAt;
       if (signedAt) {
         doc.font('Kor').fontSize(7).fillColor('#9CA3AF')

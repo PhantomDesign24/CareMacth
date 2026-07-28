@@ -81,6 +81,27 @@ router.delete('/care-requests/:id', adminController.deleteCareRequestAdmin);
 router.get('/matchings/export', adminController.exportMatchings);
 router.get('/duplicate-accounts', adminController.getDuplicateAccounts);
 
+// ① 관리자 직접등록 + 수동 매칭 (전화/내방 접수 → 공고 없이 바로 계약)
+router.post('/manual/guardian', [
+  body('name').notEmpty().trim().isLength({ min: 1, max: 50 }).withMessage('이름을 입력해주세요.'),
+  body('phone').notEmpty().matches(/^(01[016789]-?\d{3,4}-?\d{4}|0\d{1,2}-?\d{3,4}-?\d{4})$/).withMessage('유효한 전화번호를 입력해주세요.'),
+  body('email').optional({ nullable: true, checkFalsy: true }).isEmail().withMessage('유효한 이메일을 입력해주세요.'),
+  body('username').optional({ nullable: true, checkFalsy: true }).matches(/^[a-zA-Z0-9_]{4,20}$/).withMessage('아이디는 영문·숫자 4~20자여야 합니다.'),
+], adminController.adminCreateGuardian);
+router.post('/manual/caregiver', [
+  body('name').notEmpty().trim().isLength({ min: 1, max: 50 }).withMessage('이름을 입력해주세요.'),
+  body('phone').notEmpty().matches(/^(01[016789]-?\d{3,4}-?\d{4}|0\d{1,2}-?\d{3,4}-?\d{4})$/).withMessage('유효한 전화번호를 입력해주세요.'),
+  body('email').optional({ nullable: true, checkFalsy: true }).isEmail().withMessage('유효한 이메일을 입력해주세요.'),
+  body('username').optional({ nullable: true, checkFalsy: true }).matches(/^[a-zA-Z0-9_]{4,20}$/).withMessage('아이디는 영문·숫자 4~20자여야 합니다.'),
+], adminController.adminCreateCaregiver);
+router.post('/manual/match', [
+  body('guardianId').notEmpty().withMessage('보호자를 선택해주세요.'),
+  body('caregiverId').notEmpty().withMessage('간병인을 선택해주세요.'),
+  body('startDate').notEmpty().withMessage('시작일을 입력해주세요.'),
+  body('endDate').notEmpty().withMessage('종료일을 입력해주세요.'),
+  body('dailyRate').isInt({ min: 1 }).withMessage('일당(원)을 올바르게 입력해주세요.'),
+], adminController.adminCreateManualMatch);
+
 // 환자 관리
 router.get('/patients', adminController.getPatients);
 router.get('/patients/:id', adminController.getPatientDetail);

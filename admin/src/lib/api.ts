@@ -170,6 +170,39 @@ export async function getGuardianDetail(id: string) {
   return apiRequest<any>(`/admin/guardians/${id}`);
 }
 
+// ─── ① 관리자 직접등록 + 수동 매칭 ────────────────────
+export interface ManualAccountResult {
+  guardianId?: string;
+  caregiverId?: string;
+  userId: string;
+  name: string;
+  phone: string;
+  loginId: string;
+  tempPassword: string;
+}
+export async function adminCreateGuardian(data: {
+  name: string; phone: string; email?: string; username?: string; password?: string;
+}) {
+  return apiRequest<ManualAccountResult>("/admin/manual/guardian", { method: "POST", body: data });
+}
+export async function adminCreateCaregiver(data: {
+  name: string; phone: string; email?: string; username?: string; password?: string;
+  gender?: string; birthDate?: string; experienceYears?: number; address?: string; nationality?: string; corporateName?: string;
+}) {
+  return apiRequest<ManualAccountResult>("/admin/manual/caregiver", { method: "POST", body: data });
+}
+export async function adminCreateManualMatch(data: {
+  guardianId: string; caregiverId: string; patientId?: string;
+  careType?: string; scheduleType?: string; location?: string;
+  hospitalName?: string; address?: string;
+  startDate: string; endDate: string; dailyRate: number; corporateName?: string;
+  patient?: { name: string; birthDate: string; gender?: string; mobilityStatus?: string; diagnosis?: string; medicalNotes?: string };
+}) {
+  return apiRequest<{ contractId: string; careRequestId: string; patientId: string; totalAmount: number; durationDays: number; status: string }>(
+    "/admin/manual/match", { method: "POST", body: data },
+  );
+}
+
 // ─── Caregivers ───────────────────────────────────────
 export async function getCaregivers(params?: { status?: string; search?: string; page?: number; limit?: number; region?: string; minExp?: number; maxExp?: number; workStatus?: string }) {
   const res = await apiRequest<any>("/admin/caregivers", {
