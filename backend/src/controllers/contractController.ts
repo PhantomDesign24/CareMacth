@@ -1101,16 +1101,25 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     y += 18;
     drawTableRow('간병 유형', contract.careRequest.careType === 'INDIVIDUAL' ? '1:1 개인 간병' : '가족 간병');
     drawTableRow('스케줄', contract.careRequest.scheduleType === 'FULL_TIME' ? '24시간' : '시간제');
-    drawTableRow('장소', `${contract.careRequest.location === 'HOSPITAL' ? '병원' : '자택'}${contract.careRequest.hospitalName ? ' · ' + contract.careRequest.hospitalName : ''}`);
-    drawTableRow('주소', contract.careRequest.address || '-');
+    // 장소는 병원명만 표기 (병원명 없으면 병원/자택 라벨)
+    drawTableRow('장소', contract.careRequest.hospitalName || (contract.careRequest.location === 'HOSPITAL' ? '병원' : '자택'));
     drawTableRow('간병 기간', `${new Date(contract.startDate).toLocaleDateString('ko-KR')} ~ ${new Date(contract.endDate).toLocaleDateString('ko-KR')}`);
     drawTableRow('일당', `${contract.dailyRate.toLocaleString()}원`);
     drawTableRow('총 금액', `${contract.totalAmount.toLocaleString()}원 (VAT 별도)`);
-    const feeText = (contract as any).platformFeeFixed
-      ? `${contract.platformFee}% + ${(contract as any).platformFeeFixed.toLocaleString()}원/일`
-      : `${contract.platformFee}%`;
-    drawTableRow('플랫폼 수수료', feeText);
-    drawTableRow('세율 (원천징수)', `${contract.taxRate}%`);
+    // 수수료 표기 — 정액/정률 구분
+    const pf = contract.platformFee;
+    const ff = (contract as any).platformFeeFixed || 0;
+    const feeText = (ff > 0 && pf > 0)
+      ? `${pf}% + ${ff.toLocaleString()}원/일`
+      : (ff > 0 ? `${ff.toLocaleString()}원/일 (정액)` : `${pf}%`);
+    // 간병사(을) 계약서에는 플랫폼 수수료 미표시
+    if (role !== 'CAREGIVER') {
+      drawTableRow('플랫폼 수수료', feeText);
+    }
+    // 보호자(갑) 계약서에는 원천징수(세율) 미표시
+    if (role !== 'GUARDIAN') {
+      drawTableRow('세율 (원천징수)', `${contract.taxRate}%`);
+    }
     y += 20;
 
     // 주요 조항
@@ -1125,7 +1134,10 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
       },
       {
         t: '제2조 (결제 및 정산)',
-        b: '보호자(갑)는 계약 체결과 동시에 케어매치 에스크로를 통해 선결제하며, 간병 종료 익일 간병인(을)에게 정산금(총액 - 플랫폼 수수료 - 원천징수 세액 3.3%)이 지급됩니다.',
+        // 보호자(갑) 계약서에는 원천징수 문구 제외
+        b: role === 'GUARDIAN'
+          ? '보호자(갑)는 계약 체결과 동시에 케어매치 에스크로를 통해 선결제하며, 간병 종료 익일 간병인(을)에게 정산금이 지급됩니다.'
+          : '보호자(갑)는 계약 체결과 동시에 케어매치 에스크로를 통해 선결제하며, 간병 종료 익일 간병인(을)에게 정산금(총액 - 플랫폼 수수료 - 원천징수 세액 3.3%)이 지급됩니다.',
       },
       {
         t: '제3조 (취소 및 연장)',
