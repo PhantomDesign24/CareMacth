@@ -321,6 +321,31 @@ export async function uploadNotificationImage(file: File): Promise<{ url: string
   return json.data;
 }
 
+// 관리자 서류 직접등록 (③) — FormData 업로드
+async function adminUploadFile(path: string, fieldName: string, file: File, extra?: Record<string, string>) {
+  const fd = new FormData();
+  fd.append(fieldName, file);
+  if (extra) Object.entries(extra).forEach(([k, v]) => fd.append(k, v));
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const res = await fetch(`/api${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  const json = await res.json();
+  if (!res.ok || !json?.success) throw new Error(json?.message || "업로드 실패");
+  return json.data;
+}
+export function adminUploadCaregiverIdCard(id: string, file: File) {
+  return adminUploadFile(`/admin/caregivers/${id}/id-card`, "image", file);
+}
+export function adminUploadCaregiverCriminal(id: string, file: File) {
+  return adminUploadFile(`/admin/caregivers/${id}/criminal-check`, "document", file);
+}
+export function adminAddCaregiverCertificate(id: string, file: File, meta: { name: string; issuer: string; issueDate: string }) {
+  return adminUploadFile(`/admin/caregivers/${id}/certificate`, "image", file, meta);
+}
+
 // ─── Patients ─────────────────────────────────────────
 export async function getPatients(params?: { search?: string; status?: string; page?: number; limit?: number; gender?: string; mobilityStatus?: string }) {
   return apiRequest<PaginatedResponse<Patient>>("/admin/patients", {

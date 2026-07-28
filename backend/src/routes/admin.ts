@@ -6,7 +6,7 @@ import * as businessInquiryController from '../controllers/businessInquiryContro
 import * as legalController from '../controllers/legalController';
 import * as reportController from '../controllers/reportController';
 import * as noticeController from '../controllers/noticeController';
-import { upload, uploadNotice, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
+import { upload, uploadNotice, uploadPrivate, handleUploadError, verifyUploadMagicNumber } from '../middlewares/upload';
 
 const router = Router();
 
@@ -53,6 +53,10 @@ router.delete('/caregivers/:caregiverId/certificates/:certId', adminController.d
 router.delete('/caregivers/:id', adminController.deleteCaregiverMember);
 router.post('/caregivers/:id/reset-password', adminController.resetCaregiverPassword);
 router.delete('/consult-memos/:memoId', adminController.deleteConsultMemo);
+// 관리자 서류 직접등록 (③) — 민감 파일 비공개 저장
+router.post('/caregivers/:id/id-card', uploadPrivate.single('image'), handleUploadError, verifyUploadMagicNumber, adminController.adminUploadIdCard);
+router.post('/caregivers/:id/criminal-check', uploadPrivate.single('document'), handleUploadError, verifyUploadMagicNumber, adminController.adminUploadCriminalCheck);
+router.post('/caregivers/:id/certificate', uploadPrivate.single('image'), handleUploadError, verifyUploadMagicNumber, adminController.adminAddCertificate);
 router.put('/caregivers/:id/verify-id-card', adminController.verifyIdCard);
 router.delete('/caregivers/:id/verify-id-card', adminController.unverifyIdCard);
 router.put('/caregivers/:id/verify-criminal-check', adminController.verifyCriminalCheck);

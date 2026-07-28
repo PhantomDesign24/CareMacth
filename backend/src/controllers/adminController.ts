@@ -5289,3 +5289,53 @@ export const setCaregiverFeeExempt = async (req: AuthRequest, res: Response, nex
     res.json({ success: true, message: exempt ? '협회비 영구 제외되었습니다.' : '협회비 제외가 해제되었습니다.' });
   } catch (e) { next(e); }
 };
+
+// ============================================================
+// 관리자 신분증·서류 직접등록 (유상 ③)
+// ============================================================
+
+// POST /admin/caregivers/:id/id-card - 관리자가 간병인 신분증 대리 등록
+export const adminUploadIdCard = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!(req as any).file) throw new AppError('파일을 업로드해주세요.', 400);
+    const { id } = req.params;
+    const caregiver = await prisma.caregiver.findUnique({ where: { id } });
+    if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    const url = `/api/files/private/${(req as any).file.filename}`;
+    await prisma.caregiver.update({ where: { id }, data: { idCardImage: url } });
+    await logAdminAction(req, 'CAREGIVER_IDCARD_UPLOAD', { targetType: 'Caregiver', targetId: id });
+    res.json({ success: true, data: { url } });
+  } catch (e) { next(e); }
+};
+
+// POST /admin/caregivers/:id/criminal-check - 관리자가 범죄이력 회보서 대리 등록
+export const adminUploadCriminalCheck = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!(req as any).file) throw new AppError('파일을 업로드해주세요.', 400);
+    const { id } = req.params;
+    const caregiver = await prisma.caregiver.findUnique({ where: { id } });
+    if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    const url = `/api/files/private/${(req as any).file.filename}`;
+    await prisma.caregiver.update({ where: { id }, data: { criminalCheckDoc: url } });
+    await logAdminAction(req, 'CAREGIVER_CRIMINALDOC_UPLOAD', { targetType: 'Caregiver', targetId: id });
+    res.json({ success: true, data: { url } });
+  } catch (e) { next(e); }
+};
+
+// POST /admin/caregivers/:id/certificate - 관리자가 자격증 대리 등록
+export const adminAddCertificate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!(req as any).file) throw new AppError('파일을 업로드해주세요.', 400);
+    const { id } = req.params;
+    const { name, issuer, issueDate } = req.body as Record<string, string>;
+    if (!name || !issuer || !issueDate) throw new AppError('자격증명·발급기관·발급일을 입력해주세요.', 400);
+    const caregiver = await prisma.caregiver.findUnique({ where: { id } });
+    if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
+    const url = `/api/files/private/${(req as any).file.filename}`;
+    const cert = await prisma.certificate.create({
+      data: { caregiverId: id, name: String(name).slice(0, 100), issuer: String(issuer).slice(0, 100), issueDate: new Date(issueDate), imageUrl: url, verified: true },
+    });
+    await logAdminAction(req, 'CAREGIVER_CERT_ADMIN_ADD', { targetType: 'Caregiver', targetId: id, payload: { certId: cert.id } });
+    res.json({ success: true, data: { id: cert.id } });
+  } catch (e) { next(e); }
+};

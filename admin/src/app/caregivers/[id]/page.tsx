@@ -21,6 +21,9 @@ import {
   unverifyCertificate,
   unverifyIdCard,
   unverifyCriminalCheck,
+  adminUploadCaregiverIdCard,
+  adminUploadCaregiverCriminal,
+  adminAddCaregiverCertificate,
 } from "@/lib/api";
 import {
   caregiverStatusLabel as statusLabel,
@@ -866,6 +869,47 @@ export default function CaregiverDetailPage() {
         {/* Documents (서류) */}
         {activeTab === "documents" && (
           <div className="space-y-6">
+            {/* 관리자 서류 직접등록 (③) */}
+            <div className="card border-2 border-dashed border-orange-200 bg-orange-50/40">
+              <h3 className="mb-1 text-lg font-semibold text-gray-900">관리자 서류 직접등록</h3>
+              <p className="mb-4 text-xs text-gray-500">간병인 대신 신분증·범죄이력·자격증을 등록합니다. (민감 파일 비공개 저장)</p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">신분증</label>
+                  <input type="file" accept="image/*,application/pdf" disabled={actionLoading}
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      try { setActionLoading(true); await adminUploadCaregiverIdCard(id, f); alert("신분증 등록됨"); await fetchData(); }
+                      catch (err: any) { alert(err?.message || "업로드 실패"); } finally { setActionLoading(false); e.target.value = ""; }
+                    }}
+                    className="block w-full text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-white" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">범죄이력 회보서</label>
+                  <input type="file" accept="image/*,application/pdf" disabled={actionLoading}
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      try { setActionLoading(true); await adminUploadCaregiverCriminal(id, f); alert("회보서 등록됨"); await fetchData(); }
+                      catch (err: any) { alert(err?.message || "업로드 실패"); } finally { setActionLoading(false); e.target.value = ""; }
+                    }}
+                    className="block w-full text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-white" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">자격증</label>
+                  <input type="file" accept="image/*,application/pdf" disabled={actionLoading}
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      const name = prompt("자격증 이름"); if (!name) { e.target.value = ""; return; }
+                      const issuer = prompt("발급기관"); if (!issuer) { e.target.value = ""; return; }
+                      const issueDate = prompt("발급일 (YYYY-MM-DD)"); if (!issueDate) { e.target.value = ""; return; }
+                      try { setActionLoading(true); await adminAddCaregiverCertificate(id, f, { name, issuer, issueDate }); alert("자격증 등록됨"); await fetchData(); }
+                      catch (err: any) { alert(err?.message || "업로드 실패"); } finally { setActionLoading(false); e.target.value = ""; }
+                    }}
+                    className="block w-full text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-white" />
+                </div>
+              </div>
+            </div>
+
             {/* 자격증 목록 with image viewer */}
             <div className="card">
               <h3 className="mb-4 text-lg font-semibold text-gray-900">자격증 목록</h3>
