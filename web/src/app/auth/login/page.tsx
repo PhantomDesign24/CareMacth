@@ -200,13 +200,14 @@ export default function LoginPage() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">이메일</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">아이디 또는 이메일</label>
               <input
                 type="text"
                 className="input-field"
-                placeholder="example@email.com"
+                placeholder="아이디 · 이메일 · 전화번호"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
                 required
               />
             </div>

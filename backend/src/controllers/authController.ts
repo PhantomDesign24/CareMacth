@@ -106,7 +106,17 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { email, password, name, phone, role: rawRole, referredBy, agreeTerms, agreePrivacy } = req.body;
+    const { email: rawEmail, username: rawUsername, password, name, phone, role: rawRole, referredBy, agreeTerms, agreePrivacy } = req.body;
+
+    // 아이디(username) — 신규 가입은 아이디 사용. 이메일은 선택.
+    const username = rawUsername ? String(rawUsername).trim().toLowerCase() : null;
+    if (!rawEmail && !username) {
+      throw new AppError('아이디 또는 이메일을 입력해주세요.', 400);
+    }
+    // 이메일 없으면 아이디/전화 기반 placeholder 생성 (email 컬럼 NOT NULL 유지)
+    const email = rawEmail
+      ? String(rawEmail).trim().toLowerCase()
+      : `id_${username || String(phone).replace(/\D/g, '')}@id.carematch.local`;
 
     // Normalize role: frontend may send lowercase "guardian"/"caregiver"/"hospital"
     const roleMap: Record<string, string> = { guardian: 'GUARDIAN', caregiver: 'CAREGIVER', hospital: 'HOSPITAL' };
@@ -117,9 +127,16 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     }
 
     const existingUser = await prisma.user.findFirst({
-      where: { OR: [{ email }, { phone }] },
+      where: {
+        OR: [
+          { email },
+          { phone },
+          ...(username ? [{ username }] : []),
+        ],
+      },
     });
     if (existingUser) {
+      if (username && existingUser.username === username) throw new AppError('이미 사용 중인 아이디입니다.', 400);
       throw new AppError('이미 가입된 이메일 또는 전화번호입니다.', 400);
     }
 
@@ -166,6 +183,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         return tx.user.create({
           data: {
             email,
+            username,
             password: hashedPassword,
             name,
             phone,
@@ -246,19 +264,28 @@ async function sendWelcomeNotification(user: { id: string; name: string; role: s
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
+    // email 파라미터로 아이디/이메일/전화 무엇이든 허용 (기존 이메일 회원 + 신규 아이디 회원 공용)
+    const loginId = String(email || '').trim();
+    const normalizedPhone = loginId.replace(/[^0-9]/g, '');
 
-    const user = await prisma.user.findUnique({
-      where: { email },
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: loginId },
+          { username: loginId },
+          ...(normalizedPhone.length >= 10 ? [{ phone: normalizedPhone }] : []),
+        ],
+      },
       include: { guardian: true, caregiver: true, hospital: true },
     });
 
     if (!user || !user.password) {
-      throw new AppError('이메일 또는 비밀번호가 올바르지 않습니다.', 401);
+      throw new AppError('아이디(이메일) 또는 비밀번호가 올바르지 않습니다.', 401);
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      throw new AppError('이메일 또는 비밀번호가 올바르지 않습니다.', 401);
+      throw new AppError('아이디(이메일) 또는 비밀번호가 올바르지 않습니다.', 401);
     }
 
     if (user.deletedAt) {

@@ -101,6 +101,7 @@ function RegisterPageInner() {
   // Common fields
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -164,6 +165,10 @@ function RegisterPageInner() {
     }
 
     if (!isSocialMode) {
+      if (!/^[a-zA-Z0-9_]{4,20}$/.test(username)) {
+        setFieldErrors({ username: "아이디는 영문·숫자 4~20자여야 합니다." });
+        return;
+      }
       const pwOk = password.length >= 8;
       if (!pwOk) {
         setFieldErrors({ password: "비밀번호는 8자 이상이어야 합니다." });
@@ -219,7 +224,8 @@ function RegisterPageInner() {
 
       const payload: Record<string, unknown> = {
         name,
-        email,
+        username: username || undefined,
+        email: email || undefined,
         phone,
         password,
         role: resolvedRole,
@@ -630,9 +636,28 @@ function RegisterPageInner() {
               </div>
             </div>
 
+            {!isSocialMode && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  아이디 *
+                </label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="영문·숫자 4~20자"
+                  value={username}
+                  autoComplete="username"
+                  onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                  required
+                />
+                <p className="mt-1 text-xs text-gray-400">로그인에 사용할 아이디입니다. (영문·숫자 4~20자)</p>
+                {getFieldError("username")}
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                이메일 {isSocialMode ? '' : '*'}
+                이메일 {isSocialMode ? '' : '(선택)'}
               </label>
               <input
                 type="email"
@@ -640,9 +665,10 @@ function RegisterPageInner() {
                 placeholder="example@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required={!isSocialMode}
+                required={isSocialMode}
                 readOnly={isSocialMode && !!email}
               />
+              {!isSocialMode && <p className="mt-1 text-xs text-gray-400">비밀번호 찾기·알림 수신용 (선택 입력)</p>}
               {getFieldError("email")}
             </div>
 

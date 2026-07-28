@@ -9,7 +9,10 @@ const router = Router();
 // 일반 회원가입
 router.post('/register', [
   authLimiter,
-  body('email').isEmail().normalizeEmail().withMessage('유효한 이메일을 입력해주세요.'),
+  // 이메일은 선택(신규는 아이디 가입). 있으면 형식 검증.
+  body('email').optional({ nullable: true, checkFalsy: true }).isEmail().normalizeEmail().withMessage('유효한 이메일을 입력해주세요.'),
+  // 아이디: 영문/숫자 4~20자 (있을 때만)
+  body('username').optional({ nullable: true, checkFalsy: true }).matches(/^[a-zA-Z0-9_]{4,20}$/).withMessage('아이디는 영문·숫자 4~20자여야 합니다.'),
   body('password')
     .isLength({ min: 8 }).withMessage('비밀번호는 8자 이상이어야 합니다.'),
   body('name').notEmpty().trim().isLength({ min: 1, max: 50 }).withMessage('이름을 입력해주세요. (1~50자)'),

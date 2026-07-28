@@ -44,6 +44,7 @@ enum CaregiverWorkStatus {
 model User {
   id                String       @id @default(uuid())
   email             String       @unique
+  username          String?      @unique // 로그인 아이디(영문·숫자). 신규 가입은 아이디 사용, 기존은 이메일
   phone             String       @unique
   password          String? // 간편가입 시 null
   name              String
