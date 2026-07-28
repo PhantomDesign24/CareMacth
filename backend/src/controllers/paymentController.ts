@@ -245,6 +245,15 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
     // 포인트 사용 (자동 전액 사용 또는 수동 입력)
     let actualPointsUsed = 0;
     if ((pointsUsed && pointsUsed > 0) || useAllPoints) {
+      // 포인트 사용 최소 결제금액 조건 (관리자 설정) — 미달 시 포인트 사용 불가
+      const cfg = await prisma.platformConfig.findUnique({
+        where: { id: 'default' },
+        select: { pointMinAmount: true },
+      });
+      const pointMin = cfg?.pointMinAmount || 0;
+      if (pointMin > 0 && paymentAmount < pointMin) {
+        throw new AppError(`포인트는 결제금액이 ${pointMin.toLocaleString()}원 이상일 때 사용할 수 있습니다.`, 400);
+      }
       const user = await prisma.user.findUnique({
         where: { id: req.user!.id },
       });

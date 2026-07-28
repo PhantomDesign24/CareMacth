@@ -10,6 +10,7 @@ const defaultSettings: PlatformSettings = {
   familyCareFeeFixed: 0,
   taxRate: 3.3,
   referralPointAmount: 10000,
+  pointMinAmount: 0,
   noShowPenaltyThreshold: 3,
   excellentBadgeThreshold: 10,
   associationFeeDefault: 30000,
@@ -227,6 +228,28 @@ export default function SettingsPage() {
                 onChange={(e) => handleChange("referralPointAmount", Number(e.target.value))}
                 className="input-field pr-8"
                 step="1000"
+                min="0"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">원</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 포인트 사용 최소 결제금액 */}
+        <div className="card">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">포인트 사용 최소 결제금액</h3>
+            <p className="mt-1 text-sm text-gray-500">결제금액이 이 금액 이상일 때만 포인트를 사용할 수 있습니다. (0 = 제한 없음)</p>
+          </div>
+          <div className="max-w-xs">
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">최소 결제금액</label>
+            <div className="relative">
+              <input
+                type="number"
+                value={settings.pointMinAmount ?? 0}
+                onChange={(e) => handleChange("pointMinAmount", Number(e.target.value))}
+                className="input-field pr-8"
+                step="10000"
                 min="0"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">원</span>

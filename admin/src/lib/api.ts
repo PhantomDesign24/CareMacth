@@ -1015,6 +1015,7 @@ export interface PlatformSettings {
   familyCareFeeFixed?: number;
   taxRate?: number;
   referralPointAmount?: number;
+  pointMinAmount?: number;
   noShowPenaltyThreshold?: number;
   excellentBadgeThreshold?: number;
   associationFeeDefault?: number;

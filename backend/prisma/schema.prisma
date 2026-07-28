@@ -967,6 +967,7 @@ model PlatformConfig {
   familyFeeFixed         Int     @default(0) // 가족 간병 수수료 (원)
   taxRate                Float   @default(3.3) // 세율 (%)
   referralPoints         Int     @default(10000) // 추천인 포인트
+  pointMinAmount         Int     @default(0) // 포인트 사용 가능 최소 결제금액(원). 0이면 제한 없음
   noShowPenaltyThreshold Int     @default(3) // 노쇼 패널티 임계값
   badgeThreshold         Int     @default(10) // 우수 간병사 뱃지 매칭 횟수
   associationFeeDefault  Int     @default(120000) // 협회비 기본 금액(원) - 일률 12만원
