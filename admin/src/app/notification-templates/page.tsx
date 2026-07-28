@@ -496,7 +496,7 @@ export default function NotificationTemplatesPage() {
                       value={editForm.alimtalkButtonsJson}
                       onChange={(e) => setEditForm({ ...editForm, alimtalkButtonsJson: e.target.value })}
                       rows={4}
-                      placeholder={`예:\n[\n  {"name":"전화 상담","linkType":"WL","linkMo":"tel:1588-0000","linkPc":"tel:1588-0000"},\n  {"name":"매칭 취소","linkType":"WL","linkMo":"https://cm.phantomdesign.kr/...","linkPc":"https://..."}\n]`}
+                      placeholder={`예:\n[\n  {"name":"전화 상담","linkType":"WL","linkMo":"tel:1588-0000","linkPc":"tel:1588-0000"},\n  {"name":"매칭 취소","linkType":"WL","linkMo":"https://care-match.kr/...","linkPc":"https://..."}\n]`}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono resize-none"
                     />
                     <p className="text-[10px] text-gray-500 mt-1">최대 5개. linkType: WL(웹링크)/AL(앱링크)/AC(채널추가)/BC(상담톡전환). tel: 도 WL 로.</p>

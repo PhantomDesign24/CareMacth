@@ -6,8 +6,8 @@ import { AuthRequest } from '../middlewares/auth';
 import { buildPaymentHashes, buildMobileChkfake, requestApproval, requestMobileApproval, netCancel } from '../utils/inicis';
 import { notifyCaregiverSettlementEstimate } from '../services/notificationService';
 
-const WEB_BASE = process.env.WEB_BASE_URL || 'https://cm.phantomdesign.kr';
-const API_BASE = process.env.API_BASE_URL || 'https://cm.phantomdesign.kr/api';
+const WEB_BASE = process.env.WEB_BASE_URL || 'https://care-match.kr';
+const API_BASE = process.env.API_BASE_URL || 'https://care-match.kr/api';
 
 // 결제 시작/복귀 도메인을 요청 호스트 기준으로 산출 → care-match.kr 에서 결제하면 그 도메인에서 끝남.
 // 허용 도메인만 신뢰(스푸핑 방지), 그 외엔 기존 cm fallback.

@@ -688,7 +688,7 @@ export default function AlimtalkTemplatesPage() {
                     value={editButtons}
                     onChange={(e) => setEditButtons(e.target.value)}
                     rows={6}
-                    placeholder={`예시:\n[{"name":"공고 보기","linkType":"WL","linkMo":"https://cm.phantomdesign.kr/find-work","linkPc":"https://cm.phantomdesign.kr/find-work"}]`}
+                    placeholder={`예시:\n[{"name":"공고 보기","linkType":"WL","linkMo":"https://care-match.kr/find-work","linkPc":"https://care-match.kr/find-work"}]`}
                     className="input-field font-mono text-xs"
                   />
                   <p className="text-xs text-gray-400 mt-1">

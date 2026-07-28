@@ -220,7 +220,7 @@ export const adminUpdateInsurance = async (req: AuthRequest, res: Response, next
           config.jwt.secret,
           { expiresIn: '7d' },
         );
-        const base = process.env.WEB_BASE_URL || 'https://cm.phantomdesign.kr';
+        const base = process.env.WEB_BASE_URL || 'https://care-match.kr';
         downloadUrl = `${base}/api/files/insurance/${id}?t=${encodeURIComponent(dlToken)}`;
         overrideAlimtalkButtons = [
           { name: '서류 받기', linkType: 'WL', linkMo: downloadUrl, linkPc: downloadUrl },

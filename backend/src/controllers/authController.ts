@@ -886,7 +886,7 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
       { expiresIn: '15m' },
     );
 
-    const resetUrl = `${process.env.WEB_BASE_URL || 'https://cm.phantomdesign.kr'}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
+    const resetUrl = `${process.env.WEB_BASE_URL || 'https://care-match.kr'}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     let emailSent = false;
     try {

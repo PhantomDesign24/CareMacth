@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://cm.phantomdesign.kr/api";
+  process.env.NEXT_PUBLIC_API_URL || "https://care-match.kr/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,

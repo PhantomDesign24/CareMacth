@@ -340,7 +340,7 @@ export default function NotificationsPage() {
               type="text"
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
-              placeholder="예: /dashboard/guardian, https://cm.phantomdesign.kr/find-work"
+              placeholder="예: /dashboard/guardian, https://care-match.kr/find-work"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>

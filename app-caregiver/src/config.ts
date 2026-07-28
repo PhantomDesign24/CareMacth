@@ -2,7 +2,7 @@
  * 앱 공통 설정 — 도메인·브랜드 변경 시 이 파일만 수정
  */
 export const APP_CONFIG = {
-  domain: 'cm.phantomdesign.kr',
+  domain: 'care-match.kr',
   get webUrl() { return `https://${this.domain}`; },
   get apiUrl() { return `https://${this.domain}/api`; },
   phone: '1555-0801',

@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { authService } from './auth';
 
 // 도메인 중앙 관리 (shared/constants/index.ts 와 동일)
-const DOMAIN = 'cm.phantomdesign.kr';
+const DOMAIN = 'care-match.kr';
 const BASE_URL = `https://${DOMAIN}/api`;
 
 class ApiClient {

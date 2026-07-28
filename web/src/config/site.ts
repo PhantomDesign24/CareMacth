@@ -4,7 +4,7 @@
 
 export const SITE = {
   /** 정식 도메인 (scheme 포함) */
-  url: "https://cm.phantomdesign.kr",
+  url: "https://care-match.kr",
   /** 브랜드명(한글) */
   name: "케어매치",
   /** 브랜드명(영문) */

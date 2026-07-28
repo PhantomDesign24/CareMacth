@@ -3,7 +3,7 @@
 // ==========================================
 
 export const APP_NAME = '케어매치';
-export const DOMAIN = 'cm.phantomdesign.kr';
+export const DOMAIN = 'care-match.kr';
 export const API_BASE_URL = `https://${DOMAIN}/api`;
 
 // 의료행위 금지 안내 문구 (필수 표시)

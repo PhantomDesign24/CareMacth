@@ -4,7 +4,7 @@
 
 export const ADMIN_SITE = {
   /** 관리자 전용 URL */
-  url: "https://cm.phantomdesign.kr/admin",
+  url: "https://care-match.kr/admin",
   /** 브랜드명(한글) */
   name: "케어매치",
   /** 관리자 전용 타이틀 */

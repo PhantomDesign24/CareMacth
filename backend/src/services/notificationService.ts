@@ -378,7 +378,7 @@ async function sendAlimtalkForTemplate(
 
   // 버튼 URL 의 변수 치환 ({{webBase}}/#{webBase}/#{path} 등 → 실제 도메인)
   if (buttons && buttons.length > 0) {
-    const baseUrl = process.env.WEB_BASE_URL || 'https://cm.phantomdesign.kr';
+    const baseUrl = process.env.WEB_BASE_URL || 'https://care-match.kr';
     const webBase = baseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
     const subst = (s: string | undefined): string | undefined => {
       if (!s) return s;
