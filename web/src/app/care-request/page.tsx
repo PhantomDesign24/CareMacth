@@ -195,9 +195,17 @@ export default function CareRequestPage() {
         address,
         region: mergedRegions[0] || undefined,
         regions: mergedRegions,
-        startDate: data.startDate || new Date().toISOString(),
-        endDate: data.duration ? undefined : undefined,
-        durationDays: data.duration ? parseInt(data.duration) * (data.durationUnit === 'months' || data.durationUnit === '개월' ? 30 : data.durationUnit === 'weeks' || data.durationUnit === '주' ? 7 : 1) : undefined,
+        // 시작일 + 시작시간을 합쳐 시작 시각(24h 카운팅 기준)으로 전송
+        startDate: data.startDate
+          ? new Date(`${data.startDate}T${data.startTime || '09:00'}:00`).toISOString()
+          : new Date().toISOString(),
+        // 종료일이 있으면 그 기준으로 총일수 산출, 없으면 레거시 duration 계산
+        endDate: data.endDate
+          ? new Date(`${data.endDate}T${data.startTime || '09:00'}:00`).toISOString()
+          : undefined,
+        durationDays: (data.startDate && data.endDate)
+          ? Math.max(1, Math.floor((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / 86400000) + 1)
+          : (data.duration ? parseInt(data.duration) * (data.durationUnit === 'months' || data.durationUnit === '개월' ? 30 : data.durationUnit === 'weeks' || data.durationUnit === '주' ? 7 : 1) : undefined),
         dailyRate: data.dailyRate ? parseInt(data.dailyRate) : undefined,
         preferredGender: data.preferredGender ? (preferredGenderMap[data.preferredGender.toLowerCase()] || undefined) : undefined,
         specialRequirements: data.specialNotes || undefined,

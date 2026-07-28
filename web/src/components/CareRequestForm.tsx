@@ -37,6 +37,8 @@ interface CareRequestFormData {
 
   // Schedule
   startDate: string;
+  startTime: string; // 간병 시작 시각 (24시간 카운팅 기준)
+  endDate: string;   // 종료일 (총 간병기간 산출)
   duration: string;
   durationUnit: string;
 
@@ -109,6 +111,8 @@ const initialFormData: CareRequestFormData = {
   locationAddress: "",
   regions: [],
   startDate: "",
+  startTime: "09:00",
+  endDate: "",
   duration: "",
   durationUnit: "days",
   preferredGender: "",
@@ -790,9 +794,11 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const start = new Date(form.startDate);
       if (!isNaN(start.getTime()) && start < today) return "시작일은 오늘 이후여야 합니다.";
-      if (!form.duration?.trim()) return "간병 기간을 입력해주세요.";
-      const dur = parseInt(form.duration);
-      if (!Number.isFinite(dur) || dur <= 0) return "간병 기간은 1 이상이어야 합니다.";
+      if (!form.startTime) return "간병 시작 시간을 선택해주세요.";
+      if (!form.endDate) return "종료일을 선택해주세요.";
+      const end = new Date(form.endDate);
+      const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+      if (!Number.isFinite(days) || days <= 0) return "종료일은 시작일 이후여야 합니다.";
       return null;
     }
     if (s === 4) {
@@ -1552,37 +1558,49 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                기간 <span className="text-red-500">*</span>
+                시작 시간 <span className="text-red-500">*</span>
               </label>
               <input
-                type="number"
+                type="time"
                 className="input-field"
-                placeholder="숫자 입력"
-                min="1"
-                value={form.duration}
-                onChange={(e) => update("duration", e.target.value)}
+                value={form.startTime}
+                onChange={(e) => update("startTime", e.target.value)}
               />
+              <p className="mt-1 text-[11px] text-gray-400">이 시각 기준으로 24시간 카운트됩니다.</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                단위
+                종료일 <span className="text-red-500">*</span>
               </label>
-              <select
+              <input
+                type="date"
                 className="input-field"
-                value={form.durationUnit}
-                onChange={(e) => update("durationUnit", e.target.value)}
-              >
-                <option value="days">일</option>
-                <option value="weeks">주</option>
-                <option value="months">개월</option>
-              </select>
+                value={form.endDate}
+                min={form.startDate || new Date().toISOString().slice(0, 10)}
+                max={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000 * 2).toISOString().slice(0, 10)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) { update("endDate", ""); return; }
+                  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                  if (!m) return;
+                  update("endDate", v);
+                }}
+              />
             </div>
           </div>
-          {(parseInt(form.duration) || 0) > 0 && (
-            <p className="mt-2 text-sm text-gray-600">
-              총 <b className="text-orange-600">{(parseInt(form.duration) || 0) * (form.durationUnit === "weeks" ? 7 : form.durationUnit === "months" ? 30 : 1)}일</b>
-            </p>
-          )}
+          {(() => {
+            if (!form.startDate || !form.endDate) return null;
+            const s = new Date(form.startDate), e = new Date(form.endDate);
+            const days = Math.floor((e.getTime() - s.getTime()) / 86400000) + 1; // 시작·종료일 포함
+            if (!Number.isFinite(days) || days <= 0) return (
+              <p className="mt-2 text-sm text-red-500">종료일은 시작일 이후여야 합니다.</p>
+            );
+            return (
+              <p className="mt-2 text-sm text-gray-600">
+                총 <b className="text-orange-600">{days}일</b> · {form.startDate} {form.startTime} 시작
+              </p>
+            );
+          })()}
         </div>
       )}
 
