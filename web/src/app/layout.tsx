@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BottomTabBar from "@/components/BottomTabBar";
 import ToastContainer from "@/components/Toast";
+import ChannelTalk from "@/components/ChannelTalk";
 import { SITE } from "@/config/site";
 import "./globals.css";
 
@@ -153,41 +154,8 @@ export default function RootLayout({
           <BottomTabBar />
         </Suspense>
 
-        {/* ChannelTalk Script Placeholder */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              // ChannelTalk Boot Script Placeholder
-              // Replace CHANNEL_PLUGIN_KEY with your actual Channel Talk plugin key
-              /*
-              (function(){
-                var w = window;
-                if (w.ChannelIO) return;
-                var ch = function(){ ch.c(arguments); };
-                ch.q = [];
-                ch.c = function(args){ ch.q.push(args); };
-                w.ChannelIO = ch;
-                function l(){
-                  if (w.ChannelIOInitialized) return;
-                  w.ChannelIOInitialized = true;
-                  var s = document.createElement('script');
-                  s.type = 'text/javascript';
-                  s.async = true;
-                  s.src = 'https://cdn.channel.io/plugin/ch-plugin-web.js';
-                  var x = document.getElementsByTagName('script')[0];
-                  if(x.parentNode) x.parentNode.insertBefore(s, x);
-                }
-                if (document.readyState === 'complete') { l(); }
-                else { w.addEventListener('DOMContentLoaded', l); w.addEventListener('load', l); }
-              })();
-
-              ChannelIO('boot', {
-                "pluginKey": "CHANNEL_PLUGIN_KEY"
-              });
-              */
-            `,
-          }}
-        />
+        {/* 채널톡 상담 버튼 */}
+        <ChannelTalk />
       </body>
     </html>
   );
