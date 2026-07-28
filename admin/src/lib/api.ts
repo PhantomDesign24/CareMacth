@@ -346,6 +346,16 @@ export function adminAddCaregiverCertificate(id: string, file: File, meta: { nam
   return adminUploadFile(`/admin/caregivers/${id}/certificate`, "image", file, meta);
 }
 
+// 중복 가입 의심 조회 (②)
+export interface DuplicateAccount {
+  userId: string; caregiverId: string | null; guardianId: string | null;
+  role: string; phone: string; email: string; authProvider: string; createdAt: string;
+}
+export interface DuplicateGroup { name: string; count: number; accounts: DuplicateAccount[]; }
+export async function getDuplicateAccounts() {
+  return apiRequest<{ groups: DuplicateGroup[]; total: number }>("/admin/duplicate-accounts");
+}
+
 // ─── Patients ─────────────────────────────────────────
 export async function getPatients(params?: { search?: string; status?: string; page?: number; limit?: number; gender?: string; mobilityStatus?: string }) {
   return apiRequest<PaginatedResponse<Patient>>("/admin/patients", {

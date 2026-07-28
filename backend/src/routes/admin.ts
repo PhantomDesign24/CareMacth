@@ -79,6 +79,7 @@ router.get('/care-requests', adminController.getCareRequests);
 router.get('/care-requests/:id', adminController.getCareRequestDetail);
 router.delete('/care-requests/:id', adminController.deleteCareRequestAdmin);
 router.get('/matchings/export', adminController.exportMatchings);
+router.get('/duplicate-accounts', adminController.getDuplicateAccounts);
 
 // 환자 관리
 router.get('/patients', adminController.getPatients);

@@ -5339,3 +5339,47 @@ export const adminAddCertificate = async (req: AuthRequest, res: Response, next:
     res.json({ success: true, data: { id: cert.id } });
   } catch (e) { next(e); }
 };
+
+// ============================================================
+// 중복 가입 의심 조회 (유상 ②) — 같은 이름의 활성 계정이 2개 이상인 그룹
+// (전화는 유니크라 정확 중복은 가입 시 차단됨. 소셜 placeholder 전화 등으로 우회된 중복을 관리자가 확인·정리)
+// ============================================================
+export const getDuplicateAccounts = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { deletedAt: null, role: { in: ['GUARDIAN', 'CAREGIVER', 'HOSPITAL'] } },
+      select: {
+        id: true, name: true, phone: true, email: true, role: true, authProvider: true, createdAt: true,
+        caregiver: { select: { id: true } },
+        guardian: { select: { id: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    // 이름 정규화(공백 제거) 기준 그룹화
+    const byName = new Map<string, typeof users>();
+    for (const u of users) {
+      const key = (u.name || '').replace(/\s/g, '');
+      if (!key) continue;
+      if (!byName.has(key)) byName.set(key, [] as any);
+      (byName.get(key) as any).push(u);
+    }
+    const groups = [...byName.entries()]
+      .filter(([, arr]) => arr.length >= 2)
+      .map(([name, arr]) => ({
+        name,
+        count: arr.length,
+        accounts: arr.map((u: any) => ({
+          userId: u.id,
+          caregiverId: u.caregiver?.id || null,
+          guardianId: u.guardian?.id || null,
+          role: u.role,
+          phone: u.phone,
+          email: u.email,
+          authProvider: u.authProvider,
+          createdAt: u.createdAt.toISOString(),
+        })),
+      }))
+      .sort((a, b) => b.count - a.count);
+    res.json({ success: true, data: { groups, total: groups.length } });
+  } catch (e) { next(e); }
+};
