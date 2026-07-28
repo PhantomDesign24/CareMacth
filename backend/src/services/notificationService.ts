@@ -468,6 +468,37 @@ export async function sendFromTemplate(params: {
   return sendNotification({ userId, type, title, body, data });
 }
 
+// 관리자 직접생성 계정의 로그인정보(아이디/임시비번) 안내.
+//  - 비밀번호가 포함되므로 인앱(Notification DB)·이메일로는 절대 저장/발송하지 않고
+//    알림톡(실패 시 SMS/LMS 대체)만 사용한다.
+//  - 템플릿 ACCOUNT_CREATED_CREDENTIALS 가 카카오 승인코드까지 세팅돼 있어야 실제 발송된다.
+//    (미구성 시 무발송 — 관리자 UI 응답의 1회 노출로 전달)
+export async function sendAccountCredentials(params: {
+  userId: string;
+  name: string;
+  loginId: string;
+  tempPassword: string;
+}): Promise<void> {
+  try {
+    const template = await prisma.notificationTemplate.findUnique({
+      where: { key: 'ACCOUNT_CREATED_CREDENTIALS' },
+    });
+    if (!template || !template.enabled || !template.alimtalkTemplateCode) return;
+    const loginUrl = (process.env.WEB_BASE_URL || 'https://care-match.kr') + '/auth/login';
+    const map: Record<string, string> = {
+      name: params.name,
+      loginId: params.loginId,
+      tempPassword: params.tempPassword,
+      loginUrl,
+    };
+    const render = (str: string) =>
+      str.replace(/\{\{(\w+)\}\}/g, (_, v) => (map[v] == null ? '' : map[v]));
+    await sendAlimtalkForTemplate(params.userId, template, render(template.body), render(template.title));
+  } catch (e) {
+    console.error('[sendAccountCredentials] 실패:', (e as Error)?.message || e);
+  }
+}
+
 // 이메일 헬퍼 — 알림 템플릿 본문을 사용자 이메일로 발송
 async function sendEmailForTemplate(userId: string, title: string, body: string) {
   const { sendEmail } = await import('./emailService');

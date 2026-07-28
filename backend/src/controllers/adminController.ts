@@ -8,7 +8,7 @@ import { logAdminAction } from '../services/auditLog';
 import { generateReferralCode } from '../utils/generateCode';
 import { phoneVariants } from '../utils/phone';
 import bcrypt from 'bcryptjs';
-import { sendFromTemplate, renderTemplate, colorForRole, NOTIF_COLOR_PATIENT, NOTIF_COLOR_CAREGIVER, sendNotification as sendUserNotification } from '../services/notificationService';
+import { sendFromTemplate, renderTemplate, colorForRole, NOTIF_COLOR_PATIENT, NOTIF_COLOR_CAREGIVER, sendNotification as sendUserNotification, sendAccountCredentials } from '../services/notificationService';
 import { calculateEarning } from '../utils/earning';
 
 // GET /dashboard - 대시보드 통계
@@ -4115,18 +4115,20 @@ const DEFAULT_TEMPLATES = [
   { key: 'EXTENSION_REMINDER_1D', type: 'EXTENSION', name: '연장 1일 전 알림', title: '간병 종료 1일 전', body: '{patientName} 환자 간병이 내일 종료됩니다.', description: '변수: {patientName}' },
   { key: 'PAYMENT_COMPLETED', type: 'PAYMENT', name: '결제 완료', title: '결제 완료', body: '{amount}원 결제가 완료되었습니다.', description: '변수: {amount}' },
   { key: 'PENALTY_ISSUED', type: 'PENALTY', name: '패널티 부여', title: '패널티가 부여되었습니다', body: '{reason}', description: '변수: {reason}' },
+  // 관리자 직접등록·수동매칭 (P1) — 알림톡 발송 위해 관리자가 알리고 등록·검수 필요
+  { key: 'ACCOUNT_CREATED_CREDENTIALS', type: 'SYSTEM', name: '관리자 계정발급 로그인정보', title: '케어매치 로그인 정보 안내', body: '{{name}}님, 케어매치 계정이 생성되었습니다.\n아이디: {{loginId}}\n임시 비밀번호: {{tempPassword}}\n로그인 후 비밀번호를 변경해주세요.\n{{loginUrl}}', description: '관리자 직접등록 시 로그인정보 발송. 비밀번호 포함이라 알림톡(카카오 보안 템플릿) 전용이며 인앱/이메일 저장 안 함. 변수: {{name}}, {{loginId}}, {{tempPassword}}, {{loginUrl}}' },
+  { key: 'CONTRACT_MANUAL_MATCH_CAREGIVER', type: 'CONTRACT', name: '수동매칭 계약(간병사)', title: '간병 계약이 등록되었습니다', body: '{{patientName}} 환자 간병 계약이 등록되었습니다.\n기간: {{period}}\n계약 내용을 확인해주세요.', description: '관리자 수동매칭 시 간병사에게. 변수: {{patientName}}, {{period}}, {{startDate}}, {{endDate}}' },
+  { key: 'CONTRACT_MANUAL_MATCH_GUARDIAN', type: 'CONTRACT', name: '수동매칭 계약(보호자)', title: '간병 계약이 등록되었습니다', body: '{{patientName}} 환자 간병 계약이 등록되었습니다.\n간병사: {{caregiverName}}\n기간: {{period}}\n계약 내용을 확인해주세요.', description: '관리자 수동매칭 시 보호자에게. 변수: {{patientName}}, {{caregiverName}}, {{period}}' },
 ];
 
 // GET /admin/notification-templates
 export const getNotificationTemplates = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    // 템플릿 없으면 기본 시드
-    const count = await prisma.notificationTemplate.count();
-    if (count === 0) {
-      await prisma.notificationTemplate.createMany({
-        data: DEFAULT_TEMPLATES.map((t) => ({ ...t, isSystem: true })),
-      });
-    }
+    // 기본 템플릿 시드 — 누락된 key만 추가 (기존 편집 보존, 신규 default 자동 반영)
+    await prisma.notificationTemplate.createMany({
+      data: DEFAULT_TEMPLATES.map((t) => ({ ...t, isSystem: true })),
+      skipDuplicates: true,
+    });
 
     const templates = await prisma.notificationTemplate.findMany({
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
@@ -4906,6 +4908,9 @@ export const registerAlimtalkOnAligo = async (req: AuthRequest, res: Response, n
   try {
     const { key } = req.params;
     const autoRequestApproval = req.body?.autoRequestApproval !== false; // 기본 true
+    // 템플릿 유형/보안 지정 (비밀번호 등 민감정보 템플릿은 tplSecure='Y' 로 보안 템플릿 등록)
+    const tplType = ['BA', 'EX', 'AD', 'MI'].includes(req.body?.tplType) ? req.body.tplType : 'BA';
+    const tplSecure = req.body?.tplSecure === 'Y' || req.body?.tplSecure === true ? 'Y' : undefined;
 
     const tpl = await prisma.notificationTemplate.findUnique({ where: { key } });
     if (!tpl) throw new AppError('템플릿을 찾을 수 없습니다.', 404);
@@ -4937,7 +4942,8 @@ export const registerAlimtalkOnAligo = async (req: AuthRequest, res: Response, n
       tplCode: key,
       tplName,
       tplContent,
-      tplType: 'BA', // 기본형
+      tplType, // 기본형(BA) / 부가정보(EX) 등
+      ...(tplSecure && { tplSecure }), // 보안 템플릿(비밀번호 등)
       tplEmType: 'NONE',
       buttons,
     });
@@ -5454,6 +5460,9 @@ export const adminCreateGuardian = async (req: AuthRequest, res: Response, next:
       targetType: 'guardian', targetId: user.guardian!.id, payload: { userId: user.id, name, phone },
     });
 
+    // 로그인정보 알림톡 (구성 시 발송, 비번은 DB 미저장 — 알림톡/SMS 전용)
+    void sendAccountCredentials({ userId: user.id, name, loginId: username, tempPassword }).catch(() => {});
+
     res.status(201).json({
       success: true,
       data: {
@@ -5522,6 +5531,9 @@ export const adminCreateCaregiver = async (req: AuthRequest, res: Response, next
     await logAdminAction(req, 'ADMIN_CREATE_CAREGIVER', {
       targetType: 'caregiver', targetId: user.caregiver!.id, payload: { userId: user.id, name, phone },
     });
+
+    // 로그인정보 알림톡 (구성 시 발송, 비번은 DB 미저장 — 알림톡/SMS 전용)
+    void sendAccountCredentials({ userId: user.id, name, loginId: username, tempPassword }).catch(() => {});
 
     res.status(201).json({
       success: true,
@@ -5662,17 +5674,33 @@ export const adminCreateManualMatch = async (req: AuthRequest, res: Response, ne
       return { careRequest, contract };
     });
 
-    // 양측 알림
-    await sendUserNotification({
-      userId: caregiver.userId, type: 'CONTRACT',
-      title: '관리자 수동 매칭 완료',
-      body: `관리자가 간병 계약을 등록했습니다. 계약 내용을 확인해주세요. (기간 ${startDate?.slice?.(0, 10) || ''} ~ ${endDate?.slice?.(0, 10) || ''})`,
+    // 양측 알림 — 템플릿 기반(인앱 + 구성 시 알림톡). 앱 미설치 유저에게도 알림톡으로 도달.
+    const period = `${startDate?.slice?.(0, 10) || ''} ~ ${endDate?.slice?.(0, 10) || ''}`;
+    const patientName = (await prisma.patient.findUnique({ where: { id: resolvedPatientId }, select: { name: true } }))?.name || '';
+    const matchVars = {
+      caregiverName: caregiver.user.name,
+      guardianName: guardian.user.name,
+      patientName,
+      period,
+      startDate: startDate?.slice?.(0, 10) || '',
+      endDate: endDate?.slice?.(0, 10) || '',
+    };
+    await sendFromTemplate({
+      userId: caregiver.userId,
+      key: 'CONTRACT_MANUAL_MATCH_CAREGIVER',
+      vars: matchVars,
+      fallbackTitle: '관리자 수동 매칭 완료',
+      fallbackBody: `관리자가 간병 계약을 등록했습니다. 계약 내용을 확인해주세요. (기간 ${period})`,
+      fallbackType: 'CONTRACT',
       data: { contractId: result.contract.id },
     }).catch(() => {});
-    await sendUserNotification({
-      userId: guardian.userId, type: 'CONTRACT',
-      title: '관리자 수동 매칭 완료',
-      body: `관리자가 간병 계약을 등록했습니다. 계약 내용을 확인해주세요.`,
+    await sendFromTemplate({
+      userId: guardian.userId,
+      key: 'CONTRACT_MANUAL_MATCH_GUARDIAN',
+      vars: matchVars,
+      fallbackTitle: '관리자 수동 매칭 완료',
+      fallbackBody: `관리자가 간병 계약을 등록했습니다. 계약 내용을 확인해주세요. (기간 ${period})`,
+      fallbackType: 'CONTRACT',
       data: { contractId: result.contract.id },
     }).catch(() => {});
 
