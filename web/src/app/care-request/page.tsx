@@ -162,7 +162,7 @@ export default function CareRequestPage() {
       const isHospital = data.locationType === 'hospital';
       const hospitalName = isHospital ? (data.locationName || undefined) : undefined;
       const address = isHospital
-        ? (data.locationAddress || data.locationName || '주소 미입력')
+        ? ([data.hospitalAddress, data.locationAddress].filter(Boolean).join(' ') || data.locationName || '주소 미입력')
         : ([data.locationName, data.locationAddress].filter(Boolean).join(' ') || '주소 미입력');
 
       // 지역은 더 이상 사용자가 선택하지 않음 → 주소에서 시/도·시군구 자동 도출하여 매칭에 사용.

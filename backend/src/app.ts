@@ -26,6 +26,7 @@ import noticeRoutes from './routes/notice';
 import filesRoutes from './routes/files';
 import businessInquiryRoutes from './routes/businessInquiry';
 import legalRoutes from './routes/legal';
+import placesRoutes from './routes/places';
 import { errorHandler } from './middlewares/errorHandler';
 import { generalLimiter } from './middlewares/rateLimiter';
 import { sanitizeInput } from './middlewares/sanitize';
@@ -170,6 +171,7 @@ app.use('/api/notices', noticeRoutes);
 app.use('/api/files', filesRoutes);
 app.use('/api/business-inquiries', businessInquiryRoutes);
 app.use('/api/legal', legalRoutes);
+app.use('/api/places', placesRoutes);
 
 // Error handler
 app.use(errorHandler);

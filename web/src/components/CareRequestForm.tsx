@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { guardianAPI } from "@/lib/api";
+import React, { useEffect, useRef, useState } from "react";
+import { guardianAPI, placesAPI } from "@/lib/api";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -33,6 +33,7 @@ interface CareRequestFormData {
   locationType: string;
   locationName: string;
   locationAddress: string;
+  hospitalAddress: string; // 병원 검색으로 자동입력된 도로명 주소
   regions: string[];
 
   // Schedule
@@ -109,6 +110,7 @@ const initialFormData: CareRequestFormData = {
   locationType: "",
   locationName: "",
   locationAddress: "",
+  hospitalAddress: "",
   regions: [],
   startDate: "",
   startTime: "09:00",
@@ -589,6 +591,11 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
   const [savedPatients, setSavedPatients] = useState<SavedPatient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
   const [feeRules, setFeeRules] = useState<CareFeeRules>(DEFAULT_FEE_RULES);
+  // 병원명 검색(카카오 로컬) 자동완성
+  const [hospResults, setHospResults] = useState<Array<{ name: string; address: string; roadAddress: string; phone: string }>>([]);
+  const [hospLoading, setHospLoading] = useState(false);
+  const [hospOpen, setHospOpen] = useState(false);
+  const hospJustSelected = useRef(false);
 
   // 백엔드에서 산출 룰 로드 (어드민이 수정한 값 반영)
   useEffect(() => {
@@ -734,6 +741,40 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
       }
       return next;
     });
+  };
+
+  // 병원명 실시간 검색 (300ms 디바운스) — 병원 유형에서만
+  useEffect(() => {
+    if (form.locationType !== "hospital") { setHospResults([]); setHospOpen(false); return; }
+    if (hospJustSelected.current) { hospJustSelected.current = false; return; }
+    const q = form.locationName.trim();
+    if (q.length < 2) { setHospResults([]); setHospOpen(false); return; }
+    setHospLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await placesAPI.searchHospitals(q);
+        const places = ((res.data as { places?: typeof hospResults })?.places) || [];
+        setHospResults(places);
+        setHospOpen(places.length > 0);
+      } catch {
+        setHospResults([]); setHospOpen(false);
+      } finally {
+        setHospLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [form.locationName, form.locationType]);
+
+  // 병원 선택 시 병원명 + 도로명주소 자동입력 + 지역 자동추가
+  const selectHospital = (p: { name: string; address: string }) => {
+    hospJustSelected.current = true;
+    setForm((prev) => {
+      const region = (p.address || "").split(" ").slice(0, 2).join(" ").trim();
+      const regions = region && !prev.regions.includes(region) ? [...prev.regions, region] : prev.regions;
+      return { ...prev, locationName: p.name, hospitalAddress: p.address, regions };
+    });
+    setHospOpen(false);
+    setHospResults([]);
   };
 
   const toggleDiagnosis = (item: string) => {
@@ -1482,37 +1523,81 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               {form.locationType === "hospital" ? "병원명" : "주소"}{" "}
               <span className="text-red-500">*</span>
             </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                className="input-field flex-1"
-                placeholder={
-                  form.locationType === "hospital"
-                    ? "병원 이름을 입력하거나 주소 검색"
-                    : "주소 검색을 눌러주세요"
-                }
-                value={form.locationName}
-                onChange={(e) => update("locationName", e.target.value)}
-                readOnly={form.locationType === 'home'}
-              />
-              <button
-                type="button"
-                onClick={() => openDaumPostcode((data) => {
-                  update('locationName', data.address);
-                  // 자치구가 있으면 region 자동 채움
-                  if (data.sido && data.sigungu) {
-                    const region = `${data.sido} ${data.sigungu}`;
-                    if (!form.regions.includes(region)) {
-                      update('regions', [...form.regions, region]);
-                    }
+            <div className="relative">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="input-field flex-1"
+                  placeholder={
+                    form.locationType === "hospital"
+                      ? "병원 이름을 입력하면 검색됩니다"
+                      : "주소 검색을 눌러주세요"
                   }
-                })}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium whitespace-nowrap"
-              >
-                🔍 주소 검색
-              </button>
+                  value={form.locationName}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setForm((prev) => ({
+                      ...prev,
+                      locationName: v,
+                      ...(prev.locationType === "hospital" ? { hospitalAddress: "" } : {}),
+                    }));
+                  }}
+                  onFocus={() => { if (form.locationType === "hospital" && hospResults.length > 0) setHospOpen(true); }}
+                  onBlur={() => setTimeout(() => setHospOpen(false), 150)}
+                  readOnly={form.locationType === 'home'}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => openDaumPostcode((data) => {
+                    // 병원: 도로명주소만 자동입력(병원명 보존) / 자택: 주소를 장소명에 입력
+                    if (form.locationType === "hospital") {
+                      update('hospitalAddress', data.address);
+                    } else {
+                      update('locationName', data.address);
+                    }
+                    if (data.sido && data.sigungu) {
+                      const region = `${data.sido} ${data.sigungu}`;
+                      if (!form.regions.includes(region)) {
+                        update('regions', [...form.regions, region]);
+                      }
+                    }
+                  })}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium whitespace-nowrap"
+                >
+                  🔍 주소 검색
+                </button>
+              </div>
+              {/* 병원명 자동완성 드롭다운 */}
+              {form.locationType === "hospital" && hospOpen && (
+                <ul className="absolute z-20 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                  {hospResults.map((p, i) => (
+                    <li key={i}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectHospital(p)}
+                        className="block w-full text-left px-3 py-2.5 hover:bg-orange-50 border-b border-gray-50 last:border-0"
+                      >
+                        <span className="block text-sm font-medium text-gray-900">{p.name}</span>
+                        <span className="block text-xs text-gray-500">{p.address}{p.phone ? ` · ${p.phone}` : ""}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">우편번호 검색으로 정확한 주소를 입력해주세요.</p>
+            {form.locationType === "hospital" ? (
+              form.hospitalAddress ? (
+                <p className="text-[11px] text-emerald-600 mt-1">📍 {form.hospitalAddress}</p>
+              ) : hospLoading ? (
+                <p className="text-[11px] text-gray-400 mt-1">병원 검색 중…</p>
+              ) : (
+                <p className="text-[11px] text-gray-400 mt-1">병원명을 입력해 목록에서 선택하세요. 목록에 없으면 직접 입력 후 ‘주소 검색’으로 주소를 지정할 수 있어요.</p>
+              )
+            ) : (
+              <p className="text-[11px] text-gray-400 mt-1">우편번호 검색으로 정확한 주소를 입력해주세요.</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">

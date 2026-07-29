@@ -183,6 +183,12 @@ export const regionStatsAPI = {
   get: () => api.get("/care-requests/region-stats"),
 };
 
+// 병원 장소 검색 (카카오 로컬 프록시) — 응답: { places: [{ name, address, phone, ... }] }
+export const placesAPI = {
+  searchHospitals: (query: string) =>
+    api.get("/places/hospitals", { params: { query } }),
+};
+
 export const careRequestAPI = {
   create: (data: Record<string, unknown>) =>
     api.post("/care-requests", data),
