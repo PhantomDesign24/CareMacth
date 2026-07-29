@@ -4116,9 +4116,9 @@ const DEFAULT_TEMPLATES = [
   { key: 'PAYMENT_COMPLETED', type: 'PAYMENT', name: '결제 완료', title: '결제 완료', body: '{amount}원 결제가 완료되었습니다.', description: '변수: {amount}' },
   { key: 'PENALTY_ISSUED', type: 'PENALTY', name: '패널티 부여', title: '패널티가 부여되었습니다', body: '{reason}', description: '변수: {reason}' },
   // 관리자 직접등록·수동매칭 (P1) — 알림톡 발송 위해 관리자가 알리고 등록·검수 필요
-  { key: 'ACCOUNT_CREATED_CREDENTIALS', type: 'SYSTEM', name: '관리자 계정발급 로그인정보', title: '케어매치 로그인 정보 안내', body: '{{name}}님, 케어매치 계정이 생성되었습니다.\n아이디: {{loginId}}\n임시 비밀번호: {{tempPassword}}\n로그인 후 비밀번호를 변경해주세요.\n{{loginUrl}}', description: '관리자 직접등록 시 로그인정보 발송. 비밀번호 포함이라 알림톡(카카오 보안 템플릿) 전용이며 인앱/이메일 저장 안 함. 변수: {{name}}, {{loginId}}, {{tempPassword}}, {{loginUrl}}' },
-  { key: 'CONTRACT_MANUAL_MATCH_CAREGIVER', type: 'CONTRACT', name: '수동매칭 계약(간병사)', title: '간병 계약이 등록되었습니다', body: '{{patientName}} 환자 간병 계약이 등록되었습니다.\n기간: {{period}}\n계약 내용을 확인해주세요.', description: '관리자 수동매칭 시 간병사에게. 변수: {{patientName}}, {{period}}, {{startDate}}, {{endDate}}' },
-  { key: 'CONTRACT_MANUAL_MATCH_GUARDIAN', type: 'CONTRACT', name: '수동매칭 계약(보호자)', title: '간병 계약이 등록되었습니다', body: '{{patientName}} 환자 간병 계약이 등록되었습니다.\n간병사: {{caregiverName}}\n기간: {{period}}\n계약 내용을 확인해주세요.', description: '관리자 수동매칭 시 보호자에게. 변수: {{patientName}}, {{caregiverName}}, {{period}}' },
+  { key: 'ACCOUNT_CREATED_CREDENTIALS', type: 'SYSTEM', name: '관리자 계정발급 로그인정보', title: '케어매치 로그인 정보 안내', body: '[케어매치] 계정 생성 안내\n\n{{name}}님, 케어매치 계정이 생성되었습니다.\n\n▶ 아이디 : {{loginId}}\n▶ 임시 비밀번호 : {{tempPassword}}\n\n로그인 후 비밀번호를 변경해 주세요.', description: '관리자 직접등록 시 로그인정보 발송. 비밀번호 포함이라 알림톡(카카오 보안 템플릿) 전용이며 인앱/이메일 저장 안 함. 변수: {{name}}, {{loginId}}, {{tempPassword}}', alimtalkButtonsJson: '[{"name":"로그인 바로가기","linkType":"WL","linkMo":"https://care-match.kr/auth/login","linkPc":"https://care-match.kr/auth/login"}]' },
+  { key: 'CONTRACT_MANUAL_MATCH_CAREGIVER', type: 'CONTRACT', name: '수동매칭 계약(간병사)', title: '간병 계약이 등록되었습니다', body: '[케어매치] 간병 계약 등록\n\n{{patientName}} 환자님의 간병 계약이 등록되었습니다.\n\n▶ 기간 : {{period}}\n\n계약 내용을 확인해 주세요.', description: '관리자 수동매칭 시 간병사에게. 변수: {{patientName}}, {{period}}, {{startDate}}, {{endDate}}', alimtalkButtonsJson: '[{"name":"계약 확인하기","linkType":"WL","linkMo":"https://care-match.kr/auth/login","linkPc":"https://care-match.kr/auth/login"}]' },
+  { key: 'CONTRACT_MANUAL_MATCH_GUARDIAN', type: 'CONTRACT', name: '수동매칭 계약(보호자)', title: '간병 계약이 등록되었습니다', body: '[케어매치] 간병 계약 등록\n\n{{patientName}} 환자님의 간병 계약이 등록되었습니다.\n\n▶ 간병인 : {{caregiverName}}\n▶ 기간 : {{period}}\n\n계약 내용을 확인해 주세요.', description: '관리자 수동매칭 시 보호자에게. 변수: {{patientName}}, {{caregiverName}}, {{period}}', alimtalkButtonsJson: '[{"name":"계약 확인하기","linkType":"WL","linkMo":"https://care-match.kr/auth/login","linkPc":"https://care-match.kr/auth/login"}]' },
 ];
 
 // GET /admin/notification-templates
@@ -4954,16 +4954,19 @@ export const registerAlimtalkOnAligo = async (req: AuthRequest, res: Response, n
       throw new AppError(reg.reason || '알리고 템플릿 등록 실패', 502);
     }
 
-    // 2) 검수 요청 (옵션)
+    // 알리고가 자체 템플릿 코드(UJ_xxxx)를 발급하므로 그 코드를 사용해야 함 (key 아님)
+    const realCode = (reg as any)?.raw?.data?.templtCode || key;
+
+    // 2) 검수 요청 (옵션) — 반드시 알리고 발급 코드로
     let approval: any = null;
     if (autoRequestApproval) {
-      approval = await requestTemplateApproval(key);
+      approval = await requestTemplateApproval(realCode);
     }
 
-    // 3) DB에 tpl_code 저장 (이미 있어도 덮어씀)
+    // 3) DB에 알리고 발급 tpl_code 저장 (발송 시 이 코드로 전송)
     await prisma.notificationTemplate.update({
       where: { key },
-      data: { alimtalkTemplateCode: key },
+      data: { alimtalkTemplateCode: realCode },
     });
 
     res.json({
@@ -4975,6 +4978,23 @@ export const registerAlimtalkOnAligo = async (req: AuthRequest, res: Response, n
         approvalInfo: approval?.raw || null,
         approvalReason: approval?.reason,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /admin/alimtalk-templates/:key/request-approval — 이미 등록된 템플릿의 검수(승인) 요청만 재시도
+export const requestAlimtalkApproval = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { key } = req.params;
+    const tpl = await prisma.notificationTemplate.findUnique({ where: { key } });
+    if (!tpl) throw new AppError('템플릿을 찾을 수 없습니다.', 404);
+    if (!tpl.alimtalkTemplateCode) throw new AppError('먼저 알리고에 등록해주세요. (알리고 코드 없음)', 400);
+    const approval = await requestTemplateApproval(tpl.alimtalkTemplateCode);
+    res.json({
+      success: !!approval?.success,
+      data: { tplCode: tpl.alimtalkTemplateCode, approvalInfo: approval?.raw || null, reason: approval?.reason },
     });
   } catch (error) {
     next(error);

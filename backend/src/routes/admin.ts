@@ -272,6 +272,7 @@ router.post('/alimtalk-logs/:id/resend', adminController.resendAlimtalkLog);
 router.get('/alimtalk-templates/aligo-status', adminController.getAligoTemplateStatus);
 router.post('/alimtalk-templates/bulk-register', adminController.bulkRegisterAlimtalkTemplates);
 router.post('/alimtalk-templates/:key/register-aligo', adminController.registerAlimtalkOnAligo);
+router.post('/alimtalk-templates/:key/request-approval', adminController.requestAlimtalkApproval);
 router.delete('/alimtalk-templates/:key/aligo', adminController.deleteAlimtalkOnAligo);
 
 // 공지사항
