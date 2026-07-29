@@ -4124,11 +4124,14 @@ const DEFAULT_TEMPLATES = [
 // GET /admin/notification-templates
 export const getNotificationTemplates = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    // 기본 템플릿 시드 — 누락된 key만 추가 (기존 편집 보존, 신규 default 자동 반영)
-    await prisma.notificationTemplate.createMany({
-      data: DEFAULT_TEMPLATES.map((t) => ({ ...t, isSystem: true })),
-      skipDuplicates: true,
-    });
+    // 기본 템플릿 시드 — 누락 key가 있을 때만 추가 (평상시 GET은 읽기전용, 기존 편집 보존)
+    const count = await prisma.notificationTemplate.count();
+    if (count < DEFAULT_TEMPLATES.length) {
+      await prisma.notificationTemplate.createMany({
+        data: DEFAULT_TEMPLATES.map((t) => ({ ...t, isSystem: true })),
+        skipDuplicates: true,
+      });
+    }
 
     const templates = await prisma.notificationTemplate.findMany({
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
@@ -5587,10 +5590,12 @@ export const adminCreateManualMatch = async (req: AuthRequest, res: Response, ne
 
     // 환자: patientId 있으면 재사용, 없으면 생성 (guardianId+name+birthDate 유니크 → upsert)
     let resolvedPatientId: string;
+    let resolvedPatientName = '';
     if (patientId) {
       const p = await prisma.patient.findFirst({ where: { id: patientId, guardianId } });
       if (!p) throw new AppError('환자를 찾을 수 없습니다.', 404);
       resolvedPatientId = p.id;
+      resolvedPatientName = p.name;
     } else {
       const pName = String(patient?.name || '').trim();
       if (!pName) throw new AppError('환자 이름을 입력해주세요.', 400);
@@ -5604,6 +5609,7 @@ export const adminCreateManualMatch = async (req: AuthRequest, res: Response, ne
       const existing = await prisma.patient.findUnique({
         where: { guardianId_name_birthDate: { guardianId, name: pName, birthDate: pBirth } },
       });
+      resolvedPatientName = pName;
       if (existing) {
         resolvedPatientId = existing.id;
       } else {
@@ -5676,7 +5682,7 @@ export const adminCreateManualMatch = async (req: AuthRequest, res: Response, ne
 
     // 양측 알림 — 템플릿 기반(인앱 + 구성 시 알림톡). 앱 미설치 유저에게도 알림톡으로 도달.
     const period = `${startDate?.slice?.(0, 10) || ''} ~ ${endDate?.slice?.(0, 10) || ''}`;
-    const patientName = (await prisma.patient.findUnique({ where: { id: resolvedPatientId }, select: { name: true } }))?.name || '';
+    const patientName = resolvedPatientName;
     const matchVars = {
       caregiverName: caregiver.user.name,
       guardianName: guardian.user.name,

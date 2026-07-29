@@ -359,6 +359,7 @@ async function sendAlimtalkForTemplate(
   message: string,
   subject?: string,
   overrideButtons?: AligoButton[],
+  opts?: { suppressFailover?: boolean },
 ) {
   if (!template.alimtalkTemplateCode) return;
   const user = await prisma.user.findUnique({
@@ -395,12 +396,15 @@ async function sendAlimtalkForTemplate(
 
   // 대체문자 자동 첨부 — 알림톡 발송 실패 시 SMS/LMS 로 대체 발송 (수신자 미가입·차단·번호 변경 등)
   // SMS/LMS 판정은 발송 본문(message) 자체 길이 기준 — prefix는 카운트 제외하여 LMS 강제 전환 방지
+  // suppressFailover: 비밀번호 등 민감정보 템플릿은 평문 SMS 대체발송을 막는다(보안 템플릿 정합).
   const compactBody = (message || '').replace(/\s+/g, ' ').trim();
   const useShortForm = compactBody.length <= 80; // 80자 — '[케어매치] ' (8자) prefix 여유분 포함
   const fallbackMessage = `[케어매치] ${compactBody}`;
-  const fallbackSms = useShortForm
-    ? { type: 'SMS' as const, message: fallbackMessage, subject: subject || '' }
-    : { type: 'LMS' as const, message: fallbackMessage, subject: subject || '케어매치 알림' };
+  const fallbackSms = opts?.suppressFailover
+    ? undefined
+    : useShortForm
+      ? { type: 'SMS' as const, message: fallbackMessage, subject: subject || '' }
+      : { type: 'LMS' as const, message: fallbackMessage, subject: subject || '케어매치 알림' };
 
   await sendAlimtalk({
     receiver: user.phone,
@@ -408,7 +412,7 @@ async function sendAlimtalkForTemplate(
     message,
     subject,
     buttons,
-    failoverSms: fallbackSms,
+    ...(fallbackSms && { failoverSms: fallbackSms }),
     meta: { userId, templateKey: template.key || null },
   });
 }
@@ -493,7 +497,8 @@ export async function sendAccountCredentials(params: {
     };
     const render = (str: string) =>
       str.replace(/\{\{(\w+)\}\}/g, (_, v) => (map[v] == null ? '' : map[v]));
-    await sendAlimtalkForTemplate(params.userId, template, render(template.body), render(template.title));
+    // 비밀번호 포함 → 평문 SMS 대체발송 금지(보안 알림톡만). 미도달 시 관리자 UI 노출값으로 수기 전달.
+    await sendAlimtalkForTemplate(params.userId, template, render(template.body), render(template.title), undefined, { suppressFailover: true });
   } catch (e) {
     console.error('[sendAccountCredentials] 실패:', (e as Error)?.message || e);
   }

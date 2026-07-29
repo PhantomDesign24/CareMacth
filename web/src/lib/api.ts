@@ -1,7 +1,12 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
+// 브라우저에서는 항상 현재 접속 도메인의 /api 를 호출(same-origin).
+//  → 도메인 전환(care-match.kr)·멀티도메인(cm 하위호환)·빌드타임 .env 값과 무관하게 올바른 도메인으로 요청.
+// SSR/빌드 단계(window 없음)에서만 env 또는 기본값 사용.
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://care-match.kr/api";
+  typeof window !== "undefined"
+    ? `${window.location.origin}/api`
+    : process.env.NEXT_PUBLIC_API_URL || "https://care-match.kr/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,

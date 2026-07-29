@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 // 채널톡(Channel.io) 플러그인 키 — 클라이언트에 노출되는 공개 키
 // (Access Secret 은 멤버 검증 해시용 서버 비밀키라 여기 두지 않음)
@@ -47,6 +48,16 @@ function readUser(): { name?: string; phone?: string; email?: string } | null {
 }
 
 export default function ChannelTalk() {
+  const pathname = usePathname();
+
+  // 결제 경로에서는 채널톡 플로팅 버튼 숨김 (결제 CTA·약관 체크박스와 겹침/오터치 방지)
+  useEffect(() => {
+    const isPayment = !!pathname && /\/payment(\/|$)/.test(pathname);
+    try {
+      (window as any).ChannelIO?.(isPayment ? "hideChannelButton" : "showChannelButton");
+    } catch {}
+  }, [pathname]);
+
   useEffect(() => {
     loadChannelSDK();
 

@@ -278,6 +278,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
           { email: loginId },
           { email: lowerId },
           { username: lowerId },
+          { username: loginId }, // 과거 대문자로 저장된 아이디(관리자 수동생성 초기분) 정확일치 대비
           ...(normalizedPhone.length >= 10 ? [{ phone: normalizedPhone }] : []),
         ],
       },
