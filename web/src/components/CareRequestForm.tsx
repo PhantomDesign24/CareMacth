@@ -808,54 +808,67 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
   };
 
   // 단계별 검증 — 막혔을 때 "어느 항목" 때문인지 구체 메시지 반환 (null = 통과)
-  const validateStep = (s: number): string | null => {
+  type StepError = { msg: string; id?: string };
+  const validateStep = (s: number): StepError | null => {
     if (s === 1) {
-      if (!form.patientName?.trim()) return "환자 이름을 입력해주세요.";
-      if (!form.patientAge?.trim()) return "환자 나이를 입력해주세요.";
-      if (!form.patientGender) return "환자 성별을 선택해주세요.";
-      if (!form.consciousness) return "환자 의식상태를 선택해주세요.";
-      if (!form.mobility) return "환자 거동상태를 선택해주세요.";
-      if (form.hasDementia && !form.dementiaLevel) return "치매 정도를 선택해주세요.";
-      if (form.hasInfection && !form.infectionDetails?.trim()) return "감염 세부사항을 입력해주세요.";
-      if (!form.hospitalizationReason) return "입원 사유를 선택해주세요.";
-      if (form.hospitalizationReason === 'ETC' && !form.hospitalizationReasonEtc?.trim()) return "입원 사유의 기타 내용을 입력해주세요.";
-      if (form.diagnosis.includes("기타(직접입력)") && !form.diagnosisEtc?.trim()) return "기타 진단명을 직접 입력해주세요.";
+      if (!form.patientName?.trim()) return { msg: "환자 이름을 입력해주세요.", id: "cr-patientName" };
+      if (!form.patientAge?.trim()) return { msg: "환자 나이를 입력해주세요.", id: "cr-patientAge" };
+      if (!form.patientGender) return { msg: "환자 성별을 선택해주세요.", id: "cr-patientGender" };
+      if (!form.consciousness) return { msg: "환자 의식상태를 선택해주세요.", id: "cr-consciousness" };
+      if (!form.mobility) return { msg: "환자 거동상태를 선택해주세요.", id: "cr-mobility" };
+      if (form.hasDementia && !form.dementiaLevel) return { msg: "치매 정도를 선택해주세요.", id: "cr-dementiaLevel" };
+      if (form.hasInfection && !form.infectionDetails?.trim()) return { msg: "감염 세부사항을 입력해주세요.", id: "cr-infectionDetails" };
+      if (!form.hospitalizationReason) return { msg: "입원 사유를 선택해주세요.", id: "cr-hospitalizationReason" };
+      if (form.hospitalizationReason === 'ETC' && !form.hospitalizationReasonEtc?.trim()) return { msg: "입원 사유의 기타 내용을 입력해주세요.", id: "cr-hospitalizationReason" };
+      if (form.diagnosis.includes("기타(직접입력)") && !form.diagnosisEtc?.trim()) return { msg: "기타 진단명을 직접 입력해주세요.", id: "cr-diagnosisEtc" };
       return null;
     }
     if (s === 2) {
-      if (!form.careType) return "간병 유형을 선택해주세요.";
-      if (!form.careSchedule) return "간병 스케줄을 선택해주세요.";
-      if (form.careSchedule === "hourly" && (!form.hourlyStart || !form.hourlyEnd)) return "시간제 간병의 시작/종료 시간을 입력해주세요.";
+      if (!form.careType) return { msg: "간병 유형을 선택해주세요.", id: "cr-careType" };
+      if (!form.careSchedule) return { msg: "간병 스케줄을 선택해주세요.", id: "cr-careSchedule" };
+      if (form.careSchedule === "hourly" && (!form.hourlyStart || !form.hourlyEnd)) return { msg: "시간제 간병의 시작/종료 시간을 입력해주세요.", id: "cr-hourlyStart" };
       return null;
     }
     if (s === 3) {
       // 지역은 더 이상 선택받지 않음 — 병원/자택 주소 기반으로 매칭됨
-      if (!form.locationName?.trim()) return "장소명(병원명 또는 주소)을 입력해주세요.";
-      if (!form.startDate) return "시작일을 선택해주세요.";
+      if (!form.locationName?.trim()) return { msg: "장소명(병원명 또는 주소)을 입력해주세요.", id: "cr-locationName" };
+      if (!form.startDate) return { msg: "시작일을 선택해주세요.", id: "cr-startDate" };
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const start = new Date(form.startDate);
-      if (!isNaN(start.getTime()) && start < today) return "시작일은 오늘 이후여야 합니다.";
-      if (!form.startTime) return "간병 시작 시간을 선택해주세요.";
-      if (!form.endDate) return "종료일을 선택해주세요.";
+      if (!isNaN(start.getTime()) && start < today) return { msg: "시작일은 오늘 이후여야 합니다.", id: "cr-startDate" };
+      if (!form.startTime) return { msg: "간병 시작 시간을 선택해주세요.", id: "cr-startTime" };
+      if (!form.endDate) return { msg: "종료일을 선택해주세요.", id: "cr-endDate" };
       const end = new Date(form.endDate);
       // 24시간 카운팅: 종료일은 시작일 다음 날 이후여야 함 (백엔드 계약 산정과 동일)
-      if (!(end.getTime() > start.getTime())) return "종료일은 시작일 다음 날 이후로 선택해주세요.";
+      if (!(end.getTime() > start.getTime())) return { msg: "종료일은 시작일 다음 날 이후로 선택해주세요.", id: "cr-endDate" };
       return null;
     }
     if (s === 4) {
-      if (!form.disclaimerChecked) return "의료행위 금지 안내 동의에 체크해주세요.";
+      if (!form.disclaimerChecked) return { msg: "의료행위 금지 안내 동의에 체크해주세요.", id: "cr-disclaimer" };
       return null;
     }
     return null;
   };
 
-  const validateAll = (): string | null =>
+  const validateAll = (): StepError | null =>
     validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4);
 
-  // 다음 단계로 — 막히면 사유를 화면에 표시 (버튼 비활성화 대신)
+  // 에러 필드로 스크롤 + 포커스 (아래에만 뜨고 포커스 안 되던 문제 해결)
+  const focusErrorField = (id?: string) => {
+    if (typeof window === "undefined") return;
+    setTimeout(() => {
+      const el = id ? document.getElementById(id) : null;
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        (el as HTMLElement).focus?.({ preventScroll: true } as FocusOptions);
+      }
+    }, 50);
+  };
+
+  // 다음 단계로 — 막히면 사유를 화면에 표시 (버튼 비활성화 대신) + 해당 필드로 이동
   const goNext = () => {
     const err = validateStep(step);
-    if (err) { setStepError(err); return; }
+    if (err) { setStepError(err.msg); focusErrorField(err.id); return; }
     setStepError("");
     setStep(step + 1);
   };
@@ -864,7 +877,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
     e.preventDefault();
     if (submitting) return;
     const err = validateAll();
-    if (err) { setStepError(err); alert(err); return; }
+    if (err) { setStepError(err.msg); focusErrorField(err.id); return; }
     // 제시 일당 입력 제거 — 항상 환자 상태 기반 자동 책정값으로 제출
     const finalForm = { ...form, dailyRate: String(autoFee.average) };
     onSubmit?.(finalForm);
@@ -991,6 +1004,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                 type="text"
                 className="input-field"
                 placeholder="환자 이름 입력"
+                id="cr-patientName"
                 value={form.patientName}
                 onChange={(e) => update("patientName", e.target.value)}
               />
@@ -1003,6 +1017,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                 type="number"
                 className="input-field"
                 placeholder="나이 입력"
+                id="cr-patientAge"
                 value={form.patientAge}
                 onChange={(e) => update("patientAge", e.target.value)}
               />
@@ -1013,6 +1028,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               </label>
               <select
                 className="input-field"
+                id="cr-patientGender"
                 value={form.patientGender}
                 onChange={(e) => update("patientGender", e.target.value)}
               >
@@ -1052,7 +1068,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             <label className="block text-sm font-medium text-gray-700 mb-2">
               의식 상태 <span className="text-red-500">*</span>
             </label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+            <div id="cr-consciousness" tabIndex={-1} className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 outline-none">
               {[
                 { value: "clear", label: "명료" },
                 { value: "drowsy", label: "기면" },
@@ -1086,7 +1102,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             <label className="block text-sm font-medium text-gray-700 mb-2">
               거동 상태 <span className="text-red-500">*</span>
             </label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
+            <div id="cr-mobility" tabIndex={-1} className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 outline-none">
               {[
                 { value: "independent", label: "독립 보행" },
                 { value: "assisted", label: "보조 보행" },
@@ -1164,6 +1180,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                   autoFocus
                   className="w-full px-4 py-3 text-base bg-white border-2 border-amber-400 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none placeholder:text-gray-400"
                   placeholder="예: 파킨슨 합병증, 다발성 외상 등"
+                  id="cr-diagnosisEtc"
                   value={form.diagnosisEtc}
                   onChange={(e) => update("diagnosisEtc", e.target.value)}
                 />
@@ -1226,6 +1243,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             {form.hasDementia && (
               <select
                 className="input-field"
+                id="cr-dementiaLevel"
                 value={form.dementiaLevel}
                 onChange={(e) => update("dementiaLevel", e.target.value)}
               >
@@ -1255,6 +1273,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                 type="text"
                 className="input-field"
                 placeholder="감염 질환명을 입력하세요 (예: MRSA, 결핵 등)"
+                id="cr-infectionDetails"
                 value={form.infectionDetails}
                 onChange={(e) => update("infectionDetails", e.target.value)}
               />
@@ -1334,7 +1353,9 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             <YesNoToggle label="장루 관리 필요" value={form.hasStoma} onChange={(v) => update('hasStoma', v)} />
 
             {/* 입원 사유 */}
-            <RadioWithEtc required label="입원 사유" options={PATIENT_STATE_OPTIONS.HOSP_REASON} value={form.hospitalizationReason} etcValue={form.hospitalizationReasonEtc} onChange={(v) => update('hospitalizationReason', v)} onEtcChange={(v) => update('hospitalizationReasonEtc', v)} />
+            <div id="cr-hospitalizationReason" tabIndex={-1} className="outline-none">
+              <RadioWithEtc required label="입원 사유" options={PATIENT_STATE_OPTIONS.HOSP_REASON} value={form.hospitalizationReason} etcValue={form.hospitalizationReasonEtc} onChange={(v) => update('hospitalizationReason', v)} onEtcChange={(v) => update('hospitalizationReasonEtc', v)} />
+            </div>
 
             {/* 코로나 / 백신 */}
             <RadioRow label="코로나 검사 여부" options={PATIENT_STATE_OPTIONS.COVID} value={form.covidTestRequirement} onChange={(v) => update('covidTestRequirement', v)} />
@@ -1377,7 +1398,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             <label className="block text-sm font-medium text-gray-700 mb-3">
               간병 유형 <span className="text-red-500">*</span>
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div id="cr-careType" tabIndex={-1} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 outline-none">
               {CARE_TYPES.map((ct) => (
                 <label
                   key={ct.value}
@@ -1407,7 +1428,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             <label className="block text-sm font-medium text-gray-700 mb-3">
               간병 시간 <span className="text-red-500">*</span>
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div id="cr-careSchedule" tabIndex={-1} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 outline-none">
               <label
                 className={`relative p-4 sm:p-5 rounded-2xl border-2 cursor-pointer transition-all ${
                   form.careSchedule === "24h"
@@ -1462,6 +1483,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                 <input
                   type="time"
                   className="input-field"
+                  id="cr-hourlyStart"
                   value={form.hourlyStart}
                   onChange={(e) => update("hourlyStart", e.target.value)}
                 />
@@ -1533,6 +1555,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                       ? "병원 이름을 입력하면 검색됩니다"
                       : "주소 검색을 눌러주세요"
                   }
+                  id="cr-locationName"
                   value={form.locationName}
                   onChange={(e) => {
                     const v = e.target.value;
@@ -1625,6 +1648,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               <input
                 type="date"
                 className="input-field"
+                id="cr-startDate"
                 value={form.startDate}
                 min={new Date().toISOString().slice(0, 10)}
                 max={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000 * 2).toISOString().slice(0, 10)}
@@ -1648,6 +1672,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               <input
                 type="time"
                 className="input-field"
+                id="cr-startTime"
                 value={form.startTime}
                 onChange={(e) => update("startTime", e.target.value)}
               />
@@ -1660,6 +1685,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               <input
                 type="date"
                 className="input-field"
+                id="cr-endDate"
                 value={form.endDate}
                 min={form.startDate || new Date().toISOString().slice(0, 10)}
                 max={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000 * 2).toISOString().slice(0, 10)}
@@ -1771,6 +1797,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
+                id="cr-disclaimer"
                 checked={form.disclaimerChecked}
                 onChange={(e) => update("disclaimerChecked", e.target.checked)}
                 className="w-5 h-5 mt-0.5 text-primary-500 border-gray-300 rounded focus:ring-primary-400"
