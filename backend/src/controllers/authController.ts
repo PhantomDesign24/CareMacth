@@ -140,7 +140,12 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     });
     if (existingUser) {
       if (username && existingUser.username === username) throw new AppError('이미 사용 중인 아이디입니다.', 400);
-      throw new AppError('이미 가입된 이메일 또는 전화번호입니다.', 400);
+      // 연락처·이메일 중복 → 고객센터 문의 안내 (관리자 확인 후 역할 추가로 처리)
+      throw new AppError(
+        '이미 가입되어있는 연락처나 이메일입니다. 중복 가입을 원할 시 고객센터로 문의 바랍니다.',
+        409,
+        { code: 'DUPLICATE_CONTACT' },
+      );
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
@@ -220,7 +225,11 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       });
     } catch (e: any) {
       if (e?.code === 'P2002') {
-        throw new AppError('이미 가입된 이메일 또는 전화번호입니다.', 409);
+        throw new AppError(
+          '이미 가입되어있는 연락처나 이메일입니다. 중복 가입을 원할 시 고객센터로 문의 바랍니다.',
+          409,
+          { code: 'DUPLICATE_CONTACT' },
+        );
       }
       throw e;
     }

@@ -5261,6 +5261,58 @@ export const forceCloseCareRequest = async (req: AuthRequest, res: Response, nex
   }
 };
 
+// POST /admin/users/:userId/add-role — 중복가입 승인(역할 추가)
+//  같은 사람이 보호자↔간병인을 함께 이용하려는 경우, 연락처/이메일이 유니크라
+//  계정을 새로 만들 수 없으므로 기존 계정에 다른 역할 프로필을 추가한다.
+//  (클라이언트 요구 4-4: "관리자 페이지에서 확인된 정보만 중복가입 승인")
+export const adminAddUserRole = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { userId } = req.params;
+    const role = String(req.body?.role || '').toUpperCase();
+    if (!['GUARDIAN', 'CAREGIVER'].includes(role)) {
+      throw new AppError('추가할 역할은 GUARDIAN 또는 CAREGIVER 만 가능합니다.', 400);
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { guardian: true, caregiver: true },
+    });
+    if (!user) throw new AppError('회원을 찾을 수 없습니다.', 404);
+    if (user.deletedAt || !user.isActive) throw new AppError('탈퇴·비활성 회원에게는 역할을 추가할 수 없습니다.', 400);
+
+    if (role === 'GUARDIAN' && user.guardian) throw new AppError('이미 보호자 프로필이 있습니다.', 400);
+    if (role === 'CAREGIVER' && user.caregiver) throw new AppError('이미 간병인 프로필이 있습니다.', 400);
+
+    if (role === 'GUARDIAN') {
+      await prisma.guardian.create({ data: { userId } });
+    } else {
+      // 관리자가 신원을 확인하고 추가하는 것이므로 승인 상태로 생성
+      await prisma.caregiver.create({
+        data: { userId, status: 'APPROVED', workStatus: 'AVAILABLE' },
+      });
+    }
+
+    await logAdminAction(req, 'ADMIN_ADD_USER_ROLE', {
+      targetType: 'user', targetId: userId,
+      payload: { addedRole: role, currentRole: user.role, name: user.name },
+    });
+
+    await sendUserNotification({
+      userId,
+      type: 'SYSTEM',
+      title: '이용 역할이 추가되었습니다',
+      body: `${role === 'CAREGIVER' ? '간병인' : '보호자'} 역할이 추가되었습니다. 같은 계정으로 이용하실 수 있습니다.`,
+    }).catch(() => {});
+
+    res.json({
+      success: true,
+      data: { userId, addedRole: role, name: user.name },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // DELETE /admin/contracts/:contractId — 매칭(계약) 삭제
 //  기록 보존 원칙상 "금전·평판 기록이 없는" 건만 삭제 가능:
 //   결제/정산/리뷰/분쟁이 하나라도 있으면 거부, 진행중 계약도 거부(강제취소 후 삭제)

@@ -81,6 +81,8 @@ router.post('/care-requests/:id/force-close', adminController.forceCloseCareRequ
 router.delete('/care-requests/:id', adminController.deleteCareRequestAdmin);
 router.get('/matchings/export', adminController.exportMatchings);
 router.get('/duplicate-accounts', adminController.getDuplicateAccounts);
+// 중복가입 승인 = 기존 계정에 역할 추가 (연락처/이메일 유니크라 계정 분리 불가)
+router.post('/users/:userId/add-role', adminController.adminAddUserRole);
 
 // ① 관리자 직접등록 + 수동 매칭 (전화/내방 접수 → 공고 없이 바로 계약)
 router.post('/manual/guardian', [

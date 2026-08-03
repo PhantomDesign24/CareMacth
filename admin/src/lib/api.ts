@@ -1272,3 +1272,11 @@ export async function getAligoTemplateStatusMap(): Promise<Record<string, { insp
 export async function deleteContractAdmin(contractId: string) {
   return apiRequest<{ deleted: boolean; contractId: string }>(`/admin/contracts/${contractId}`, { method: "DELETE" });
 }
+
+// 중복가입 승인 — 기존 계정에 역할 추가 (GUARDIAN | CAREGIVER)
+export async function adminAddUserRole(userId: string, role: "GUARDIAN" | "CAREGIVER") {
+  return apiRequest<{ userId: string; addedRole: string; name: string }>(
+    `/admin/users/${userId}/add-role`,
+    { method: "POST", body: { role } },
+  );
+}
