@@ -63,3 +63,10 @@ SIRmatch11.zip
 backend/key/
 *.pem
 keypass.enc
+
+# 클라이언트 제공 문서(공개 저장소에 올리지 않음)
+*.hwpx
+*.hwp
+*.pptx
+*.docx
+*.xlsx

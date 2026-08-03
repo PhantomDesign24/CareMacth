@@ -197,6 +197,7 @@ export default function AlimtalkLogsPage() {
               <th className="px-3 py-2 text-left">수신자</th>
               <th className="px-3 py-2 text-left">템플릿</th>
               <th className="px-3 py-2 text-center">상태</th>
+              <th className="px-3 py-2 text-center">발송수단</th>
               <th className="px-3 py-2 text-left">에러 사유</th>
               <th className="px-3 py-2 text-left">본문</th>
               <th className="px-3 py-2 text-center">액션</th>
@@ -205,7 +206,7 @@ export default function AlimtalkLogsPage() {
           <tbody className="divide-y divide-gray-100">
             {items.length === 0 && !loading ? (
               <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-gray-400">발송 이력이 없습니다.</td>
+                <td colSpan={8} className="px-3 py-10 text-center text-gray-400">발송 이력이 없습니다.</td>
               </tr>
             ) : (
               items.map((it) => {
@@ -229,6 +230,23 @@ export default function AlimtalkLogsPage() {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${stat.cls}`}>
                         {stat.label}
                       </span>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {(() => {
+                        const via = (it as any).sentVia as string | null;
+                        if (!via) return <span className="text-[11px] text-gray-400">-</span>;
+                        const isAlim = via === "ALIMTALK";
+                        return (
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                              isAlim ? "bg-yellow-100 text-yellow-800" : "bg-blue-100 text-blue-700"
+                            }`}
+                            title={isAlim ? "카카오 알림톡으로 발송" : "알림톡 실패 → 대체문자로 발송(요금 발생)"}
+                          >
+                            {isAlim ? "알림톡" : `문자(${via})`}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-2 text-xs text-red-600 max-w-[200px] truncate" title={it.errorReason || ""}>
                       {it.errorReason || ""}

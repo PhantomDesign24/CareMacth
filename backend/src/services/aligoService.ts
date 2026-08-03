@@ -62,7 +62,7 @@ export async function sendAlimtalk(params: SendAlimtalkParams): Promise<{ succes
     console.error('[aligoService] log INSERT 실패:', e?.message || e);
   }
 
-  const finalize = async (status: 'SUCCESS' | 'FAILED', extras: { aligoMsgId?: string | null; errorReason?: string | null }) => {
+  const finalize = async (status: 'SUCCESS' | 'FAILED', extras: { aligoMsgId?: string | null; errorReason?: string | null; sentVia?: string | null }) => {
     if (!logId) return;
     try {
       await prisma.alimtalkLog.update({
@@ -71,6 +71,7 @@ export async function sendAlimtalk(params: SendAlimtalkParams): Promise<{ succes
           status,
           aligoMsgId: extras.aligoMsgId || null,
           errorReason: extras.errorReason || null,
+          ...(extras.sentVia ? { sentVia: extras.sentVia } : {}),
           sentAt: new Date(),
         },
       });
@@ -115,9 +116,16 @@ export async function sendAlimtalk(params: SendAlimtalkParams): Promise<{ succes
       timeout: 10000,
     });
     const data = res.data;
-    // 알리고 응답: { code: 0, message: '성공', info: { msg_id: '...' } } / 실패는 code != 0
+    // 알리고 응답: { code: 0, message: '성공', info: { type: 'AT', mid: 12345678, scnt, fcnt } }
+    //  - info.mid  : 발송 식별자(이력 조회 키)
+    //  - info.type : 실제 발송 수단 (AT=알림톡, SMS/LMS/MMS=대체문자로 전환된 경우)
     if (data && data.code === 0) {
-      await finalize('SUCCESS', { aligoMsgId: data?.info?.msg_id ? String(data.info.msg_id) : (data?.msg_id ? String(data.msg_id) : null) });
+      const info = data?.info || {};
+      const mid = info.mid != null ? String(info.mid)
+        : (info.msg_id != null ? String(info.msg_id) : (data?.msg_id != null ? String(data.msg_id) : null));
+      const t = String(info.type || '').toUpperCase();
+      const via = t ? (t === 'AT' ? 'ALIMTALK' : t) : null;
+      await finalize('SUCCESS', { aligoMsgId: mid, sentVia: via });
       return { success: true, raw: data, logId };
     }
     await finalize('FAILED', { errorReason: data?.message || '알리고 발송 실패' });
@@ -314,5 +322,48 @@ export async function deleteAlimtalkTemplate(
       success: false,
       reason: err?.response?.data?.message || err?.message || '삭제 호출 중 오류',
     };
+  }
+}
+
+// ============================================
+// 발송 이력 조회 — 실제 발송 수단(알림톡/대체문자) 확인용
+// ============================================
+const ALIGO_HISTORY_LIST_ENDPOINT = 'https://kakaoapi.aligo.in/akv10/history/list/';
+
+/**
+ * 알리고 발송 이력 조회.
+ *  응답의 type 값: AT=알림톡, SMS/LMS/MMS=대체문자로 발송된 건
+ *  반환: { [mid]: 'ALIMTALK' | 'SMS' | 'LMS' | 'MMS' }
+ */
+export async function fetchAlimtalkHistory(opts?: {
+  startdate?: string; // YYYYMMDD
+  limit?: number;
+  page?: number;
+}): Promise<Record<string, string>> {
+  if (!isAligoConfigured()) return {};
+  const form = new URLSearchParams();
+  form.append('apikey', ALIGO_API_KEY!);
+  form.append('userid', ALIGO_USER_ID!);
+  form.append('page', String(opts?.page ?? 1));
+  form.append('limit', String(Math.min(opts?.limit ?? 100, 500)));
+  if (opts?.startdate) form.append('startdate', opts.startdate);
+  try {
+    const res = await axios.post(ALIGO_HISTORY_LIST_ENDPOINT, form.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      timeout: 15000,
+    });
+    const list = res.data?.list;
+    if (!Array.isArray(list)) return {};
+    const map: Record<string, string> = {};
+    for (const item of list) {
+      const mid = String(item?.mid ?? '');
+      if (!mid) continue;
+      const t = String(item?.type || '').toUpperCase();
+      map[mid] = t === 'AT' ? 'ALIMTALK' : (t || 'UNKNOWN');
+    }
+    return map;
+  } catch (err: any) {
+    console.error('[aligoService] 발송이력 조회 실패:', err?.response?.data || err?.message);
+    return {};
   }
 }

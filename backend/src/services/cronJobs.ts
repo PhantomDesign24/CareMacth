@@ -212,6 +212,36 @@ export function setupCronJobs() {
     }
   });
 
+  // 매 10분: 알림톡 발송 로그의 "실제 발송 수단" 보정
+  //  알리고는 알림톡 실패 시 대체문자(SMS/LMS)로 자동 전환하고 접수는 성공으로 응답한다.
+  //  → 발송 시점엔 알 수 없으므로 발송이력(type: AT/SMS/LMS)을 조회해 sentVia 를 채운다.
+  cron.schedule('*/10 * * * *', async () => {
+    try {
+      const pending = await prisma.alimtalkLog.findMany({
+        where: { status: 'SUCCESS', sentVia: null, aligoMsgId: { not: null } },
+        select: { id: true, aligoMsgId: true },
+        orderBy: { createdAt: 'desc' },
+        take: 300,
+      });
+      if (pending.length === 0) return;
+      const { fetchAlimtalkHistory } = await import('./aligoService');
+      const today = new Date();
+      const ymd = (d: Date) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+      const yesterday = new Date(today.getTime() - 86400000);
+      const map = { ...(await fetchAlimtalkHistory({ startdate: ymd(yesterday), limit: 500 })) };
+      let updated = 0;
+      for (const log of pending) {
+        const via = map[String(log.aligoMsgId)];
+        if (!via) continue;
+        await prisma.alimtalkLog.update({ where: { id: log.id }, data: { sentVia: via } });
+        updated += 1;
+      }
+      if (updated > 0) console.log(`[CRON] 알림톡 발송수단 보정: ${updated}건`);
+    } catch (error) {
+      console.error('[CRON] 알림톡 발송수단 보정 오류:', error);
+    }
+  });
+
   // 매시간: 간병 기간이 끝난 요청 자동 종료 (자정까지 기다리지 않고 1시간 내 정리)
   //  — 종료된 매칭이 목록에 '진행중' 으로 남아 보이거나 재매칭이 막히는 것을 방지
   cron.schedule('23 * * * *', async () => {

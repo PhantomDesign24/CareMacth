@@ -1200,6 +1200,7 @@ model AlimtalkLog {
   message      String
   buttonsJson  Json?
   status       AlimtalkLogStatus @default(PENDING)
+  sentVia      String? // 실제 발송 수단: ALIMTALK(카카오) / SMS / LMS — 알리고 발송이력으로 확인
   aligoMsgId   String?
   errorReason  String?
   sentAt       DateTime?
