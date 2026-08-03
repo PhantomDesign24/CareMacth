@@ -107,7 +107,15 @@ router.get('/private/:filename', async (req: AuthRequest, res: Response, next: N
           select: { caregiverId: true },
         }),
         prisma.insuranceDocRequest.findFirst({
-          where: { OR: [{ documentUrl: publicUrl }, { documentUrl: legacyUrl }] },
+          // 다중 업로드(documentUrls) 지원 — 2번째 이후 파일도 신청자가 열 수 있어야 함
+          where: {
+            OR: [
+              { documentUrl: publicUrl },
+              { documentUrl: legacyUrl },
+              { documentUrls: { has: publicUrl } },
+              { documentUrls: { has: legacyUrl } },
+            ],
+          },
           select: { requestedBy: true },
         }),
       ]);

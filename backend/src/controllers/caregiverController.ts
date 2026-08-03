@@ -4,6 +4,7 @@ import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { sendToAdmins } from '../services/notificationService';
+import { calculateEarning } from '../utils/earning';
 
 // GET /profile - 프로필 조회
 export const getProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -513,16 +514,21 @@ export const getActivity = async (req: AuthRequest, res: Response, next: NextFun
     // 간병사에게 보이는 금액은 매칭수수료(보호자 부담 플랫폼 이용료) 제외 기준으로 통일.
     //  공고 목록의 netDailyRate 와 동일해야 계약서·활동이력 금액이 어긋나지 않는다.
     const contractsForCaregiver = contracts.map((c: any) => {
-      const feeFixed = c.platformFeeFixed || 0;
-      const netDailyRate = Math.max(0, (c.dailyRate || 0) - feeFixed);
       const days = Math.max(1, Math.round((c.totalAmount || 0) / (c.dailyRate || 1)));
-      const netTotalAmount = netDailyRate * days;
-      const tax = Math.round(netTotalAmount * ((c.taxRate ?? 3.3) / 100));
+      // 실제 정산과 동일 공식 — 정률(%) + 정액(원/일) 수수료를 모두 반영
+      const calc = calculateEarning({
+        amount: c.totalAmount || 0,
+        platformFeePercent: c.platformFee || 0,
+        platformFeeFixed: c.platformFeeFixed || 0,
+        durationDays: days,
+        taxRate: c.taxRate ?? 3.3,
+      });
+      const netTotalAmount = Math.max(0, (c.totalAmount || 0) - calc.platformFee);
       return {
         ...c,
-        netDailyRate,
+        netDailyRate: Math.round(netTotalAmount / days),
         netTotalAmount,
-        netPayoutAmount: Math.max(0, netTotalAmount - tax),
+        netPayoutAmount: calc.netAmount, // 원천징수까지 차감(협회비 별도)
       };
     });
 

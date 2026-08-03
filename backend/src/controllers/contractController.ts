@@ -314,13 +314,20 @@ export const getContract = async (req: AuthRequest, res: Response, next: NextFun
       ? (dpCfg?.individualFeeFixed ?? 0)
       : (dpCfg?.familyFeeFixed ?? 0);
 
-    // 간병사 표시용 금액 — 매칭수수료(보호자 부담 플랫폼 이용료) 제외 기준.
-    //  공고 목록의 netDailyRate 와 동일 기준이라 계약서·활동이력에서도 같은 금액이 보인다.
+    // 간병사 표시용 금액 — 실제 정산과 동일 공식(calculateEarning)으로 산출한다.
+    //  정률 수수료(platformFee %)까지 반영해야 정산 내역과 어긋나지 않는다.
     const feeFixed = (contract as any).platformFeeFixed || 0;
-    const netDailyRate = Math.max(0, contract.dailyRate - feeFixed);
     const contractDays = Math.max(1, Math.round(contract.totalAmount / (contract.dailyRate || 1)));
-    const netTotalAmount = netDailyRate * contractDays;
-    const netTax = Math.round(netTotalAmount * ((contract.taxRate ?? 3.3) / 100));
+    const calcForView = calculateEarning({
+      amount: contract.totalAmount,
+      platformFeePercent: contract.platformFee,
+      platformFeeFixed: feeFixed,
+      durationDays: contractDays,
+      taxRate: contract.taxRate ?? 3.3,
+    });
+    const netTotalAmount = Math.max(0, contract.totalAmount - calcForView.platformFee); // 수수료 제외 총액
+    const netDailyRate = Math.round(netTotalAmount / contractDays);
+    const netTax = calcForView.taxAmount;
 
     res.json({
       success: true,
@@ -329,7 +336,7 @@ export const getContract = async (req: AuthRequest, res: Response, next: NextFun
         directFeePerDay,
         netDailyRate,
         netTotalAmount,
-        netPayoutAmount: Math.max(0, netTotalAmount - netTax), // 원천징수 차감 후 지급 예정액
+        netPayoutAmount: calcForView.netAmount, // 원천징수까지 차감한 지급 예정액(협회비 별도)
       },
     });
   } catch (error) {
@@ -1124,16 +1131,23 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     // 간병사(을) 기준 금액 = 매칭수수료 제외 (매칭수수료는 보호자가 부담하는 플랫폼 이용료)
     //  공고 화면(netDailyRate)과 동일 기준으로 맞춘다.
     const isCaregiverDoc = role === 'CAREGIVER';
-    const netDaily = Math.max(0, contract.dailyRate - ff);
     const days = Math.max(1, Math.round(contract.totalAmount / (contract.dailyRate || 1)));
-    const shownDaily = isCaregiverDoc ? netDaily : contract.dailyRate;
-    const shownTotal = isCaregiverDoc ? netDaily * days : contract.totalAmount;
-    drawTableRow('일당', `${shownDaily.toLocaleString()}원${isCaregiverDoc && ff > 0 ? ' (매칭수수료 제외)' : ''}`);
+    // 간병사 문서 금액은 실제 정산 공식과 동일하게 산출 (정률 + 정액 수수료 모두 반영)
+    const calcDoc = calculateEarning({
+      amount: contract.totalAmount,
+      platformFeePercent: contract.platformFee,
+      platformFeeFixed: ff,
+      durationDays: days,
+      taxRate: contract.taxRate ?? 3.3,
+    });
+    const netTotalDoc = Math.max(0, contract.totalAmount - calcDoc.platformFee);
+    const shownDaily = isCaregiverDoc ? Math.round(netTotalDoc / days) : contract.dailyRate;
+    const shownTotal = isCaregiverDoc ? netTotalDoc : contract.totalAmount;
+    drawTableRow('일당', `${shownDaily.toLocaleString()}원${isCaregiverDoc && calcDoc.platformFee > 0 ? ' (매칭수수료 제외)' : ''}`);
     drawTableRow('총 금액', `${shownTotal.toLocaleString()}원${isCaregiverDoc ? '' : ' (VAT 별도)'}`);
-    if (isCaregiverDoc) {
-      // 원천징수 차감 후 실지급 예정액까지 안내
-      const tax = Math.round(shownTotal * ((contract.taxRate ?? 3.3) / 100));
-      drawTableRow('지급 예정액', `${Math.max(0, shownTotal - tax).toLocaleString()}원 (원천징수 ${tax.toLocaleString()}원 차감)`);
+    // 취소 계약은 실제 사용일수 기준으로 일할 정산되므로 '예정액'을 표기하지 않는다
+    if (isCaregiverDoc && contract.status !== 'CANCELLED') {
+      drawTableRow('지급 예정액', `${calcDoc.netAmount.toLocaleString()}원 (원천징수 ${calcDoc.taxAmount.toLocaleString()}원 차감, 협회비 별도)`);
     }
     const feeText = (ff > 0 && pf > 0)
       ? `${pf}% + ${ff.toLocaleString()}원/일`

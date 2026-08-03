@@ -80,7 +80,7 @@ router.get('/care-requests/:id', adminController.getCareRequestDetail);
 router.post('/care-requests/:id/force-close', adminController.forceCloseCareRequest);
 // 간병비(일당) 관리자 수정 — 가족간병 보험 담보액 등 건별 조정
 router.patch('/care-requests/:id/daily-rate', [
-  body('dailyRate').isInt({ min: 1 }).withMessage('일당(원)을 올바르게 입력해주세요.'),
+  body('dailyRate').isInt({ min: 1000, max: 10000000 }).withMessage('일당은 1,000원 ~ 10,000,000원 사이여야 합니다.'),
 ], adminController.updateCareRequestDailyRate);
 router.delete('/care-requests/:id', adminController.deleteCareRequestAdmin);
 router.get('/matchings/export', adminController.exportMatchings);

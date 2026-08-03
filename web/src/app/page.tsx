@@ -227,7 +227,7 @@ function HeroSection() {
                 /* 모바일에서 인물 우측이 잘리던 문제 수정 — 우측 여백 확보 + 최대 너비 축소 */
                 /* 우측 끝을 헤더/본문 컨테이너(max-w-7xl + lg:px-8) 정렬선에 맞춤 —
                    PPT④: '인물 사진이 관리자 오브젝트와 끝이 맞지 않아 눈을 옮겨야 한다' 반영 */
-                className="hidden sm:block absolute bottom-0 right-6 lg:right-[calc(max((100vw-80rem)/2,0px)+2rem)] h-[62%] md:h-[88%] w-auto max-w-[48%] md:max-w-[52%] object-contain object-bottom pointer-events-none select-none"
+                className="hidden sm:block absolute bottom-0 right-6 lg:right-[calc(max((100%-80rem)/2,0px)+2rem)] h-[62%] md:h-[88%] w-auto max-w-[48%] md:max-w-[52%] object-contain object-bottom pointer-events-none select-none"
               />
             </>
           )}
@@ -409,6 +409,12 @@ function HomeBannerSection() {
 
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
+  // 배너 개수가 바뀌면(기본 → CMS) 인덱스를 항상 유효 범위로 보정 — 빈 슬라이드 방지
+  const activeIndex = banners.length > 0 ? current % banners.length : 0;
+
+  useEffect(() => {
+    setCurrent(0);
+  }, [banners.length]);
 
   useEffect(() => {
     if (paused) return;
@@ -441,7 +447,7 @@ function HomeBannerSection() {
             <div
               key={b.id}
               className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
-                i === current ? "opacity-100 z-10" : "opacity-0 z-0"
+                i === activeIndex ? "opacity-100 z-10" : "opacity-0 z-0"
               }`}
             >
               <div className="flex flex-col md:grid md:grid-cols-2 h-full">
@@ -498,7 +504,7 @@ function HomeBannerSection() {
               aria-label={`배너 ${i + 1}`}
               onClick={() => setCurrent(i)}
               className={`transition-all rounded-full ${
-                i === current ? "w-6 h-1.5 bg-gray-800" : "w-2 h-2 bg-gray-300 hover:bg-gray-400"
+                i === activeIndex ? "w-6 h-1.5 bg-gray-800" : "w-2 h-2 bg-gray-300 hover:bg-gray-400"
               }`}
             />
           ))}

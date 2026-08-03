@@ -5266,10 +5266,13 @@ export const forceCloseCareRequest = async (req: AuthRequest, res: Response, nex
 //  결제가 발생한 건은 금액이 어긋나므로 차단(환불·재결제 필요).
 export const updateCareRequestDailyRate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const vErrors = validationResult(req);
+    if (!vErrors.isEmpty()) throw new AppError(vErrors.array()[0].msg || '입력값이 올바르지 않습니다.', 400);
     const { id } = req.params;
     const dailyRate = parseInt(req.body?.dailyRate);
-    if (!Number.isFinite(dailyRate) || dailyRate <= 0) {
-      throw new AppError('일당(원)을 올바르게 입력해주세요.', 400);
+    // 상한: DB Int(약 21억) 오버플로 및 오입력(소수점→100배 등) 방어
+    if (!Number.isFinite(dailyRate) || dailyRate < 1000 || dailyRate > 10000000) {
+      throw new AppError('일당은 1,000원 ~ 10,000,000원 사이로 입력해주세요.', 400);
     }
 
     const cr = await prisma.careRequest.findUnique({
@@ -5410,6 +5413,37 @@ export const deleteContractAdmin = async (req: AuthRequest, res: Response, next:
       await tx.contractExtension.deleteMany({ where: { contractId } });
       await tx.additionalFee.deleteMany({ where: { contractId } });
       await tx.contract.delete({ where: { id: contractId } });
+
+      // 계약이 사라지면 요청/간병인 상태도 되돌려야 한다.
+      //  (서명대기 계약을 지우면 careRequest 가 MATCHED 로 남아 부분 유니크 인덱스에 걸리고
+      //   보호자가 같은 환자로 새 요청을 못 만드는 데드락이 생긴다)
+      const remain = await tx.contract.count({
+        where: { careRequestId: contract.careRequestId, status: { notIn: ['CANCELLED'] } },
+      });
+      if (remain === 0) {
+        await tx.careRequest.updateMany({
+          where: { id: contract.careRequestId, status: { in: ['MATCHED', 'IN_PROGRESS'] } },
+          data: { status: 'OPEN' },
+        });
+        await tx.careApplication.updateMany({
+          where: { careRequestId: contract.careRequestId, status: 'ACCEPTED' },
+          data: { status: 'CANCELLED' },
+        });
+      }
+      // 간병인 근무상태·매칭 카운트 보정
+      const cgActive = await tx.contract.count({
+        where: { caregiverId: contract.caregiverId, status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] } },
+      });
+      if (cgActive === 0) {
+        await tx.caregiver.updateMany({
+          where: { id: contract.caregiverId, workStatus: 'WORKING' },
+          data: { workStatus: 'AVAILABLE' },
+        });
+      }
+      await tx.caregiver.updateMany({
+        where: { id: contract.caregiverId, totalMatches: { gt: 0 } },
+        data: { totalMatches: { decrement: 1 } },
+      });
     });
 
     await logAdminAction(req, 'ADMIN_DELETE_CONTRACT', {
