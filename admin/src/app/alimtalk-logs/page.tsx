@@ -234,14 +234,25 @@ export default function AlimtalkLogsPage() {
                     <td className="px-3 py-2 text-center">
                       {(() => {
                         const via = it.sentVia;
-                        if (!via) return <span className="text-[11px] text-gray-400">-</span>;
+                        // 미확인 = 알리고 접수는 됐으나 실제 전달 결과가 아직 안 들어온 상태.
+                        //  (접수 성공 ≠ 전달 성공 — 10분 크론이 건별 결과를 조회해 채운다)
+                        if (!via) {
+                          return (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-500"
+                              title="알리고 접수는 됐으나 실제 전달 결과 확인 전입니다. 최대 10분 뒤 반영됩니다."
+                            >
+                              확인 중
+                            </span>
+                          );
+                        }
                         const isAlim = via === "ALIMTALK";
                         return (
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
                               isAlim ? "bg-yellow-100 text-yellow-800" : "bg-blue-100 text-blue-700"
                             }`}
-                            title={isAlim ? "카카오 알림톡으로 발송" : "알림톡 실패 → 대체문자로 발송(요금 발생)"}
+                            title={isAlim ? "카카오 알림톡으로 전달됨" : "알림톡 실패 → 대체문자로 전달됨(문자 요금 발생)"}
                           >
                             {isAlim ? "알림톡" : `문자(${via})`}
                           </span>

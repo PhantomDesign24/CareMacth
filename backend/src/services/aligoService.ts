@@ -192,6 +192,49 @@ export interface RegisterTemplateParams {
   buttons?: AligoButton[];
 }
 
+/**
+ * 발송 건별 "실제 전달 결과" 조회 — POST /akv10/history/detail/
+ *
+ *  접수 응답(code:0)이나 발송이력(type:AT)은 '접수됐다'는 뜻일 뿐 전달 성공이 아니다.
+ *  실제 성패는 이 API 의 rslt 로만 알 수 있다.
+ *    rslt '0'|'Y' : 카카오 전달 성공
+ *    그 외        : 실패 (M=템플릿 없음, U=본문 불일치, I=번호오류 …)
+ *    smid != '0'  : 카톡 실패 후 대체문자가 발송됨
+ */
+export async function fetchAlimtalkResult(mid: string): Promise<{
+  ok: boolean;              // 카카오 전달 성공 여부
+  code?: string;            // rslt
+  reason?: string;          // rslt_message
+  smsSent: boolean;         // 대체문자 발송 여부
+  smid?: string;
+} | null> {
+  if (!isAligoConfigured()) return null;
+  const form = new URLSearchParams();
+  form.append('apikey', ALIGO_API_KEY!);
+  form.append('userid', ALIGO_USER_ID!);
+  form.append('mid', String(mid));
+  try {
+    const res = await axios.post(ALIGO_HISTORY_DETAIL_ENDPOINT, form.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      timeout: 15000,
+    });
+    const item = (res.data?.list || [])[0];
+    if (!item) return null; // 아직 결과 미반영 — 다음 주기에 재시도
+    const rslt = String(item.rslt ?? '');
+    const smid = String(item.smid ?? '0');
+    return {
+      ok: rslt === '0' || rslt.toUpperCase() === 'Y',
+      code: rslt,
+      reason: item.rslt_message || '',
+      smsSent: smid !== '0' && smid !== '',
+      smid,
+    };
+  } catch (err: any) {
+    console.error('[aligoService] 발송결과 조회 실패:', err?.response?.data || err?.message);
+    return null;
+  }
+}
+
 /** 알림톡 템플릿 신규 등록 — POST /akv10/template/add/ */
 export async function registerAlimtalkTemplate(
   params: RegisterTemplateParams,
@@ -332,6 +375,7 @@ export async function deleteAlimtalkTemplate(
 // 발송 이력 조회 — 실제 발송 수단(알림톡/대체문자) 확인용
 // ============================================
 const ALIGO_HISTORY_LIST_ENDPOINT = 'https://kakaoapi.aligo.in/akv10/history/list/';
+const ALIGO_HISTORY_DETAIL_ENDPOINT = 'https://kakaoapi.aligo.in/akv10/history/detail/';
 
 /**
  * 알리고 발송 이력 조회.

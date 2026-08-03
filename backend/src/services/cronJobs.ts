@@ -238,39 +238,55 @@ export function setupCronJobs() {
     }
   });
 
-  // 매 10분: 알림톡 발송 로그의 "실제 발송 수단" 보정
-  //  알리고는 알림톡 실패 시 대체문자(SMS/LMS)로 자동 전환하고 접수는 성공으로 응답한다.
-  //  → 발송 시점엔 알 수 없으므로 발송이력(type: AT/SMS/LMS)을 조회해 sentVia 를 채운다.
+  // 매 10분: 알림톡 "실제 전달 결과" 반영
+  //  알리고 접수 응답(code:0)과 발송이력(type:AT)은 '접수됨'일 뿐 전달 성공이 아니다.
+  //  건별 상세(rslt)를 조회해야 실제 성패를 알 수 있다.
+  //   - 성공            → sentVia=ALIMTALK
+  //   - 실패 + 대체문자 → sentVia=SMS (문자로는 전달됨), 실패 사유 기록
+  //   - 실패 + 문자없음 → status=FAILED (사용자에게 아무것도 전달되지 않음)
+  let resultSyncRunning = false;
   cron.schedule('*/10 * * * *', async () => {
+    if (resultSyncRunning) return;
+    resultSyncRunning = true;
     try {
       const pending = await prisma.alimtalkLog.findMany({
         where: { status: 'SUCCESS', sentVia: null, aligoMsgId: { not: null } },
         select: { id: true, aligoMsgId: true },
         orderBy: { createdAt: 'desc' },
-        take: 300,
+        take: 120, // 건당 1회 호출 — 알리고 부하를 고려해 제한
       });
       if (pending.length === 0) return;
-      const { fetchAlimtalkHistory } = await import('./aligoService');
-      const ymd = (d: Date) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-      const since = ymd(new Date(Date.now() - 2 * 86400000));
-      // 페이지를 넘겨가며 수집 (하루 발송량이 500건을 넘어도 누락되지 않도록)
-      const map: Record<string, string> = {};
-      for (let page = 1; page <= 5; page++) {
-        const chunk = await fetchAlimtalkHistory({ startdate: since, limit: 500, page });
-        const before = Object.keys(map).length;
-        Object.assign(map, chunk);
-        if (Object.keys(map).length === before) break;
-      }
-      let updated = 0;
+
+      const { fetchAlimtalkResult } = await import('./aligoService');
+      let ok = 0, viaSms = 0, failed = 0;
       for (const log of pending) {
-        const via = map[String(log.aligoMsgId)];
-        if (!via) continue;
-        await prisma.alimtalkLog.update({ where: { id: log.id }, data: { sentVia: via } });
-        updated += 1;
+        const r = await fetchAlimtalkResult(String(log.aligoMsgId));
+        if (!r) continue; // 결과 미반영 — 다음 주기 재시도
+        if (r.ok) {
+          await prisma.alimtalkLog.update({ where: { id: log.id }, data: { sentVia: 'ALIMTALK' } });
+          ok += 1;
+        } else if (r.smsSent) {
+          await prisma.alimtalkLog.update({
+            where: { id: log.id },
+            data: { sentVia: 'SMS', errorReason: `알림톡 실패(${r.code}: ${r.reason}) → 대체문자 발송` },
+          });
+          viaSms += 1;
+        } else {
+          await prisma.alimtalkLog.update({
+            where: { id: log.id },
+            data: { status: 'FAILED', errorReason: `${r.code}: ${r.reason} (대체문자 미발송)` },
+          });
+          failed += 1;
+        }
+        await new Promise((res) => setTimeout(res, 120)); // rate limit 여유
       }
-      if (updated > 0) console.log(`[CRON] 알림톡 발송수단 보정: ${updated}건`);
+      if (ok + viaSms + failed > 0) {
+        console.log(`[CRON] 알림톡 결과 반영: 카톡 ${ok}건 / 대체문자 ${viaSms}건 / 미전달 ${failed}건`);
+      }
     } catch (error) {
-      console.error('[CRON] 알림톡 발송수단 보정 오류:', error);
+      console.error('[CRON] 알림톡 결과 반영 오류:', error);
+    } finally {
+      resultSyncRunning = false;
     }
   });
 
