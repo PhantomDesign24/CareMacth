@@ -62,7 +62,7 @@ export default function CompanyPage() {
       </section>
 
       {/* 4개 소개 섹션 — 이미지 좌우 교차 */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20 space-y-14 sm:space-y-24">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-20 space-y-14 sm:space-y-24">
         {SECTIONS.map((s, i) => (
           <div
             key={s.no}
@@ -84,7 +84,7 @@ export default function CompanyPage() {
 
       {/* 6대 경영이념 */}
       <section className="bg-gray-50 py-14 sm:py-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-14">
             <p className="text-primary-500 font-semibold text-sm tracking-wider uppercase mb-2">VALUES</p>
             <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">케어매치 6대 경영이념</h2>
@@ -92,8 +92,8 @@ export default function CompanyPage() {
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {VALUES.map((v) => (
               <div key={v.name} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-7 text-center">
-                <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-full overflow-hidden">
-                  <Image src={v.img} alt={v.name} fill className="object-cover" sizes="80px" />
+                <div className="relative w-24 h-24 sm:w-32 sm:h-32 mx-auto mb-4 rounded-full overflow-hidden">
+                  <Image src={v.img} alt={v.name} fill className="object-cover" sizes="128px" />
                 </div>
                 <h3 className="text-lg font-bold text-primary-500 mb-2">{v.name}</h3>
                 <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">{v.desc}</p>

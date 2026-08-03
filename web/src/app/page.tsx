@@ -21,6 +21,7 @@ import {
   FaBrain,
   FaLayerGroup,
   FaClipboardList,
+  FaFileMedical,
   FaSearch,
   FaHandshake,
 } from "react-icons/fa";
@@ -718,7 +719,8 @@ function CareFeeEstimateSection() {
             <button
               type="button"
               onClick={() => router.push("/care-fee-estimate")}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl text-white font-bold shadow-lg hover:shadow-xl hover:translate-y-[-1px] transition-all text-sm sm:text-base"
+              /* 위 금액 카드(max-w-sm)와 정확히 같은 폭 — 클라이언트 요청 */
+              className="w-full max-w-sm inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl text-white font-bold shadow-lg hover:shadow-xl hover:translate-y-[-1px] transition-all text-sm sm:text-base"
               style={{ background: "linear-gradient(135deg, #FF922E 0%, #FF6B35 100%)" }}
             >
               지금 무료로 계산해보기
@@ -727,20 +729,6 @@ function CareFeeEstimateSection() {
               </svg>
             </button>
 
-            {/* 특징 3개 */}
-            <div className="mt-5 grid grid-cols-3 gap-3 max-w-md">
-              {[
-                { icon: "⚡", title: "30초", desc: "간단 4문항" },
-                { icon: "🎯", title: "정확", desc: "시장 시세" },
-                { icon: "🆓", title: "무료", desc: "가입 불필요" },
-              ].map((item) => (
-                <div key={item.title} className="text-center">
-                  <div className="text-xl mb-0.5">{item.icon}</div>
-                  <div className="text-xs font-bold text-gray-900">{item.title}</div>
-                  <div className="text-[10px] text-gray-500">{item.desc}</div>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* 우측: 비주얼 이미지 */}
@@ -1060,6 +1048,11 @@ function WhyCareMatchSection() {
       title: "간병일지",
       desc: "실시간 간병일지를 통해 환자 상태를 투명하게 확인할 수 있습니다.",
     },
+    {
+      icon: <FaFileMedical className="w-6 h-6" />,
+      title: "빠른 간병보험 서류 발급 지원",
+      desc: "간병 종료 후 보험금 청구에 필요한 간병 확인서와 관련 서류를 신속하게 발급해, 복잡한 보험 청구를 빠르게 준비할 수 있도록 지원합니다.",
+    },
   ];
 
   return (
@@ -1077,7 +1070,7 @@ function WhyCareMatchSection() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-5">
           {reasons.map((r, i) => (
             <div
               key={i}
