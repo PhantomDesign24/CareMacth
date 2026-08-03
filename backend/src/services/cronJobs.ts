@@ -769,5 +769,55 @@ export function setupCronJobs() {
     }
   });
 
+  // 매시 17분: 카카오 재승인 대기 템플릿 자동 전환
+  //  문구를 바꾸려면 카카오 재승인이 필요하고, 승인 전에 코드를 바꾸면 발송이 죽는다.
+  //  → 새 코드를 description 에 '[재승인 대기] 신규코드 XX_0000' 로 적어두고,
+  //     승인(APR)된 게 확인되면 그때 코드·본문·버튼을 신규본으로 교체한다.
+  cron.schedule('17 * * * *', async () => {
+    try {
+      const waiting = await prisma.notificationTemplate.findMany({
+        where: { description: { startsWith: '[재승인 대기]' } },
+        select: { id: true, key: true, description: true, alimtalkTemplateCode: true },
+      });
+      if (waiting.length === 0) return;
+
+      const { listAlimtalkTemplates } = await import('./aligoService');
+      const res = await listAlimtalkTemplates();
+      const list = (res as any)?.raw?.list || (res as any)?.list || [];
+      const byCode = new Map(list.map((t: any) => [t.templtCode, t]));
+
+      let switched = 0;
+      for (const w of waiting) {
+        const m = /신규코드 ([A-Z]{2}_\d+)/.exec(w.description || '');
+        if (!m) continue;
+        const t: any = byCode.get(m[1]);
+        if (!t || t.inspStatus !== 'APR') continue; // 아직 심사 중/반려
+
+        // 승인된 본문·버튼을 그대로 반영해야 이후에도 전송 거부되지 않는다
+        const body = String(t.templtContent || '').replace(/#\{(\w+)\}/g, '{{$1}}');
+        const buttons = (t.buttons || []).map((b: any) => ({
+          name: b.name,
+          linkType: b.linkType,
+          linkMo: String(b.linkM || b.linkMo || '').replace(/#\{(\w+)\}/g, '{{$1}}'),
+          linkPc: String(b.linkP || b.linkPc || '').replace(/#\{(\w+)\}/g, '{{$1}}'),
+        }));
+        await prisma.notificationTemplate.update({
+          where: { id: w.id },
+          data: {
+            alimtalkTemplateCode: m[1],
+            body,
+            alimtalkButtonsJson: buttons.length ? JSON.stringify(buttons) : null,
+            description: null,
+          },
+        });
+        console.log(`[CRON] 알림톡 재승인 전환: ${w.key} ${w.alimtalkTemplateCode} → ${m[1]}`);
+        switched += 1;
+      }
+      if (switched > 0) console.log(`[CRON] 재승인 템플릿 전환 완료: ${switched}건`);
+    } catch (error) {
+      console.error('[CRON] 재승인 템플릿 전환 오류:', error);
+    }
+  });
+
   console.log('[CRON] 스케줄 작업 설정 완료');
 }
