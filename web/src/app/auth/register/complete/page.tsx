@@ -103,7 +103,7 @@ function CompleteInner() {
                   className="block rounded-xl border-2 border-primary-500 bg-primary-50 p-4 hover:shadow-md transition"
                 >
                   <div className="font-semibold text-primary-700">필수 서류 등록</div>
-                  <div className="text-xs text-gray-600 mt-1">대시보드에서 자격증/신분증을 업로드해주세요.</div>
+                  <div className="text-xs text-gray-600 mt-1">마이페이지에서 자격증/신분증을 업로드해주세요.</div>
                 </Link>
                 <Link
                   href="/find-work"
@@ -154,7 +154,7 @@ function CompleteInner() {
             onClick={() => router.push(dashboardPath)}
             className="btn-primary w-full mt-8 py-3"
           >
-            대시보드로 이동
+            {role === 'CAREGIVER' ? '마이페이지로 이동' : '대시보드로 이동'}
           </button>
         </div>
       </div>

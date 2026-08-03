@@ -16,6 +16,7 @@ interface CareHistory {
   caregiverName: string;
   startDate: string;
   endDate: string;
+  durationDays: number | null;   // 기간 옆 총 일수 표시용
   startDateRaw: string;
   endDateRaw: string;
   status: string;
@@ -417,6 +418,12 @@ function GuardianDashboard() {
           caregiverName: isVirtual ? '-' : (c.caregiver?.user?.name || '대기 중'),
           startDate: formatDate(c.startDate),
           endDate: formatDate(c.endDate),
+          durationDays: (() => {
+            if (typeof c.durationDays === 'number') return c.durationDays;
+            if (!c.startDate || !c.endDate) return null;
+            const ms = new Date(c.endDate).getTime() - new Date(c.startDate).getTime();
+            return ms >= 0 ? Math.floor(ms / 86400000) + 1 : null;
+          })(),
           startDateRaw: c.startDate,
           endDateRaw: c.endDate,
           status: statusLabel,
@@ -1018,6 +1025,9 @@ function GuardianDashboard() {
                         <span>장소: {care.location}</span>
                         <span>
                           기간: {care.startDate} ~ {care.endDate}
+                          {care.durationDays ? (
+                            <span className="ml-1 font-semibold text-gray-700">(총 {care.durationDays}일)</span>
+                          ) : null}
                         </span>
                       </div>
                     </div>

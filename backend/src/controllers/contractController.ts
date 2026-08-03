@@ -201,14 +201,20 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
 
       // 알림 발송 - 간병인 + 보호자 (템플릿)
       const startDateStr = startDate.toLocaleDateString('ko-KR');
-      const cgTpl = await renderTemplate('CONTRACT_SIGNED_CAREGIVER', {
+      // 템플릿이 {{caregiverName}}·{{period}} 를 쓰는데 안 넘기면 공란으로 나간다 —
+      //  서명 완료 알림(아래 signVars)과 동일하게 전부 채워 보낸다.
+      const fmtDate = (d: Date | string | null | undefined) =>
+        d ? new Date(d).toISOString().slice(0, 10) : '';
+      const createVars = {
+        caregiverName: caregiver.user.name,
+        guardianName: (newContract as any).guardian?.user?.name || '',
         patientName: newContract.careRequest.patient.name,
         startDate: startDateStr,
-      });
-      const gTpl = await renderTemplate('CONTRACT_SIGNED_GUARDIAN', {
-        caregiverName: caregiver.user.name,
-        startDate: startDateStr,
-      });
+        endDate: fmtDate((newContract as any).endDate),
+        period: `${fmtDate((newContract as any).startDate)} ~ ${fmtDate((newContract as any).endDate)}`,
+      };
+      const cgTpl = await renderTemplate('CONTRACT_SIGNED_CAREGIVER', createVars);
+      const gTpl = await renderTemplate('CONTRACT_SIGNED_GUARDIAN', createVars);
       const notifData: any[] = [];
       if (cgTpl && cgTpl.enabled) {
         notifData.push({ userId: caregiver.userId, type: cgTpl.type, title: cgTpl.title, body: cgTpl.body, data: { contractId: newContract.id, url: '/dashboard/caregiver?tab=activity' } as any });

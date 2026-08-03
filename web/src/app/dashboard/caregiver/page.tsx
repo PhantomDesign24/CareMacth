@@ -789,7 +789,7 @@ function CaregiverDashboard() {
                       type="button"
                       disabled={statusChanging}
                       onClick={() => handleStatusChange(opt.value)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-60 ${
+                      className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-sm font-bold transition-all disabled:opacity-60 ${
                         active ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
                       }`}
                     >
@@ -903,13 +903,13 @@ function CaregiverDashboard() {
                   key={tab.key}
                   type="button"
                   onClick={() => handleTabChange(tab.key)}
-                  className={`relative flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 ${
+                  className={`relative flex items-center gap-2 px-4 py-3 sm:px-5 sm:py-3.5 rounded-xl text-[15px] sm:text-base font-bold transition-all whitespace-nowrap flex-shrink-0 ${
                     active
                       ? "bg-primary-500 text-white shadow-sm shadow-primary-500/25"
                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={active ? 2.2 : 1.8} stroke="currentColor">
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={active ? 2.2 : 1.8} stroke="currentColor">
                     {tab.icon}
                   </svg>
                   <span>{tab.label}</span>

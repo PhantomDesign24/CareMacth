@@ -348,20 +348,20 @@ const REGION_MAP_IMGS: Record<string, string> = {
 const CARE_TYPES = [
   {
     value: "hospital",
-    label: "병원간병",
-    desc: "입원 환자를 위한 전문 병원 간병",
+    label: "병원간병 (개인)",
+    desc: "입원 환자를 1:1 로 돌보는 개인 간병",
     emoji: "🏥",
   },
   {
     value: "home",
-    label: "재택간병",
-    desc: "자택에서 받는 전문 재택 간병",
+    label: "재택간병 (개인)",
+    desc: "자택에서 1:1 로 받는 개인 간병",
     emoji: "🏠",
   },
   {
     value: "family",
     label: "가족간병",
-    desc: "가족처럼 세심하게 돌보는 가족 간병",
+    desc: "한 간병인이 여러 환자를 함께 돌보는 다인 간병",
     emoji: "👨‍👩‍👧",
   },
 ];
@@ -1397,6 +1397,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
               간병 유형 <span className="text-red-500">*</span>
+              <span className="ml-1 font-normal text-gray-400">— 개인(1:1) / 가족(다인) 중 선택</span>
             </label>
             <div id="cr-careType" tabIndex={-1} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 outline-none">
               {CARE_TYPES.map((ct) => (

@@ -947,7 +947,7 @@ function CareFieldsSection() {
           <h2 className="text-xl sm:text-3xl md:text-4xl font-bold">케어매치 간병 매칭 업무 분야</h2>
           <p className="mt-3 text-gray-400 text-sm sm:text-base">다양한 간병 분야에서 맞춤형 매칭 서비스를 제공합니다</p>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           {fields.map((f, i) => (
             <div key={i} className="group relative h-52 sm:h-72 rounded-2xl overflow-hidden cursor-pointer">
               <img src={f.image} alt={f.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
@@ -955,7 +955,7 @@ function CareFieldsSection() {
               <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
                 <div className="text-primary-400 text-xs font-bold mb-1">{f.count} 매칭</div>
                 <h3 className="text-base sm:text-xl font-bold text-white mb-1">{f.title}</h3>
-                <p className="text-xs sm:text-sm text-gray-300 leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity duration-300">{f.desc}</p>
+                <p className="text-xs sm:text-sm text-gray-300 leading-relaxed opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300">{f.desc}</p>
               </div>
             </div>
           ))}

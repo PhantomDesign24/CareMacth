@@ -384,6 +384,9 @@ export default function PaymentPage() {
                 <p className="font-medium text-gray-900">
                   {formatDate(contract?.startDate)} ~{" "}
                   {formatDate(contract?.endDate)}
+                  {contract?.days ? (
+                    <span className="ml-1 text-primary-600">(총 {contract.days}일)</span>
+                  ) : null}
                 </p>
               </div>
               <div>
