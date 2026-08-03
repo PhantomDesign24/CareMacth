@@ -505,7 +505,7 @@ export async function getAssociationFees(year?: number, month?: number, exempt?:
     { params: { ...(year && { year }), ...(month && { month }), ...(exempt && { exempt: 1 }) } }
   );
 }
-export async function updateAssociationFee(caregiverId: string, data: { year: number; month: number; paid: boolean; amount?: number; note?: string }) {
+export async function updateAssociationFee(caregiverId: string, data: { year: number; month: number; paid: boolean; amount?: number; note?: string; paidAt?: string }) {
   return apiRequest(`/admin/association-fees/${caregiverId}`, { method: "PUT", body: data });
 }
 export async function exportAssociationFees(year: number, months?: number | number[]) {

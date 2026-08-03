@@ -106,11 +106,24 @@ export default function AssociationFeesPage() {
     )) {
       return;
     }
+    // 입금일 지정 (미입력 시 오늘) — '승인일과 입금일이 다를 수 있다' 는 요청 반영
+    const today = new Date().toISOString().slice(0, 10);
+    const paidAtInput = window.prompt(
+      `입금일을 입력해주세요. (YYYY-MM-DD)\n비워두면 오늘(${today})로 기록됩니다.`,
+      today,
+    );
+    if (paidAtInput === null) return;
+    const paidAt = paidAtInput.trim();
+    if (paidAt && !/^\d{4}-\d{2}-\d{2}$/.test(paidAt)) {
+      alert("입금일은 YYYY-MM-DD 형식으로 입력해주세요.");
+      return;
+    }
     try {
       await updateAssociationFee(row.caregiverId, {
         year, month,
         paid: true,
         amount: row.feeAmount || defaultAmount,
+        ...(paidAt ? { paidAt } : {}),
       });
       setRows(prev => prev.map(r =>
         r.caregiverId === row.caregiverId

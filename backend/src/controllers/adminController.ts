@@ -3965,7 +3965,7 @@ export const updateAssociationFee = async (req: AuthRequest, res: Response, next
       return res.status(400).json({ success: false, errors: errors.array() });
     }
     const { caregiverId } = req.params;
-    const { year, month, paid, amount, note } = req.body;
+    const { year, month, paid, amount, note, paidAt: paidAtInput } = req.body;
 
     const cg = await prisma.caregiver.findUnique({ where: { id: caregiverId } });
     if (!cg) throw new AppError('간병인을 찾을 수 없습니다.', 404);
@@ -3988,7 +3988,8 @@ export const updateAssociationFee = async (req: AuthRequest, res: Response, next
         month,
         amount: amount || 0,
         paid,
-        paidAt: paid ? new Date() : null,
+        // 입금일을 직접 지정할 수 있게 (미지정 시 승인 처리 시각)
+        paidAt: paid ? (paidAtInput ? new Date(`${String(paidAtInput).slice(0, 10)}T00:00:00+09:00`) : new Date()) : null,
         note: note || null,
       },
       update: {
