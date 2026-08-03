@@ -1255,3 +1255,14 @@ export interface AdminNotificationsResponse {
 }
 
 export { ApiError };
+
+// 알리고 템플릿 검수상태 조회 — { [tplCode]: 'APR'|'REJ'|'REQ'|'REG' }
+export async function getAligoTemplateStatusMap(): Promise<Record<string, { insp: string; name?: string }>> {
+  const res = await apiRequest<any>("/admin/alimtalk-templates/aligo-status");
+  const list = res?.list || [];
+  const map: Record<string, { insp: string; name?: string }> = {};
+  for (const t of list) {
+    if (t?.templtCode) map[t.templtCode] = { insp: t.inspStatus || "", name: t.templtName };
+  }
+  return map;
+}

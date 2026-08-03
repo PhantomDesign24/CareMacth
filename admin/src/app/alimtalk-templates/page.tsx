@@ -7,9 +7,18 @@ import {
   updateNotificationTemplate,
   createNotificationTemplate,
   getAlimtalkTemplateStats,
+  getAligoTemplateStatusMap,
   NotificationTemplate,
   AlimtalkTemplateStat,
 } from "@/lib/api";
+
+// 카카오 검수 상태 표시
+const INSP_LABEL: Record<string, { label: string; cls: string; hint: string }> = {
+  APR: { label: "승인", cls: "bg-emerald-100 text-emerald-700", hint: "카카오 승인 완료 — 알림톡으로 발송됩니다" },
+  REJ: { label: "반려", cls: "bg-red-100 text-red-700", hint: "카카오 반려 — 알림톡 대신 대체문자(SMS)로 발송되어 요금이 발생합니다" },
+  REQ: { label: "검수중", cls: "bg-amber-100 text-amber-700", hint: "카카오 검수 대기 중 — 승인 전까지 대체문자로 발송됩니다" },
+  REG: { label: "미검수", cls: "bg-gray-100 text-gray-600", hint: "등록만 되고 검수 요청 전입니다" },
+};
 
 const ROLE_LABEL: Record<string, string> = { GUARDIAN: '보호자', CAREGIVER: '간병인', ADMIN: '관리자', HOSPITAL: '병원' };
 
@@ -184,6 +193,7 @@ function AlimtalkPreview({ title, body, buttonsJson, emphasisTitle, showFooter =
 export default function AlimtalkTemplatesPage() {
   const [all, setAll] = useState<NotificationTemplate[]>([]);
   const [stats, setStats] = useState<Record<string, AlimtalkTemplateStat>>({});
+  const [inspMap, setInspMap] = useState<Record<string, { insp: string; name?: string }>>({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"alimtalk" | "candidate" | "all">("alimtalk");
 
@@ -214,9 +224,10 @@ export default function AlimtalkTemplatesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [tpls, statsRes] = await Promise.allSettled([
+      const [tpls, statsRes, inspRes] = await Promise.allSettled([
         getNotificationTemplates(),
         getAlimtalkTemplateStats(),
+        getAligoTemplateStatusMap(),
       ]);
       if (tpls.status === "fulfilled") setAll(tpls.value);
       if (statsRes.status === "fulfilled") {
@@ -224,6 +235,7 @@ export default function AlimtalkTemplatesPage() {
         for (const s of statsRes.value?.stats || []) map[s.templateKey] = s;
         setStats(map);
       }
+      if (inspRes.status === "fulfilled") setInspMap(inspRes.value || {});
     } finally {
       setLoading(false);
     }
@@ -446,9 +458,26 @@ export default function AlimtalkTemplatesPage() {
                       </td>
                       <td className="px-3 py-3">
                         {t.alimtalkTemplateCode ? (
-                          <code className="text-xs font-mono px-2 py-0.5 rounded bg-yellow-50 text-yellow-700">
-                            {t.alimtalkTemplateCode}
-                          </code>
+                          <div className="space-y-1">
+                            <code className="text-xs font-mono px-2 py-0.5 rounded bg-yellow-50 text-yellow-700">
+                              {t.alimtalkTemplateCode}
+                            </code>
+                            {(() => {
+                              const insp = inspMap[t.alimtalkTemplateCode!]?.insp;
+                              const meta = insp ? INSP_LABEL[insp] : undefined;
+                              if (!meta) return null;
+                              return (
+                                <div>
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${meta.cls}`}
+                                    title={meta.hint}
+                                  >
+                                    카카오 {meta.label}
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </div>
                         ) : (
                           <span className="text-xs text-red-600">미등록</span>
                         )}

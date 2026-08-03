@@ -561,11 +561,21 @@ export async function notifyCaregiverSettlementEstimate(contractId: string): Pro
       `${afterFee.toLocaleString()}원 − ${tax.toLocaleString()}원(${taxRate}%) = ${finalAmount.toLocaleString()}원\n\n` +
       `간병 종료일 이후 간병비 ${finalAmount.toLocaleString()}원이 지급될 예정입니다.`;
 
-    await sendNotification({
+    // 템플릿 기반 발송 — 알림톡 구성 시 간병사 휴대폰으로도 전달 (앱 미설치 대비)
+    await sendFromTemplate({
       userId: contract.caregiver.userId,
-      type: 'PAYMENT',
-      title: '예상 정산금액 안내',
-      body,
+      key: 'SETTLEMENT_ESTIMATE',
+      vars: {
+        perDayNet: perDayNet.toLocaleString(),
+        days: String(days),
+        afterFee: afterFee.toLocaleString(),
+        tax: tax.toLocaleString(),
+        taxRate: String(taxRate),
+        finalAmount: finalAmount.toLocaleString(),
+      },
+      fallbackTitle: '예상 정산금액 안내',
+      fallbackBody: body,
+      fallbackType: 'PAYMENT',
       data: { url: '/dashboard/caregiver?tab=activity', contractId },
     });
   } catch (e: any) {
