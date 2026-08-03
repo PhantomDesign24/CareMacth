@@ -1288,3 +1288,47 @@ export async function updateCareRequestDailyRate(id: string, dailyRate: number) 
     { method: "PATCH", body: { dailyRate } },
   );
 }
+
+// ─── 메인 광고 배너 CMS (5-11) ────────────────────────
+export interface BannerItem {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  imageUrl: string | null;
+  linkUrl: string | null;
+  ctaLabel: string | null;
+  bgColor: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  startAt: string | null;
+  endAt: string | null;
+}
+export async function getBanners() {
+  return apiRequest<BannerItem[]>("/admin/banners");
+}
+export async function createBanner(data: Partial<BannerItem>) {
+  return apiRequest<BannerItem>("/admin/banners", { method: "POST", body: data });
+}
+export async function updateBanner(id: string, data: Partial<BannerItem>) {
+  return apiRequest<BannerItem>(`/admin/banners/${id}`, { method: "PUT", body: data });
+}
+export async function deleteBanner(id: string) {
+  return apiRequest<{ deleted: boolean }>(`/admin/banners/${id}`, { method: "DELETE" });
+}
+export async function uploadBannerImage(file: File): Promise<{ url: string }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
+  const fd = new FormData();
+  fd.append("file", file);
+  const base = typeof window !== "undefined" && window.location.hostname !== "localhost" ? "/api" : "http://localhost:4000/api";
+  const res = await fetch(`${base}/admin/banners/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: fd,
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.message || "이미지 업로드 실패");
+  }
+  const json = await res.json();
+  return json.data || json;
+}

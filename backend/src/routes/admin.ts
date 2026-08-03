@@ -184,6 +184,14 @@ router.get('/business-inquiries', businessInquiryController.getBusinessInquiries
 router.post('/business-inquiries/:id/status', businessInquiryController.updateBusinessInquiry);
 router.delete('/business-inquiries/:id', businessInquiryController.deleteBusinessInquiry);
 
+// 메인 광고 배너 CMS (5-11)
+import * as bannerController from '../controllers/bannerController';
+router.get('/banners', bannerController.adminListBanners);
+router.post('/banners', bannerController.adminCreateBanner);
+router.put('/banners/:id', bannerController.adminUpdateBanner);
+router.delete('/banners/:id', bannerController.adminDeleteBanner);
+router.post('/banners/upload', upload.single('file'), handleUploadError, verifyUploadMagicNumber, bannerController.adminUploadBannerImage);
+
 // 약관·개인정보처리방침 CMS
 router.get('/legal', legalController.getLegalDocumentsAdmin);
 router.put('/legal/:type', legalController.upsertLegalDocument);

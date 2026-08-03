@@ -150,6 +150,8 @@ app.get('/api/public/care-fee-rules', async (_req, res, next) => {
 // 공개: 메인 페이지 노출용 간병 후기 (관리자 isFeatured 토글)
 import * as reportController from './controllers/reportController';
 app.get('/api/public/featured-reviews', reportController.getPublicFeaturedReviews);
+// 메인 광고 배너 (관리자 CMS 로 등록/수정)
+app.get('/api/public/banners', require('./controllers/bannerController').listPublicBanners);
 
 // Routes
 app.use('/api/auth', authRoutes);

@@ -318,7 +318,20 @@ function HeroSection() {
 /* ------------------------------------------------------------------ */
 function HomeBannerSection() {
   const router = useRouter();
-  const banners = [
+  // 관리자 CMS(어드민 > 메인 배너)에 등록된 배너가 있으면 그것을 사용,
+  // 없으면 아래 기본 배너를 그대로 노출한다.
+  const [cmsBanners, setCmsBanners] = useState<any[] | null>(null);
+  useEffect(() => {
+    fetch("/api/public/banners")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const list = j?.data;
+        if (Array.isArray(list) && list.length > 0) setCmsBanners(list);
+      })
+      .catch(() => {});
+  }, []);
+
+  const defaultBanners = [
     {
       id: "b1",
       title: "AI 간병 매칭",
@@ -369,6 +382,27 @@ function HomeBannerSection() {
     },
   ];
 
+  // CMS 배너를 기본 배너와 같은 형태로 매핑 (이미지 있으면 배경 이미지로 표시)
+  const banners = cmsBanners
+    ? cmsBanners.map((b: any, i: number) => ({
+        id: b.id,
+        title: b.title,
+        subtitle: b.subtitle || "",
+        desc: b.subtitle || "",
+        cta: b.ctaLabel || "자세히 보기",
+        target: b.linkUrl || "/",
+        role: undefined as string | undefined,
+        gradient: "from-primary-600 via-primary-500 to-primary-400",
+        pattern: b.imageUrl
+          ? `url(${b.imageUrl})`
+          : "radial-gradient(circle at 85% 20%, rgba(255,255,255,0.2), transparent 40%)",
+        bgColor: b.bgColor || undefined,
+        imageUrl: b.imageUrl || undefined,
+        emoji: b.imageUrl ? "" : "📢",
+        _i: i,
+      }))
+    : defaultBanners;
+
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -409,9 +443,15 @@ function HomeBannerSection() {
               <div className="flex flex-col md:grid md:grid-cols-2 h-full">
                 {/* 비주얼 — 모바일 상단 / 데스크탑 우측 */}
                 <div
-                  className={`order-1 md:order-2 relative h-24 sm:h-28 md:h-full bg-gradient-to-br ${b.gradient} flex items-center justify-center overflow-hidden`}
+                  className={`order-1 md:order-2 relative h-24 sm:h-28 md:h-full ${(b as any).imageUrl ? "" : `bg-gradient-to-br ${b.gradient}`} flex items-center justify-center overflow-hidden`}
+                  style={(b as any).imageUrl ? undefined : ((b as any).bgColor ? { background: (b as any).bgColor } : undefined)}
                 >
-                  <div className="absolute inset-0" style={{ backgroundImage: b.pattern }} />
+                  <div
+                    className="absolute inset-0"
+                    style={(b as any).imageUrl
+                      ? { backgroundImage: `url(${(b as any).imageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+                      : { backgroundImage: b.pattern }}
+                  />
                   <div className="relative text-6xl sm:text-7xl md:text-9xl drop-shadow-lg">{b.emoji}</div>
                   <div className="absolute top-3 right-4 text-white/40 font-black text-base sm:text-2xl tabular-nums">
                     {String(i + 1).padStart(2, "0")}
