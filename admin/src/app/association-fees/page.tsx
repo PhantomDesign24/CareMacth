@@ -477,26 +477,26 @@ export default function AssociationFeesPage() {
                         {!r.feePaid && (
                           <button
                             onClick={async () => {
-                              if (!confirm(`${r.name} 간병사의 ${year}년 ${month}월 협회비를 면제할까요?`)) return;
+                              if (!confirm(`${r.name} 간병사의 ${year}년 ${month}월 협회비만 면제할까요?\n\n· 이번 달만 적용되며 다음 달부터는 다시 부과됩니다\n· 월별 기록은 '면제(관리자)'로 남습니다`)) return;
                               try { await exemptAssociationFeeMonth(r.caregiverId, year, month); setToast("이번 달 면제 처리됨"); await load(); }
                               catch (e: any) { alert(e?.message || "면제 실패"); }
                             }}
-                            className="px-2 h-7 text-xs bg-amber-50 text-amber-700 rounded hover:bg-amber-100"
-                            title="이번 달 협회비 면제"
+                            className="px-2 h-7 text-xs bg-amber-50 text-amber-700 rounded hover:bg-amber-100 whitespace-nowrap"
+                            title={`${year}년 ${month}월 협회비만 면제 (다음 달은 다시 부과, 기록 보존)`}
                           >
-                            면제
+                            이번 달만 면제
                           </button>
                         )}
                         <button
                           onClick={async () => {
-                            if (!confirm(`${r.name} 간병사를 협회비 대상에서 영구 제외할까요?\n이후 협회비 목록에서 제외됩니다. (계정은 유지)`)) return;
+                            if (!confirm(`${r.name} 간병사를 협회비 대상에서 영구 제외할까요?\n\n· 이번 달뿐 아니라 앞으로 계속 협회비 목록에서 제외됩니다\n· 한 달만 빼려면 '이번 달만 면제'를 사용하세요\n· 계정은 유지되며 '제외됨 보기'에서 해제할 수 있습니다`)) return;
                             try { await setCaregiverFeeExempt(r.caregiverId, true); setToast("영구 제외 처리됨"); await load(); }
                             catch (e: any) { alert(e?.message || "제외 실패"); }
                           }}
-                          className="px-2 h-7 text-xs border border-red-200 bg-red-50 text-red-600 rounded hover:bg-red-100"
-                          title="협회비 영구 제외"
+                          className="px-2 h-7 text-xs border border-red-200 bg-red-50 text-red-600 rounded hover:bg-red-100 whitespace-nowrap"
+                          title="앞으로 계속 제외 (한 달만 빼려면 '이번 달만 면제' 사용)"
                         >
-                          제외
+                          영구 제외
                         </button>
                       </>
                     )}
