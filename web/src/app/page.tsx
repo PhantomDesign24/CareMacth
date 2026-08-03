@@ -1294,8 +1294,13 @@ function AppDownloadSection() {
             <div className="flex-shrink-0 hidden sm:block">
               <div className="w-48 sm:w-56 h-[360px] sm:h-[420px] bg-gradient-to-b from-gray-900 to-gray-800 rounded-[2.5rem] p-3 shadow-2xl">
                 <div className="w-full h-full bg-gradient-to-b from-primary-50 to-secondary-50 rounded-[2rem] flex flex-col items-center justify-center gap-4">
-                  <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-accent-500 rounded-2xl flex items-center justify-center shadow-lg">
-                    <span className="text-white text-3xl font-bold">C</span>
+                  {/* 1-7 앱 소개 로고 — 케어매치 공식 로고 사용 */}
+                  <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center shadow-lg p-3">
+                    <img
+                      src="/img/care_logo.png"
+                      alt="케어매치"
+                      className="w-full h-full object-contain"
+                    />
                   </div>
                   <p className="text-gray-900 font-bold text-lg">케어매치</p>
                   <p className="text-gray-500 text-xs">
