@@ -30,6 +30,19 @@ export const createInsuranceDocRequest = async (req: AuthRequest, res: Response,
       );
     }
 
+    // 간병 기간이 끝나야 신청 가능 — 화면에서만 막고 있어 API 직접 호출로 우회됐다.
+    //  carePeriod 는 'YYYY-MM-DD ~ YYYY-MM-DD' 형식으로 들어온다.
+    const periodMatch = String(carePeriod).match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/);
+    if (periodMatch) {
+      const endOfCare = new Date(`${periodMatch[2]}T00:00:00+09:00`);
+      if (!isNaN(endOfCare.getTime()) && Date.now() < endOfCare.getTime()) {
+        throw new AppError(
+          `간병 종료일(${periodMatch[2]}) 이후부터 보험 서류를 신청할 수 있습니다.`,
+          400,
+        );
+      }
+    }
+
     // 서류 종류는 4종 일괄 신청으로 통일 — 미입력 시 기본 문구로 저장
     const docType = String(documentType || '').trim()
       || '보험청구 서류 일괄(사업자등록증·간병인사용확인서·용역계약서·간병일지)';

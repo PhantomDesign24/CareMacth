@@ -177,10 +177,13 @@ export default function PatientsPage() {
             onClick={(e) => {
               e.stopPropagation();
               if (!confirm(`${row.name} 환자를 삭제하시겠습니까? 진행 중인 간병이 있으면 실패합니다.`)) return;
+              // 회원 삭제와 동일하게 관리자 비밀번호 재확인 (실수·타인 조작 방지)
+              const adminPassword = window.prompt("확인을 위해 관리자 비밀번호를 입력해주세요.");
+              if (!adminPassword) return;
               (async () => {
                 try {
                   const { apiRequest } = await import("@/lib/api");
-                  await apiRequest(`/admin/patients/${value}`, { method: "DELETE" });
+                  await apiRequest(`/admin/patients/${value}`, { method: "DELETE", body: { adminPassword } });
                   alert("삭제되었습니다.");
                   fetchData();
                 } catch (err: any) {

@@ -153,6 +153,21 @@ export default function EducationListPage() {
                         </>
                       )}
                     </div>
+                    {/* 수료증 발급 — 수료한 과정만 (자동 발급이 아니라 요청 시 발급) */}
+                    {c.completed && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const token = localStorage.getItem("cm_access_token") || "";
+                          window.open(educationAPI.getCertificatePdfUrl(c.id, token), "_blank");
+                        }}
+                        className="w-full mb-2 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 hover:bg-emerald-100 transition"
+                      >
+                        수료증 발급 (PDF)
+                      </button>
+                    )}
                     {/* 진도 바 */}
                     <div>
                       <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">

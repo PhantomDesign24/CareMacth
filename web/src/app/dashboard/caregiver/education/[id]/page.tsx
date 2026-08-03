@@ -410,6 +410,17 @@ export default function EducationDetailPage() {
                   </svg>
                   수료 완료됨
                 </div>
+                {/* 수료증 발급 — 요청 시 PDF 로 내려받는다(자동 발송 아님) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const token = localStorage.getItem("cm_access_token") || "";
+                    window.open(educationAPI.getCertificatePdfUrl(String(id), token), "_blank");
+                  }}
+                  className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition-colors shadow-sm"
+                >
+                  수료증 발급 (PDF)
+                </button>
                 {nextCourse ? (
                   <Link
                     href={`/dashboard/caregiver/education/${nextCourse.id}`}

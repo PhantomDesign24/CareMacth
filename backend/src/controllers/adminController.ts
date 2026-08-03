@@ -4447,6 +4447,8 @@ export const updatePatientByAdmin = async (req: AuthRequest, res: Response, next
 // DELETE /patients/:id - 환자 삭제 (관리자, 진행 중 간병 없을 때만)
 export const deletePatientByAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    // 회원 삭제와 동일한 고위험 액션 — 관리자 본인 비밀번호 재확인
+    await requireAdminPassword(req);
     const { id } = req.params;
     const activeRequests = await prisma.careRequest.count({
       where: { patientId: id, status: { in: ['OPEN', 'MATCHED', 'IN_PROGRESS', 'MATCHING'] } },
