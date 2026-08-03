@@ -95,7 +95,9 @@ export async function closeExpiredRequestsForPatient(
     select: { id: true },
   });
   for (const r of expired) {
-    await closeCareRequest(r.id).catch((e) => {
+    // settle:false — 사용자 요청(공고 등록) 처리 중에 외부 결제사 정산 호출을 하지 않는다.
+    //  정산은 자정/매시간 크론에 위임 (응답 지연·부수효과 방지)
+    await closeCareRequest(r.id, { settle: false }).catch((e) => {
       console.error('[closeExpiredRequestsForPatient] 실패:', r.id, (e as Error)?.message || e);
     });
   }

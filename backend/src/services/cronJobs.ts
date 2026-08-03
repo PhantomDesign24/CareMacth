@@ -183,18 +183,33 @@ export function setupCronJobs() {
     }
   });
 
-  // 매시간: 간병 기간이 끝난 요청(매칭) 정리
-  //  자정 크론만으로는 "오늘 끝난 간병"이 자정 전까지 '진행중'으로 남아 보여서,
-  //  1시간 내에 자동으로 종료되도록 짧은 주기로 한 번 더 돌린다.
+  // 매시간: 간병 기간이 끝난 요청(매칭) 정리 — 자정 크론이 놓친 잔여분 보완
+  //  ⚠ 종료 경계는 반드시 "어제 이전"(오늘 00:00 KST 이전)만 대상으로 한다.
+  //    endDate 는 날짜만 입력받아 UTC 자정으로 저장되므로(예: 8/4 종료 → 2026-08-04T00:00:00Z),
+  //    now 기준으로 판정하면 종료 당일 오전 09:23(KST)에 계약이 완료·정산되어
+  //    (a) 간병 마지막 날 오전에 에스크로가 풀리고 (b) 연장 요청이 원천 차단된다.
+  //  종료 당일의 "재매칭 가능" 요구는 신규 공고 등록 시 자동 정리(closeExpiredRequestsForPatient)로 충족.
+  let hourlyCloseRunning = false; // node-cron 은 겹침 방지를 하지 않음
   cron.schedule('23 * * * *', async () => {
+    if (hourlyCloseRunning) return;
+    hourlyCloseRunning = true;
     try {
-      const now = new Date();
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0); // 서버 로컬(KST) 오늘 00:00
       const expired = await prisma.careRequest.findMany({
         where: {
           status: { in: ['OPEN', 'MATCHING', 'MATCHED', 'IN_PROGRESS'] },
-          endDate: { not: null, lt: now },
+          endDate: { not: null, lt: todayStart },
+          // 연장 진행 중인 계약이 달린 요청은 제외 (연장 확정 전 종료 방지)
+          contracts: {
+            none: {
+              status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
+              extensions: { some: { status: { in: ['PENDING_CAREGIVER_APPROVAL', 'PENDING_PAYMENT'] } } },
+            },
+          },
         },
         select: { id: true },
+        take: 200,
       });
       if (expired.length === 0) return;
       let closed = 0;
@@ -209,6 +224,8 @@ export function setupCronJobs() {
       console.log(`[CRON] 만료 간병요청 정리: ${closed}건`);
     } catch (error) {
       console.error('[CRON] 만료 간병요청 정리 오류:', error);
+    } finally {
+      hourlyCloseRunning = false;
     }
   });
 
@@ -225,10 +242,16 @@ export function setupCronJobs() {
       });
       if (pending.length === 0) return;
       const { fetchAlimtalkHistory } = await import('./aligoService');
-      const today = new Date();
       const ymd = (d: Date) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-      const yesterday = new Date(today.getTime() - 86400000);
-      const map = { ...(await fetchAlimtalkHistory({ startdate: ymd(yesterday), limit: 500 })) };
+      const since = ymd(new Date(Date.now() - 2 * 86400000));
+      // 페이지를 넘겨가며 수집 (하루 발송량이 500건을 넘어도 누락되지 않도록)
+      const map: Record<string, string> = {};
+      for (let page = 1; page <= 5; page++) {
+        const chunk = await fetchAlimtalkHistory({ startdate: since, limit: 500, page });
+        const before = Object.keys(map).length;
+        Object.assign(map, chunk);
+        if (Object.keys(map).length === before) break;
+      }
       let updated = 0;
       for (const log of pending) {
         const via = map[String(log.aligoMsgId)];
@@ -242,33 +265,6 @@ export function setupCronJobs() {
     }
   });
 
-  // 매시간: 간병 기간이 끝난 요청 자동 종료 (자정까지 기다리지 않고 1시간 내 정리)
-  //  — 종료된 매칭이 목록에 '진행중' 으로 남아 보이거나 재매칭이 막히는 것을 방지
-  cron.schedule('23 * * * *', async () => {
-    try {
-      const now = new Date();
-      const expired = await prisma.careRequest.findMany({
-        where: {
-          status: { in: ['OPEN', 'MATCHING', 'MATCHED', 'IN_PROGRESS'] },
-          endDate: { not: null, lt: now },
-        },
-        select: { id: true },
-      });
-      if (expired.length === 0) return;
-      let closed = 0;
-      for (const r of expired) {
-        try {
-          await closeCareRequest(r.id);
-          closed += 1;
-        } catch (e) {
-          console.error('[CRON] 만료 간병요청 종료 실패:', r.id, (e as Error)?.message || e);
-        }
-      }
-      console.log(`[CRON] 만료 간병요청 자동 종료: ${closed}건`);
-    } catch (error) {
-      console.error('[CRON] 만료 간병요청 정리 오류:', error);
-    }
-  });
 
   // 매일 자정: 우수 간병사 뱃지 자동 부여 (매칭 10회 이상)
   cron.schedule('0 0 * * *', async () => {

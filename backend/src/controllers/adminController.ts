@@ -4800,6 +4800,7 @@ export const getAlimtalkLogs = async (req: AuthRequest, res: Response, next: Nex
           title: it.title,
           message: it.message,
           status: it.status,
+          sentVia: it.sentVia, // 실제 발송 수단 (ALIMTALK / SMS / LMS)
           aligoMsgId: it.aligoMsgId,
           errorReason: it.errorReason,
         })),
@@ -5220,6 +5221,25 @@ export const forceCloseCareRequest = async (req: AuthRequest, res: Response, nex
     if (!cr) throw new AppError('간병 요청을 찾을 수 없습니다.', 404);
     if (cr.status === 'COMPLETED' || cr.status === 'CANCELLED') {
       throw new AppError(`이미 ${cr.status === 'COMPLETED' ? '완료' : '취소'}된 요청입니다.`, 400);
+    }
+
+    // 아직 간병 기간이 남은 진행 계약은 이 경로로 종료하지 않는다.
+    //  여기서 종료하면 남은 기간까지 전액 정산(에스크로 해제)되고 환불 경로가 없다.
+    //  → 기간 중 중단은 '강제 취소'(비례 환불/위약금 처리)를 사용해야 함.
+    const ongoing = await prisma.contract.findFirst({
+      where: {
+        careRequestId: id,
+        status: { in: ['ACTIVE', 'EXTENDED'] },
+        endDate: { gt: new Date() },
+      },
+      select: { id: true, endDate: true },
+    });
+    if (ongoing) {
+      throw new AppError(
+        `아직 간병 기간이 남은 계약이 있습니다(종료 예정 ${new Date(ongoing.endDate).toLocaleDateString('ko-KR')}). ` +
+        '기간 중 중단은 매칭 관리의 “강제 취소”(환불 처리)를 이용해주세요.',
+        400,
+      );
     }
 
     const result = await closeCareRequest(id);

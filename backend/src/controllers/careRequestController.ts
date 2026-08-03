@@ -76,7 +76,9 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
 
     // 간병 기간이 이미 끝난 기존 요청은 자동 종료 → 종료 후 바로 재매칭 가능
     // (자정 크론을 기다리지 않아도 "이미 진행 중" 으로 막히지 않도록)
-    await closeExpiredRequestsForPatient(guardian.id, patientId).catch(() => {});
+    await closeExpiredRequestsForPatient(guardian.id, patientId).catch((e) => {
+      console.error('[createCareRequest] 만료 요청 자동정리 실패:', (e as Error)?.message || e);
+    });
 
     // 중복 방지: 같은 환자로 활성 상태인 간병 요청이 이미 있으면 차단
     // (OPEN/MATCHING/MATCHED — DB 부분 유니크 인덱스와 동일 집합)

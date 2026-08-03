@@ -637,6 +637,7 @@ export interface AlimtalkLogItem {
   title: string | null;
   message: string;
   status: "PENDING" | "SUCCESS" | "FAILED";
+  sentVia: string | null; // 실제 발송 수단: ALIMTALK / SMS / LMS
   aligoMsgId: string | null;
   errorReason: string | null;
 }

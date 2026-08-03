@@ -233,7 +233,7 @@ export default function AlimtalkLogsPage() {
                     </td>
                     <td className="px-3 py-2 text-center">
                       {(() => {
-                        const via = (it as any).sentVia as string | null;
+                        const via = it.sentVia;
                         if (!via) return <span className="text-[11px] text-gray-400">-</span>;
                         const isAlim = via === "ALIMTALK";
                         return (

@@ -118,14 +118,14 @@ export async function sendAlimtalk(params: SendAlimtalkParams): Promise<{ succes
     const data = res.data;
     // 알리고 응답: { code: 0, message: '성공', info: { type: 'AT', mid: 12345678, scnt, fcnt } }
     //  - info.mid  : 발송 식별자(이력 조회 키)
-    //  - info.type : 실제 발송 수단 (AT=알림톡, SMS/LMS/MMS=대체문자로 전환된 경우)
+    //  - info.type : "접수된 채널"이며 알림톡 요청은 항상 'AT'. 카카오 발송 실패 후
+    //                대체문자로 전환되는지는 이 시점에 알 수 없다.
+    //  → sentVia 는 여기서 확정하지 않고, 사후 이력조회 크론이 채운다. (미확정 = null 유지)
     if (data && data.code === 0) {
       const info = data?.info || {};
       const mid = info.mid != null ? String(info.mid)
         : (info.msg_id != null ? String(info.msg_id) : (data?.msg_id != null ? String(data.msg_id) : null));
-      const t = String(info.type || '').toUpperCase();
-      const via = t ? (t === 'AT' ? 'ALIMTALK' : t) : null;
-      await finalize('SUCCESS', { aligoMsgId: mid, sentVia: via });
+      await finalize('SUCCESS', { aligoMsgId: mid });
       return { success: true, raw: data, logId };
     }
     await finalize('FAILED', { errorReason: data?.message || '알리고 발송 실패' });
@@ -352,14 +352,20 @@ export async function fetchAlimtalkHistory(opts?: {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
       timeout: 15000,
     });
-    const list = res.data?.list;
+    const data = res.data;
+    if (data && data.code !== 0 && data.code !== '0') {
+      console.error('[aligoService] 발송이력 조회 오류:', data?.message || data);
+      return {};
+    }
+    const list = data?.list;
     if (!Array.isArray(list)) return {};
     const map: Record<string, string> = {};
     for (const item of list) {
       const mid = String(item?.mid ?? '');
       if (!mid) continue;
       const t = String(item?.type || '').toUpperCase();
-      map[mid] = t === 'AT' ? 'ALIMTALK' : (t || 'UNKNOWN');
+      if (!t) continue; // 알 수 없는 값은 기록하지 않음(오정보 방지)
+      map[mid] = t === 'AT' ? 'ALIMTALK' : t;
     }
     return map;
   } catch (err: any) {
