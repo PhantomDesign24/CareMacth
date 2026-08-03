@@ -5287,7 +5287,12 @@ export const updateCareRequestDailyRate = async (req: AuthRequest, res: Response
     // 연결 계약 확인 — 결제가 있으면 금액 정합이 깨지므로 차단
     const contracts = await prisma.contract.findMany({
       where: { careRequestId: id, status: { in: ['PENDING_SIGNATURE', 'ACTIVE', 'EXTENDED'] } },
-      select: { id: true, status: true, startDate: true, endDate: true },
+      select: {
+        id: true, status: true, startDate: true, endDate: true,
+        guardianSignedAt: true, caregiverSignedAt: true,
+        guardian: { select: { userId: true } },
+        caregiver: { select: { userId: true } },
+      },
     });
     if (contracts.length > 0) {
       const paid = await prisma.payment.count({
@@ -5295,6 +5300,14 @@ export const updateCareRequestDailyRate = async (req: AuthRequest, res: Response
       });
       if (paid > 0) {
         throw new AppError('이미 결제가 진행된 건은 금액을 수정할 수 없습니다. (환불 후 재진행 필요)', 400);
+      }
+      // 양측 서명이 끝난 계약은 서명 당시 금액이 곧 합의 내용이므로 소급 변경 불가
+      const bothSigned = contracts.find((c) => c.guardianSignedAt && c.caregiverSignedAt);
+      if (bothSigned) {
+        throw new AppError(
+          '양측 서명이 완료된 계약은 금액을 변경할 수 없습니다. 금액 조정이 필요하면 매칭 관리에서 강제 취소 후 다시 진행해주세요.',
+          400,
+        );
       }
     }
 
@@ -5316,6 +5329,24 @@ export const updateCareRequestDailyRate = async (req: AuthRequest, res: Response
       targetType: 'careRequest', targetId: id,
       payload: { before, after: dailyRate, patientName: cr.patient?.name, contractsUpdated: contracts.length },
     });
+
+    // 계약이 걸린 건이면 당사자에게 금액 변경을 알린다 (한쪽만 서명한 상태 포함)
+    if (contracts.length > 0) {
+      const targets = new Set<string>();
+      for (const c of contracts) {
+        if (c.guardian?.userId) targets.add(c.guardian.userId);
+        if (c.caregiver?.userId) targets.add(c.caregiver.userId);
+      }
+      for (const userId of targets) {
+        await sendUserNotification({
+          userId,
+          type: 'CONTRACT',
+          title: '간병비가 변경되었습니다',
+          body: `${cr.patient?.name ? cr.patient.name + ' 환자 ' : ''}간병 건의 일당이 ${before?.toLocaleString() || '-'}원에서 ${dailyRate.toLocaleString()}원으로 변경되었습니다. 계약 내용을 다시 확인해주세요.`,
+          data: { careRequestId: id },
+        }).catch(() => {});
+      }
+    }
 
     res.json({
       success: true,

@@ -55,6 +55,13 @@ export async function closeCareRequest(
 
   // 미종결 지원은 모두 종결 처리 (요청이 닫혔으므로 더 이상 선택될 수 없음)
   //  — 다른 취소 경로(계약취소·강제취소·블랙리스트)와 동일하게 PENDING + ACCEPTED 를 함께 정리
+  //  알림 대상 파악을 위해 종결 전에 지원자를 먼저 조회한다.
+  const affectedApplicants = notify
+    ? await prisma.careApplication.findMany({
+        where: { careRequestId, status: { in: ['PENDING', 'ACCEPTED'] } },
+        select: { caregiver: { select: { userId: true } } },
+      })
+    : [];
   await prisma.careApplication.updateMany({
     where: { careRequestId, status: { in: ['PENDING', 'ACCEPTED'] } },
     data: { status: 'CANCELLED' },
@@ -95,12 +102,16 @@ export async function closeCareRequest(
         const { sendFromTemplate } = await import('./notificationService');
         const patientName = cr.patient?.name || '';
         const vars = { patientName, reason: opts?.reason || '' };
-        const targets: string[] = [];
-        if (cr.guardian?.userId) targets.push(cr.guardian.userId);
+        // 보호자 + 계약 간병사 + (계약 전이라면) 지원했던 간병사 모두에게 안내
+        const targets = new Set<string>();
+        if (cr.guardian?.userId) targets.add(cr.guardian.userId);
         const cgUserId = cr.contracts?.[0]?.caregiver?.userId;
-        if (cgUserId) targets.push(cgUserId);
+        if (cgUserId) targets.add(cgUserId);
+        for (const a of affectedApplicants) {
+          if (a.caregiver?.userId) targets.add(a.caregiver.userId);
+        }
         for (const userId of targets) {
-          await sendFromTemplate({
+          const sent = await sendFromTemplate({
             userId,
             key: 'CARE_REQUEST_CLOSED',
             vars,
@@ -108,8 +119,8 @@ export async function closeCareRequest(
             fallbackBody: `${patientName ? patientName + ' 환자의 ' : ''}간병 매칭이 종료되었습니다.${opts?.reason ? `\n사유: ${opts.reason}` : ''}`,
             fallbackType: 'MATCHING',
             data: { careRequestId },
-          }).catch(() => {});
-          notified += 1;
+          }).then(() => true).catch(() => false);
+          if (sent) notified += 1; // 실제 발송된 건만 집계
         }
       }
     } catch (e) {

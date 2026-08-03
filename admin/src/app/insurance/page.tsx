@@ -61,6 +61,7 @@ export default function InsuranceAdminPage() {
   const [completeTarget, setCompleteTarget] = useState<InsuranceReq | null>(null);
   const [rejectTarget, setRejectTarget] = useState<InsuranceReq | null>(null);
   const [docFiles, setDocFiles] = useState<File[]>([]);
+  const [removeUrls, setRemoveUrls] = useState<string[]>([]); // 기존 서류 중 삭제할 항목
   const [rejectReason, setRejectReason] = useState("");
   const [updating, setUpdating] = useState(false);
 
@@ -104,8 +105,8 @@ export default function InsuranceAdminPage() {
   };
 
   const handleComplete = async () => {
-    if (!completeTarget || docFiles.length === 0) {
-      alert("서류 파일을 선택해주세요.");
+    if (!completeTarget || (docFiles.length === 0 && removeUrls.length === 0)) {
+      alert("업로드할 파일을 선택하거나, 삭제할 기존 서류를 선택해주세요.");
       return;
     }
     setUpdating(true);
@@ -113,9 +114,11 @@ export default function InsuranceAdminPage() {
       const fd = new FormData();
       fd.append("status", "COMPLETED");
       for (const f of docFiles) fd.append("documents", f);
+      if (removeUrls.length > 0) fd.append("removeUrls", JSON.stringify(removeUrls));
       await patchMultipart(`/admin/insurance/${completeTarget.id}`, fd);
       setCompleteTarget(null);
       setDocFiles([]);
+      setRemoveUrls([]);
       fetchData();
     } catch (err: any) {
       alert(err?.message || "완료 처리 실패");
@@ -221,7 +224,7 @@ export default function InsuranceAdminPage() {
                         )}
                         {/* 완료/거절 포함 모든 상태에서 서류 재업로드(완료) 가능 */}
                         <button
-                          onClick={() => { setCompleteTarget(r); setDocFiles([]); }}
+                          onClick={() => { setCompleteTarget(r); setDocFiles([]); setRemoveUrls([]); }}
                           disabled={updating}
                           className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
                         >
@@ -297,6 +300,39 @@ export default function InsuranceAdminPage() {
             <p className="text-sm text-gray-500 mb-4">
               {completeTarget.patientName} 환자 · {completeTarget.documentType}
             </p>
+            {(() => {
+              const existing = (completeTarget.documentUrls && completeTarget.documentUrls.length > 0)
+                ? completeTarget.documentUrls
+                : (completeTarget.documentUrl ? [completeTarget.documentUrl] : []);
+              if (existing.length === 0) return null;
+              return (
+                <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <p className="mb-2 text-xs font-semibold text-gray-600">이미 등록된 서류 ({existing.length}건)</p>
+                  <ul className="space-y-1">
+                    {existing.map((u, i) => {
+                      const marked = removeUrls.includes(u);
+                      return (
+                        <li key={u} className="flex items-center justify-between gap-2 text-xs">
+                          <span className={marked ? "text-red-500 line-through truncate" : "text-gray-700 truncate"}>
+                            서류 {i + 1} · {u.split("/").pop()}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setRemoveUrls((prev) => marked ? prev.filter((x) => x !== u) : [...prev, u])}
+                            className={`shrink-0 rounded px-2 py-0.5 ${marked ? "bg-gray-200 text-gray-600" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
+                          >
+                            {marked ? "취소" : "삭제"}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {removeUrls.length > 0 && (
+                    <p className="mt-2 text-[11px] text-red-500">저장 시 {removeUrls.length}건이 목록에서 제거됩니다.</p>
+                  )}
+                </div>
+              );
+            })()}
             <label className="block text-sm font-medium text-gray-700 mb-1">
               발급된 서류 파일 <span className="text-red-500">*</span>
             </label>
@@ -340,7 +376,7 @@ export default function InsuranceAdminPage() {
             )}
             <div className="flex gap-2 mt-5">
               <button
-                onClick={() => { setCompleteTarget(null); setDocFiles([]); }}
+                onClick={() => { setCompleteTarget(null); setDocFiles([]); setRemoveUrls([]); }}
                 className="btn-secondary flex-1"
                 disabled={updating}
               >
@@ -348,7 +384,7 @@ export default function InsuranceAdminPage() {
               </button>
               <button
                 onClick={handleComplete}
-                disabled={updating || docFiles.length === 0}
+                disabled={updating || (docFiles.length === 0 && removeUrls.length === 0)}
                 className="btn-success flex-1 disabled:opacity-50"
               >
                 {updating ? "처리 중..." : "업로드 + 완료 처리"}
