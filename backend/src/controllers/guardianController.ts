@@ -398,7 +398,8 @@ export const getCareHistory = async (req: AuthRequest, res: Response, next: Next
                 include: { user: { select: { name: true, phone: true } } },
               },
               payments: {
-                select: { id: true, status: true, totalAmount: true },
+                // method 포함 — 대기 중 결제(직접결제/무통장)를 화면에서 구분해 안내
+                select: { id: true, status: true, totalAmount: true, method: true },
               },
               reviews: {
                 select: { id: true, rating: true, comment: true, wouldRehire: true, createdAt: true },

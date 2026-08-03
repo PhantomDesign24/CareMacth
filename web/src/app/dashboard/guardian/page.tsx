@@ -31,6 +31,7 @@ interface CareHistory {
   isVirtual: boolean; // 계약 없는 케어리퀘스트 (매칭 전)
   requestStatus: string; // CareRequest.status (OPEN/MATCHING/MATCHED/CANCELLED/COMPLETED)
   isPaid: boolean; // 결제 완료 여부
+  pendingPaymentMethod?: string | null; // 처리 대기 중인 결제수단 (DIRECT/BANK_TRANSFER)
   createdAtRaw: string; // 요청 생성 시각
   // 디지털 서명
   guardianSigned?: boolean;
@@ -390,6 +391,11 @@ function GuardianDashboard() {
         const payments = Array.isArray(c.payments) ? c.payments : [];
         const isPaid = !isVirtual && payments.some((p: any) => p.status === 'COMPLETED');
         const isEscrow = !isVirtual && !isPaid && payments.some((p: any) => p.status === 'ESCROW');
+        // 처리 대기 중인 결제(직접결제 관리자 확인 / 무통장 입금 확인)
+        //  — 이걸 안 보면 요청 후에도 '결제하기' 버튼이 계속 떠서 중복 결제로 이어진다
+        const pendingPayment = !isVirtual && !isPaid && !isEscrow
+          ? payments.find((p: any) => p.status === 'PENDING')
+          : null;
 
         // 상태 라벨
         let statusLabel: string;
@@ -426,6 +432,7 @@ function GuardianDashboard() {
           isVirtual,
           requestStatus: crStatus,
           isPaid,
+          pendingPaymentMethod: pendingPayment ? (pendingPayment.method || null) : null,
           createdAtRaw: c.careRequest?.createdAt || c.createdAt || '',
           guardianSigned: !!c.guardianSignedAt,
           caregiverSigned: !!c.caregiverSignedAt,
@@ -1039,8 +1046,18 @@ function GuardianDashboard() {
                             ⏱ 간병인 서명 대기 중
                           </span>
                         )}
+                        {/* 결제 대기 안내 — 직접결제/무통장 요청 후에는 결제 버튼 대신 진행 상태를 보여준다 */}
+                        {!care.isVirtual && care.pendingPaymentMethod && !care.isPaid && (
+                          <span className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg">
+                            {care.pendingPaymentMethod === 'DIRECT'
+                              ? '⏱ 직접결제 확인 대기 중 (관리자 확인 후 시작)'
+                              : care.pendingPaymentMethod === 'BANK_TRANSFER'
+                                ? '⏱ 무통장 입금 확인 대기 중'
+                                : '⏱ 결제 확인 대기 중'}
+                          </span>
+                        )}
                         {/* 결제 버튼 — 양측 서명 완료(ACTIVE/EXTENDED) 후에만 노출 (서명 전 결제는 백엔드에서도 차단) */}
-                        {!care.isVirtual && (care.contractStatus === 'ACTIVE' || care.contractStatus === 'EXTENDED') && !care.isPaid && (
+                        {!care.isVirtual && (care.contractStatus === 'ACTIVE' || care.contractStatus === 'EXTENDED') && !care.isPaid && !care.pendingPaymentMethod && (
                           <Link
                             href={`/dashboard/guardian/payment/${care.id}`}
                             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors"
