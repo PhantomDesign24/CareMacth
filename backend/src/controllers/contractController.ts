@@ -211,10 +211,10 @@ export const createContract = async (req: AuthRequest, res: Response, next: Next
       });
       const notifData: any[] = [];
       if (cgTpl && cgTpl.enabled) {
-        notifData.push({ userId: caregiver.userId, type: cgTpl.type, title: cgTpl.title, body: cgTpl.body, data: { contractId: newContract.id } as any });
+        notifData.push({ userId: caregiver.userId, type: cgTpl.type, title: cgTpl.title, body: cgTpl.body, data: { contractId: newContract.id, url: '/dashboard/caregiver?tab=activity' } as any });
       }
       if (gTpl && gTpl.enabled) {
-        notifData.push({ userId: guardian.userId, type: gTpl.type, title: gTpl.title, body: gTpl.body, data: { contractId: newContract.id } as any });
+        notifData.push({ userId: guardian.userId, type: gTpl.type, title: gTpl.title, body: gTpl.body, data: { contractId: newContract.id, url: '/dashboard/guardian?tab=history' } as any });
       }
       // 간병사에게 자가배상책임보험 안내 (매칭 성사 시 1회) — 어드민 알림 템플릿(INSURANCE_NOTICE_CAREGIVER)에서 본문 편집 가능
       const insTpl = await renderTemplate('INSURANCE_NOTICE_CAREGIVER', {});

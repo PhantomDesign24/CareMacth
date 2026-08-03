@@ -1384,12 +1384,32 @@ function CaregiverDashboard() {
           {/* Activity history */}
           {activeTab === "activity" && (
             <div className="divide-y divide-gray-100">
-              {activityHistory.map((activity) => (
-                <div key={activity.id} className="p-4 sm:p-6">
+              {/* 서명 대기 안내 — 알림을 놓쳐도 활동이력에서 바로 확인 */}
+              {(() => {
+                const pending = activityHistory.filter(
+                  (a) => a.contractStatus === 'PENDING_SIGNATURE' && !a.caregiverSigned,
+                ).length;
+                if (pending === 0) return null;
+                return (
+                  <div className="flex items-center gap-2 bg-primary-500 px-4 py-3 text-sm font-semibold text-white sm:px-6">
+                    ✍ 계약서 서명이 필요한 매칭이 {pending}건 있습니다. 서명해야 간병이 시작됩니다.
+                  </div>
+                );
+              })()}
+              {activityHistory.map((activity) => {
+                // 계약서 미서명 건은 눈에 띄게 강조 (매칭 알림 → 활동이력 연결 시 바로 찾도록)
+                const needSign = activity.contractStatus === 'PENDING_SIGNATURE' && !activity.caregiverSigned;
+                return (
+                <div key={activity.id} className={`p-4 sm:p-6 ${needSign ? 'bg-primary-50/60 border-l-4 border-primary-500' : ''}`}>
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
                     <div className="space-y-2 min-w-0">
                       <div className="flex items-center gap-3">
                         {statusBadge(activity.status)}
+                        {needSign && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary-500 px-2 py-0.5 text-[11px] font-bold text-white">
+                            ● 계약서 서명 필요
+                          </span>
+                        )}
                       </div>
                       <h4 className="font-semibold text-gray-900 break-words">
                         {activity.patientName} - {activity.careType}
@@ -1520,7 +1540,8 @@ function CaregiverDashboard() {
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+              })}
               {activityHistory.length === 0 && (
                 <div className="p-12 text-center text-gray-400">
                   활동 이력이 없습니다.
