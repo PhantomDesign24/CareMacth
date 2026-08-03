@@ -429,7 +429,7 @@ function HomeBannerSection() {
 
   return (
     <section className="relative py-4 sm:py-10 bg-gray-50">
-      <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div
           className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg bg-white border border-gray-100 h-[340px] sm:h-[300px]"
           onMouseEnter={() => setPaused(true)}
@@ -546,7 +546,7 @@ function LiveDashboardSection() {
 
   return (
     <section className="py-8 md:py-12 bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* 상단 카운터 */}
         <div className="grid grid-cols-2 gap-4 mb-8">
@@ -791,7 +791,7 @@ function CareMatchTVSection() {
 
   return (
     <section className="py-10 md:py-12 bg-gray-900">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-10">
           <h2 className="text-2xl md:text-3xl font-bold text-white">간병 TV</h2>
           <p className="mt-2 text-gray-400">케어매치의 간병 서비스를 영상으로 만나보세요</p>
@@ -991,7 +991,7 @@ function FeaturedReviewsSection() {
   if (reviews.length === 0) return null;
   return (
     <section className="py-12 md:py-16 bg-white">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-10">
           <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
             보호자가 직접 남긴 <span className="text-primary-500">간병 후기</span>
@@ -1125,7 +1125,7 @@ function CareEducationSection() {
 
   return (
     <section ref={sectionRef} className="py-8 sm:py-12 md:py-14 bg-white overflow-hidden">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-10 sm:mb-14">
           <p className="text-secondary-500 font-semibold text-sm tracking-wider uppercase mb-2">Education Program</p>
           <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-gray-900">케어매치 간병교육 프로그램</h2>
