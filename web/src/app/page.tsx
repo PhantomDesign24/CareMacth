@@ -1289,39 +1289,46 @@ function AppDownloadSection() {
                 케어매치 앱을 설치하면 간병 요청, 매칭 알림, 실시간 소통을 더욱
                 빠르고 편리하게 이용할 수 있습니다.
               </p>
-              <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
-                <a
-                  href={SITE.iosStoreUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-3 px-6 py-3.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all shadow-lg w-full sm:w-auto justify-center"
-                >
-                  <FaApple className="w-6 h-6" />
-                  <div className="text-left">
-                    <div className="text-[10px] opacity-70 leading-none">
-                      Download on the
-                    </div>
-                    <div className="text-sm font-semibold leading-tight">
-                      App Store
-                    </div>
+              {/* 보호자용 / 간병인용 앱을 구분해 함께 노출 (클라이언트 문의 반영) */}
+              <div className="space-y-4">
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-gray-500">보호자용 앱</p>
+                  <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
+                    <a href={SITE.iosStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 min-w-[132px] sm:min-w-[168px] bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
+                      <FaApple className="w-4 sm:w-5 h-4 sm:h-5" />
+                      <div className="text-left">
+                        <div className="text-[10px] opacity-70 leading-none">Download on the</div>
+                        <div className="text-sm font-semibold leading-tight">App Store</div>
+                      </div>
+                    </a>
+                    <a href={SITE.androidStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 min-w-[132px] sm:min-w-[168px] bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
+                      <FaGooglePlay className="w-4 sm:w-5 h-4 sm:h-5" />
+                      <div className="text-left">
+                        <div className="text-[10px] opacity-70 leading-none">GET IT ON</div>
+                        <div className="text-sm font-semibold leading-tight">Google Play</div>
+                      </div>
+                    </a>
                   </div>
-                </a>
-                <a
-                  href={SITE.androidStoreUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-3 px-6 py-3.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all shadow-lg w-full sm:w-auto justify-center"
-                >
-                  <FaGooglePlay className="w-5 h-5" />
-                  <div className="text-left">
-                    <div className="text-[10px] opacity-70 leading-none">
-                      GET IT ON
-                    </div>
-                    <div className="text-sm font-semibold leading-tight">
-                      Google Play
-                    </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-gray-500">간병인용 앱</p>
+                  <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
+                    <a href={SITE.caregiverIosStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 min-w-[132px] sm:min-w-[168px] bg-white border border-gray-300 text-gray-900 rounded-xl hover:bg-gray-50 transition-all duration-200">
+                      <FaApple className="w-4 sm:w-5 h-4 sm:h-5" />
+                      <div className="text-left">
+                        <div className="text-[10px] opacity-70 leading-none">Download on the</div>
+                        <div className="text-sm font-semibold leading-tight">App Store</div>
+                      </div>
+                    </a>
+                    <a href={SITE.caregiverAndroidStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 min-w-[132px] sm:min-w-[168px] bg-white border border-gray-300 text-gray-900 rounded-xl hover:bg-gray-50 transition-all duration-200">
+                      <FaGooglePlay className="w-4 sm:w-5 h-4 sm:h-5" />
+                      <div className="text-left">
+                        <div className="text-[10px] opacity-70 leading-none">GET IT ON</div>
+                        <div className="text-sm font-semibold leading-tight">Google Play</div>
+                      </div>
+                    </a>
                   </div>
-                </a>
+                </div>
               </div>
             </div>
 

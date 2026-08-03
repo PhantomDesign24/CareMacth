@@ -261,18 +261,21 @@ export const updateWorkStatus = async (req: AuthRequest, res: Response, next: Ne
       throw new AppError('승인된 간병인만 근무 상태를 변경할 수 있습니다.', 403);
     }
 
-    // 활성 계약이 있으면 AVAILABLE/IMMEDIATE 로의 직접 변경 차단
-    // (계약 종료/취소 흐름에서만 WORKING 해제됨)
-    if (workStatus === 'AVAILABLE' || workStatus === 'IMMEDIATE') {
-      const ongoing = await prisma.contract.count({
-        where: {
-          caregiverId: caregiver.id,
-          status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
-        },
-      });
-      if (ongoing > 0) {
-        throw new AppError('진행 중인 계약이 있어 근무 상태를 변경할 수 없습니다.', 409);
-      }
+    // 간병 매칭이 진행 중이면 근무 상태를 아예 변경할 수 없다.
+    //  (기존엔 AVAILABLE/IMMEDIATE 만 막아 매칭 중에도 '휴직'으로 바꿀 수 있었음)
+    //  근무 상태는 계약 종료/취소 흐름에서 자동 해제된다.
+    const ongoing = await prisma.contract.findFirst({
+      where: {
+        caregiverId: caregiver.id,
+        status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
+      },
+      select: { endDate: true },
+    });
+    if (ongoing && workStatus !== caregiver.workStatus) {
+      throw new AppError(
+        `간병 매칭이 진행 중입니다. 간병이 종료(${new Date(ongoing.endDate).toLocaleDateString('ko-KR')})된 후 변경할 수 있습니다.`,
+        409,
+      );
     }
 
     const updated = await prisma.caregiver.update({

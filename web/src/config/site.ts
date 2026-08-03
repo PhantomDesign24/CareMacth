@@ -26,6 +26,10 @@ export const SITE = {
   androidStoreUrl: "https://play.google.com/store/apps/details?id=kr.carematch.patient",
   /** 앱스토어 (보호자 앱) — iOS 승인 후 숫자 App ID로 교체 (현재 검색 폴백) */
   iosStoreUrl: "https://apps.apple.com/kr/search?term=%EC%BC%80%EC%96%B4%EB%A7%A4%EC%B9%98",
+  /** 구글 플레이 (간병인 앱) — 패키지명 kr.carematch.giver */
+  caregiverAndroidStoreUrl: "https://play.google.com/store/apps/details?id=kr.carematch.giver",
+  /** 앱스토어 (간병인 앱) — iOS 승인 후 App ID로 교체 (현재 검색 폴백) */
+  caregiverIosStoreUrl: "https://apps.apple.com/kr/search?term=%EC%BC%80%EC%96%B4%EB%A7%A4%EC%B9%98",
   /** 대표 이메일 */
   email: "support@carematch.kr",
   /** 주요 키워드 */
