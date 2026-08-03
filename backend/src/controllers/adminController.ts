@@ -7,6 +7,7 @@ import { AuthRequest } from '../middlewares/auth';
 import { logAdminAction } from '../services/auditLog';
 import { generateReferralCode } from '../utils/generateCode';
 import { phoneVariants } from '../utils/phone';
+import { closeCareRequest } from '../services/careRequestLifecycle';
 import bcrypt from 'bcryptjs';
 import { sendFromTemplate, renderTemplate, colorForRole, NOTIF_COLOR_PATIENT, NOTIF_COLOR_CAREGIVER, sendNotification as sendUserNotification, sendAccountCredentials } from '../services/notificationService';
 import { calculateEarning } from '../utils/earning';
@@ -5205,6 +5206,38 @@ export const deleteConsultMemo = async (req: AuthRequest, res: Response, next: N
 };
 
 // DELETE /admin/care-requests/:id - 일감(공고) 삭제 (진행 계약 없는 건만)
+// POST /admin/care-requests/:id/force-close — 매칭(간병 요청) 강제 종료
+//  간병 기간이 끝났는데 '매칭 진행중' 으로 남아 재매칭이 막힐 때 관리자가 즉시 정리.
+//  연결된 진행 계약이 있으면 함께 마감(정산 포함)하고, 간병인 근무상태도 해제한다.
+export const forceCloseCareRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const cr = await prisma.careRequest.findUnique({
+      where: { id },
+      select: { id: true, status: true, patient: { select: { name: true } } },
+    });
+    if (!cr) throw new AppError('간병 요청을 찾을 수 없습니다.', 404);
+    if (cr.status === 'COMPLETED' || cr.status === 'CANCELLED') {
+      throw new AppError(`이미 ${cr.status === 'COMPLETED' ? '완료' : '취소'}된 요청입니다.`, 400);
+    }
+
+    const result = await closeCareRequest(id);
+
+    await logAdminAction(req, 'ADMIN_FORCE_CLOSE_CARE_REQUEST', {
+      targetType: 'careRequest',
+      targetId: id,
+      payload: { before: cr.status, patientName: cr.patient?.name, ...result },
+    });
+
+    res.json({
+      success: true,
+      data: { careRequestId: id, status: 'COMPLETED', ...result },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const deleteCareRequestAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;

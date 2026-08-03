@@ -8,6 +8,7 @@ import {
   getAdminCareRequests,
   getAdminCareRequest,
   deleteCareRequestAdmin,
+  forceCloseCareRequest,
   AdminCareRequestRow,
 } from "@/lib/api";
 import { formatPhone } from "@/lib/constants";
@@ -269,6 +270,26 @@ export default function CareRequestsPage() {
           >
             상세
           </button>
+          {/* 진행중인 매칭만 종료 가능 — 기간 종료됐는데 '진행중' 으로 남아 재매칭이 막힐 때 사용 */}
+          {["OPEN", "MATCHING", "MATCHED", "IN_PROGRESS"].includes((row as AdminCareRequestRow).status) && (
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (!confirm("이 매칭을 종료 처리할까요?\n\n· 진행중인 계약이 있으면 함께 완료 처리됩니다(정산 포함)\n· 간병인 근무상태가 해제되어 새 매칭이 가능해집니다")) return;
+                try {
+                  const r: any = await forceCloseCareRequest((row as AdminCareRequestRow).id);
+                  await fetchData();
+                  alert(`매칭이 종료되었습니다.${r?.completedContracts ? `\n완료 처리된 계약: ${r.completedContracts}건` : ""}`);
+                } catch (err: any) {
+                  alert(err?.message || "매칭 종료 실패");
+                }
+              }}
+              className="text-xs px-3 py-1.5 border border-blue-200 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium"
+            >
+              매칭 종료
+            </button>
+          )}
           <button
             type="button"
             onClick={async (e) => {

@@ -10,6 +10,7 @@ function isKrHoliday(date: Date): boolean {
   return !!KR_HOLIDAY_MAP[`${y}-${m}-${d}`];
 }
 import { sendExtensionReminder, sendToAdmins, sendFromTemplate } from './notificationService';
+import { closeCareRequest } from './careRequestLifecycle';
 import { settleEarning } from './paymentService';
 import { prisma } from '../app';
 
@@ -157,7 +158,26 @@ export function setupCronJobs() {
         }
       }
 
-      console.log(`[CRON] 완료 처리된 계약: ${completed}건, workStatus 해제: ${cgsToCheck.size}명`);
+      // 간병 요청(매칭)도 함께 종료 — 이게 없으면 요청이 MATCHED 로 남아
+      // 같은 환자로 새 간병 요청을 등록할 수 없게 된다(부분 유니크 인덱스 + 중복검사).
+      const expiredRequests = await prisma.careRequest.findMany({
+        where: {
+          status: { in: ['OPEN', 'MATCHING', 'MATCHED', 'IN_PROGRESS'] },
+          endDate: { not: null, lt: now },
+        },
+        select: { id: true },
+      });
+      let closedRequests = 0;
+      for (const r of expiredRequests) {
+        try {
+          await closeCareRequest(r.id);
+          closedRequests += 1;
+        } catch (e) {
+          console.error('[CRON] 간병요청 종료 실패:', r.id, (e as Error)?.message || e);
+        }
+      }
+
+      console.log(`[CRON] 완료 처리된 계약: ${completed}건, workStatus 해제: ${cgsToCheck.size}명, 종료된 간병요청: ${closedRequests}건`);
     } catch (error) {
       console.error('[CRON] 계약 상태 업데이트 오류:', error);
     }

@@ -905,6 +905,14 @@ export async function deleteConsultMemo(memoId: string) {
 export async function deleteCareRequestAdmin(id: string) {
   return apiRequest(`/admin/care-requests/${id}`, { method: "DELETE" });
 }
+
+// 매칭(간병 요청) 강제 종료 — 기간 종료됐는데 '진행중' 으로 남아 재매칭이 막힐 때
+export async function forceCloseCareRequest(id: string) {
+  return apiRequest<{ careRequestId: string; status: string; completedContracts: number; cancelledContracts: number }>(
+    `/admin/care-requests/${id}/force-close`,
+    { method: "POST" },
+  );
+}
 export async function deleteAssociationFee(paymentId: string) {
   return apiRequest(`/admin/association-fees/${paymentId}`, { method: "DELETE" });
 }

@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator';
 import { prisma } from '../app';
 import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
+import { closeExpiredRequestsForPatient } from '../services/careRequestLifecycle';
 import {
   calculateDistance,
   getDistanceScore,
@@ -72,6 +73,10 @@ export const createCareRequest = async (req: AuthRequest, res: Response, next: N
     if (!careType || !scheduleType || !location || !address || !startDate) {
       throw new AppError('필수 항목을 입력해주세요.', 400);
     }
+
+    // 간병 기간이 이미 끝난 기존 요청은 자동 종료 → 종료 후 바로 재매칭 가능
+    // (자정 크론을 기다리지 않아도 "이미 진행 중" 으로 막히지 않도록)
+    await closeExpiredRequestsForPatient(guardian.id, patientId).catch(() => {});
 
     // 중복 방지: 같은 환자로 활성 상태인 간병 요청이 이미 있으면 차단
     // (OPEN/MATCHING/MATCHED — DB 부분 유니크 인덱스와 동일 집합)

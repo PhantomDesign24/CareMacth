@@ -77,6 +77,7 @@ router.delete('/notifications/unsent', adminController.deleteUnsentNotifications
 // 간병 일감(요청) 관리
 router.get('/care-requests', adminController.getCareRequests);
 router.get('/care-requests/:id', adminController.getCareRequestDetail);
+router.post('/care-requests/:id/force-close', adminController.forceCloseCareRequest);
 router.delete('/care-requests/:id', adminController.deleteCareRequestAdmin);
 router.get('/matchings/export', adminController.exportMatchings);
 router.get('/duplicate-accounts', adminController.getDuplicateAccounts);
