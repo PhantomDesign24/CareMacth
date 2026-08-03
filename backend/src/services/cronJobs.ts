@@ -183,6 +183,35 @@ export function setupCronJobs() {
     }
   });
 
+  // 매시간: 간병 기간이 끝난 요청(매칭) 정리
+  //  자정 크론만으로는 "오늘 끝난 간병"이 자정 전까지 '진행중'으로 남아 보여서,
+  //  1시간 내에 자동으로 종료되도록 짧은 주기로 한 번 더 돌린다.
+  cron.schedule('23 * * * *', async () => {
+    try {
+      const now = new Date();
+      const expired = await prisma.careRequest.findMany({
+        where: {
+          status: { in: ['OPEN', 'MATCHING', 'MATCHED', 'IN_PROGRESS'] },
+          endDate: { not: null, lt: now },
+        },
+        select: { id: true },
+      });
+      if (expired.length === 0) return;
+      let closed = 0;
+      for (const r of expired) {
+        try {
+          await closeCareRequest(r.id);
+          closed += 1;
+        } catch (e) {
+          console.error('[CRON] 만료 간병요청 정리 실패:', r.id, (e as Error)?.message || e);
+        }
+      }
+      console.log(`[CRON] 만료 간병요청 정리: ${closed}건`);
+    } catch (error) {
+      console.error('[CRON] 만료 간병요청 정리 오류:', error);
+    }
+  });
+
   // 매일 자정: 우수 간병사 뱃지 자동 부여 (매칭 10회 이상)
   cron.schedule('0 0 * * *', async () => {
     console.log('[CRON] 우수 간병사 뱃지 체크...');
