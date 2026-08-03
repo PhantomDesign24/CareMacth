@@ -293,9 +293,13 @@ export default function CaregiverDetailPage() {
 
   async function handleDeleteMember() {
     if (!confirm("이 간병인 회원을 삭제할까요?\n계정이 비활성화되고 개인정보가 익명 처리됩니다. (계약·정산 기록은 보존)")) return;
+    // 고위험 액션 — 관리자 본인 확인
+    const pw = window.prompt("보안을 위해 관리자 비밀번호를 입력해주세요.");
+    if (pw === null) return;
+    if (!pw.trim()) { alert("관리자 비밀번호를 입력해주세요."); return; }
     try {
       setActionLoading(true);
-      await deleteCaregiverMember(id);
+      await deleteCaregiverMember(id, pw);
       alert("회원이 삭제(익명화)되었습니다.");
       window.location.href = "/caregivers";
     } catch (err: any) {

@@ -888,14 +888,14 @@ export async function updateLegalDoc(type: string, data: { title?: string; conte
 }
 
 // ─── 회원 관리 확장 (G) ───
-export async function deleteCaregiverMember(id: string) {
-  return apiRequest(`/admin/caregivers/${id}`, { method: "DELETE" });
+export async function deleteCaregiverMember(id: string, adminPassword: string) {
+  return apiRequest(`/admin/caregivers/${id}`, { method: "DELETE", body: { adminPassword } });
 }
 export async function resetCaregiverPassword(id: string, newPassword: string) {
   return apiRequest(`/admin/caregivers/${id}/reset-password`, { method: "POST", body: { newPassword } });
 }
-export async function deleteGuardianMember(id: string) {
-  return apiRequest(`/admin/guardians/${id}`, { method: "DELETE" });
+export async function deleteGuardianMember(id: string, adminPassword: string) {
+  return apiRequest(`/admin/guardians/${id}`, { method: "DELETE", body: { adminPassword } });
 }
 export async function resetGuardianPassword(id: string, newPassword: string) {
   return apiRequest(`/admin/guardians/${id}/reset-password`, { method: "POST", body: { newPassword } });

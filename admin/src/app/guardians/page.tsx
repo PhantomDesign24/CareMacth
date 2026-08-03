@@ -288,7 +288,11 @@ export default function GuardiansPage() {
                           <button
                             onClick={async () => {
                               if (!confirm("이 보호자 회원을 삭제할까요?\n계정 비활성화+개인정보 익명화 처리됩니다. (계약 기록은 보존)")) return;
-                              try { await deleteGuardianMember(detailId!); alert("삭제되었습니다."); setDetailId(null); await fetchData(); }
+                              // 고위험 액션 — 관리자 본인 확인
+                              const pw = window.prompt("보안을 위해 관리자 비밀번호를 입력해주세요.");
+                              if (pw === null) return;
+                              if (!pw.trim()) { alert("관리자 비밀번호를 입력해주세요."); return; }
+                              try { await deleteGuardianMember(detailId!, pw); alert("삭제되었습니다."); setDetailId(null); await fetchData(); }
                               catch (e: any) { alert(e?.message || "삭제 실패"); }
                             }}
                             className="text-xs px-3 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"

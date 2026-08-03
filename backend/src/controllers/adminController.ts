@@ -5128,8 +5128,23 @@ async function anonymizeUser(userId: string) {
 }
 
 // DELETE /admin/caregivers/:id - 간병인 회원 삭제(비활성화+익명화)
+// 고위험 액션(회원 삭제 등) 전 관리자 본인 비밀번호 재확인.
+//  세션이 열려 있는 PC 를 타인이 조작하거나, 실수로 삭제하는 것을 막는다.
+async function requireAdminPassword(req: AuthRequest): Promise<void> {
+  const password = String(req.body?.adminPassword || '');
+  if (!password) throw new AppError('관리자 비밀번호를 입력해주세요.', 400);
+  const admin = await prisma.user.findUnique({
+    where: { id: req.user!.id },
+    select: { password: true },
+  });
+  if (!admin?.password) throw new AppError('관리자 계정에 비밀번호가 설정되어 있지 않습니다.', 400);
+  const ok = await bcrypt.compare(password, admin.password);
+  if (!ok) throw new AppError('관리자 비밀번호가 올바르지 않습니다.', 403);
+}
+
 export const deleteCaregiverMember = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    await requireAdminPassword(req);
     const { id } = req.params;
     const caregiver = await prisma.caregiver.findUnique({ where: { id }, include: { user: true } });
     if (!caregiver) throw new AppError('간병인을 찾을 수 없습니다.', 404);
@@ -5147,6 +5162,7 @@ export const deleteCaregiverMember = async (req: AuthRequest, res: Response, nex
 // DELETE /admin/guardians/:id - 보호자 회원 삭제(비활성화+익명화)
 export const deleteGuardianMember = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    await requireAdminPassword(req);
     const { id } = req.params;
     const guardian = await prisma.guardian.findUnique({ where: { id }, include: { user: true } });
     if (!guardian) throw new AppError('보호자를 찾을 수 없습니다.', 404);
