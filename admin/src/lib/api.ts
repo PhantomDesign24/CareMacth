@@ -1267,3 +1267,8 @@ export async function getAligoTemplateStatusMap(): Promise<Record<string, { insp
   }
   return map;
 }
+
+// 매칭(계약) 삭제 — 결제/정산/후기/분쟁 없는 건만 가능
+export async function deleteContractAdmin(contractId: string) {
+  return apiRequest<{ deleted: boolean; contractId: string }>(`/admin/contracts/${contractId}`, { method: "DELETE" });
+}

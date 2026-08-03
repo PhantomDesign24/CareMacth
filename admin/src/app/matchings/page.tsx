@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import DataTable, { Column } from "@/components/DataTable";
 import StatsCard from "@/components/StatsCard";
-import { getAdminPayments, AdminPayment, apiRequest, exportMatchingsCsv } from "@/lib/api";
+import { getAdminPayments, AdminPayment, apiRequest, exportMatchingsCsv, deleteContractAdmin } from "@/lib/api";
 import { formatPhone } from "@/lib/constants";
 
 interface MatchingRow {
@@ -374,15 +374,40 @@ export default function MatchingsPage() {
       key: "id",
       label: "관리",
       align: "center",
-      render: (_v, row) => (
-        <button
-          type="button"
-          onClick={() => openDetail(row as MatchingRow)}
-          className="text-xs px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 font-medium"
-        >
-          상세/관리
-        </button>
-      ),
+      render: (_v, row) => {
+        const r = row as MatchingRow;
+        const hasContract = !!r.contractId && r.contractId !== "-";
+        return (
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => openDetail(r)}
+              className="text-xs px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 font-medium"
+            >
+              상세/관리
+            </button>
+            {hasContract && (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!confirm("이 매칭을 삭제할까요?\n\n· 결제·정산·후기·분쟁이 있는 건은 삭제할 수 없습니다(기록 보존)\n· 진행 중인 계약은 강제 취소/매칭 종료 후 삭제하세요")) return;
+                  try {
+                    await deleteContractAdmin(r.contractId);
+                    await fetchData();
+                    alert("매칭이 삭제되었습니다.");
+                  } catch (err: any) {
+                    alert(err?.message || "삭제 실패");
+                  }
+                }}
+                className="text-xs px-3 py-1.5 border border-red-200 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium"
+              >
+                삭제
+              </button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 

@@ -4119,6 +4119,7 @@ const DEFAULT_TEMPLATES = [
   // 관리자 직접등록·수동매칭 (P1) — 알림톡 발송 위해 관리자가 알리고 등록·검수 필요
   { key: 'ACCOUNT_CREATED_CREDENTIALS', type: 'SYSTEM', name: '관리자 계정발급 로그인정보', title: '케어매치 로그인 정보 안내', body: '[케어매치] 계정 생성 안내\n\n{{name}}님, 케어매치 계정이 생성되었습니다.\n\n▶ 아이디 : {{loginId}}\n▶ 임시 비밀번호 : {{tempPassword}}\n\n로그인 후 비밀번호를 변경해 주세요.', description: '관리자 직접등록 시 로그인정보 발송. 비밀번호 포함이라 알림톡(카카오 보안 템플릿) 전용이며 인앱/이메일 저장 안 함. 변수: {{name}}, {{loginId}}, {{tempPassword}}', alimtalkButtonsJson: '[{"name":"로그인 바로가기","linkType":"WL","linkMo":"https://care-match.kr/auth/login","linkPc":"https://care-match.kr/auth/login"}]' },
   { key: 'CONTRACT_MANUAL_MATCH_CAREGIVER', type: 'CONTRACT', name: '수동매칭 계약(간병사)', title: '간병 계약이 등록되었습니다', body: '[케어매치] 간병 계약 등록\n\n{{patientName}} 환자님의 간병 계약이 등록되었습니다.\n\n▶ 기간 : {{period}}\n\n계약 내용을 확인해 주세요.', description: '관리자 수동매칭 시 간병사에게. 변수: {{patientName}}, {{period}}, {{startDate}}, {{endDate}}', alimtalkButtonsJson: '[{"name":"계약 확인하기","linkType":"WL","linkMo":"https://care-match.kr/auth/login","linkPc":"https://care-match.kr/auth/login"}]' },
+  { key: 'CARE_REQUEST_CLOSED', type: 'MATCHING', name: '매칭 종료 안내(양측)', title: '매칭이 종료되었습니다', body: '[케어매치] 매칭 종료 안내\n\n고객님께서 진행하신 {{patientName}} 환자의 간병 매칭이 종료되었습니다.\n\n자세한 내용은 앱에서 확인하실 수 있습니다.', description: '관리자 매칭 강제 종료 시 보호자·간병사 양측 발송. 변수: {{patientName}}, {{reason}}' },
   { key: 'SETTLEMENT_ESTIMATE', type: 'PAYMENT', name: '정산 예정 금액 안내(간병사)', title: '정산 예정 금액 안내', body: '[케어매치] 정산 예정 금액 안내\n\n회원님께서 진행하시는 간병 건의 결제가 완료되어 정산 예정 금액을 안내드립니다.\n\n▶ 일 정산액 : {{perDayNet}}원 × {{days}}일 = {{afterFee}}원\n▶ 원천징수 : {{tax}}원 ({{taxRate}}%)\n▶ 지급 예정 : {{finalAmount}}원\n\n간병 종료일 이후 지급될 예정입니다.', description: '보호자 결제 완료 시 간병사에게 발송. 매칭수수료 제외 후 3.3% 원천징수 차감액. 변수: {{perDayNet}}, {{days}}, {{afterFee}}, {{tax}}, {{taxRate}}, {{finalAmount}}' },
   { key: 'CONTRACT_MANUAL_MATCH_GUARDIAN', type: 'CONTRACT', name: '수동매칭 계약(보호자)', title: '간병 계약이 등록되었습니다', body: '[케어매치] 간병 계약 등록\n\n{{patientName}} 환자님의 간병 계약이 등록되었습니다.\n\n▶ 간병인 : {{caregiverName}}\n▶ 기간 : {{period}}\n\n계약 내용을 확인해 주세요.', description: '관리자 수동매칭 시 보호자에게. 변수: {{patientName}}, {{caregiverName}}, {{period}}', alimtalkButtonsJson: '[{"name":"계약 확인하기","linkType":"WL","linkMo":"https://care-match.kr/auth/login","linkPc":"https://care-match.kr/auth/login"}]' },
 ];
@@ -5242,7 +5243,8 @@ export const forceCloseCareRequest = async (req: AuthRequest, res: Response, nex
       );
     }
 
-    const result = await closeCareRequest(id);
+    // 관리자 강제 종료는 당사자가 예상하지 못한 변경이므로 양측에 알림 발송
+    const result = await closeCareRequest(id, { notify: true, reason: String(req.body?.reason || '').trim() || undefined });
 
     await logAdminAction(req, 'ADMIN_FORCE_CLOSE_CARE_REQUEST', {
       targetType: 'careRequest',
@@ -5254,6 +5256,54 @@ export const forceCloseCareRequest = async (req: AuthRequest, res: Response, nex
       success: true,
       data: { careRequestId: id, status: 'COMPLETED', ...result },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /admin/contracts/:contractId — 매칭(계약) 삭제
+//  기록 보존 원칙상 "금전·평판 기록이 없는" 건만 삭제 가능:
+//   결제/정산/리뷰/분쟁이 하나라도 있으면 거부, 진행중 계약도 거부(강제취소 후 삭제)
+export const deleteContractAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { contractId } = req.params;
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { id: true, status: true, careRequestId: true, caregiverId: true },
+    });
+    if (!contract) throw new AppError('계약을 찾을 수 없습니다.', 404);
+    if (contract.status === 'ACTIVE' || contract.status === 'EXTENDED') {
+      throw new AppError('진행 중인 계약은 삭제할 수 없습니다. 강제 취소 또는 매칭 종료 후 삭제해주세요.', 400);
+    }
+
+    const [payments, earnings, reviews, disputes] = await Promise.all([
+      prisma.payment.count({ where: { contractId } }),
+      prisma.earning.count({ where: { contractId } }),
+      prisma.review.count({ where: { contractId } }),
+      prisma.dispute.count({ where: { contractId } }),
+    ]);
+    const blockers: string[] = [];
+    if (payments > 0) blockers.push(`결제 ${payments}건`);
+    if (earnings > 0) blockers.push(`정산 ${earnings}건`);
+    if (reviews > 0) blockers.push(`후기 ${reviews}건`);
+    if (disputes > 0) blockers.push(`분쟁 ${disputes}건`);
+    if (blockers.length > 0) {
+      throw new AppError(`${blockers.join(', ')}이(가) 연결되어 있어 삭제할 수 없습니다. (기록 보존)`, 400);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.careRecord.deleteMany({ where: { contractId } });
+      await tx.contractExtension.deleteMany({ where: { contractId } });
+      await tx.additionalFee.deleteMany({ where: { contractId } });
+      await tx.contract.delete({ where: { id: contractId } });
+    });
+
+    await logAdminAction(req, 'ADMIN_DELETE_CONTRACT', {
+      targetType: 'contract', targetId: contractId,
+      payload: { status: contract.status, careRequestId: contract.careRequestId },
+    });
+
+    res.json({ success: true, data: { deleted: true, contractId } });
   } catch (error) {
     next(error);
   }

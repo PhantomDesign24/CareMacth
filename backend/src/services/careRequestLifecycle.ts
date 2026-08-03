@@ -10,9 +10,10 @@ import { prisma } from '../app';
  */
 export async function closeCareRequest(
   careRequestId: string,
-  opts?: { settle?: boolean },
-): Promise<{ completedContracts: number; cancelledContracts: number }> {
+  opts?: { settle?: boolean; notify?: boolean; reason?: string },
+): Promise<{ completedContracts: number; cancelledContracts: number; notified: number }> {
   const settle = opts?.settle !== false;
+  const notify = opts?.notify === true; // 관리자 강제 종료 등 "예상 밖 종료"에서만 알림
 
   const contracts = await prisma.contract.findMany({
     where: { careRequestId, status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] } },
@@ -52,9 +53,10 @@ export async function closeCareRequest(
     }
   }
 
-  // 대기중 지원은 종결 처리 (요청이 닫혔으므로 더 이상 선택될 수 없음)
+  // 미종결 지원은 모두 종결 처리 (요청이 닫혔으므로 더 이상 선택될 수 없음)
+  //  — 다른 취소 경로(계약취소·강제취소·블랙리스트)와 동일하게 PENDING + ACCEPTED 를 함께 정리
   await prisma.careApplication.updateMany({
-    where: { careRequestId, status: 'PENDING' },
+    where: { careRequestId, status: { in: ['PENDING', 'ACCEPTED'] } },
     data: { status: 'CANCELLED' },
   });
 
@@ -72,7 +74,50 @@ export async function closeCareRequest(
     }
   }
 
-  return { completedContracts: completedIds.length, cancelledContracts: cancelled };
+  // 종료 사실을 양측에 안내 (관리자 강제 종료 등)
+  let notified = 0;
+  if (notify) {
+    try {
+      const cr = await prisma.careRequest.findUnique({
+        where: { id: careRequestId },
+        select: {
+          guardian: { select: { userId: true } },
+          patient: { select: { name: true } },
+          contracts: {
+            where: { status: { in: ['COMPLETED', 'CANCELLED'] } },
+            orderBy: { updatedAt: 'desc' },
+            take: 1,
+            select: { caregiver: { select: { userId: true } } },
+          },
+        },
+      });
+      if (cr) {
+        const { sendFromTemplate } = await import('./notificationService');
+        const patientName = cr.patient?.name || '';
+        const vars = { patientName, reason: opts?.reason || '' };
+        const targets: string[] = [];
+        if (cr.guardian?.userId) targets.push(cr.guardian.userId);
+        const cgUserId = cr.contracts?.[0]?.caregiver?.userId;
+        if (cgUserId) targets.push(cgUserId);
+        for (const userId of targets) {
+          await sendFromTemplate({
+            userId,
+            key: 'CARE_REQUEST_CLOSED',
+            vars,
+            fallbackTitle: '매칭이 종료되었습니다',
+            fallbackBody: `${patientName ? patientName + ' 환자의 ' : ''}간병 매칭이 종료되었습니다.${opts?.reason ? `\n사유: ${opts.reason}` : ''}`,
+            fallbackType: 'MATCHING',
+            data: { careRequestId },
+          }).catch(() => {});
+          notified += 1;
+        }
+      }
+    } catch (e) {
+      console.error('[closeCareRequest] 종료 알림 실패:', (e as Error)?.message || e);
+    }
+  }
+
+  return { completedContracts: completedIds.length, cancelledContracts: cancelled, notified };
 }
 
 /**

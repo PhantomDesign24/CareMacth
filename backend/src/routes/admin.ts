@@ -188,6 +188,7 @@ router.post(
   adminController.forceCancelContract,
 );
 router.post('/contracts/:contractId/force-complete', adminController.forceCompleteContract);
+router.delete('/contracts/:contractId', adminController.deleteContractAdmin);
 
 // 환불 요청 관리 (2단계 플로우)
 import * as paymentController from '../controllers/paymentController';
