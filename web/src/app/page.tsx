@@ -224,7 +224,9 @@ function HeroSection() {
                 src={s.src}
                 alt=""
                 /* 모바일에서 인물 우측이 잘리던 문제 수정 — 우측 여백 확보 + 최대 너비 축소 */
-                className="hidden sm:block absolute bottom-0 right-3 md:right-[3%] h-[62%] md:h-[88%] w-auto max-w-[48%] md:max-w-[52%] object-contain object-bottom pointer-events-none select-none"
+                /* 우측 끝을 헤더/본문 컨테이너(max-w-7xl + lg:px-8) 정렬선에 맞춤 —
+                   PPT④: '인물 사진이 관리자 오브젝트와 끝이 맞지 않아 눈을 옮겨야 한다' 반영 */
+                className="hidden sm:block absolute bottom-0 right-6 lg:right-[calc(max((100vw-80rem)/2,0px)+2rem)] h-[62%] md:h-[88%] w-auto max-w-[48%] md:max-w-[52%] object-contain object-bottom pointer-events-none select-none"
               />
             </>
           )}
