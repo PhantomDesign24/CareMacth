@@ -32,6 +32,13 @@ router.post('/certificates', uploadPrivate.single('image'), verifyUploadMagicNum
 // DELETE /certificates/:id - 자격증 삭제 (본인 소유)
 router.delete('/certificates/:id', caregiverController.deleteCertificate);
 
+// PUT /certificates/:id - 자격증 수정 (이미지는 선택 재첨부)
+router.put('/certificates/:id', uploadPrivate.single('image'), verifyUploadMagicNumber, [
+  body('name').optional({ values: 'falsy' }).trim().isLength({ min: 1, max: 100 }).withMessage('자격증 이름은 1~100자로 입력해주세요.'),
+  body('issuer').optional({ values: 'falsy' }).trim().isLength({ min: 1, max: 100 }).withMessage('발급기관은 1~100자로 입력해주세요.'),
+  body('issueDate').optional({ values: 'falsy' }).isISO8601().withMessage('유효한 발급일을 입력해주세요.'),
+], caregiverController.updateCertificate);
+
 // PUT /work-status - 근무 상태 변경
 router.put('/work-status', [
   body('workStatus').notEmpty().isIn(['WORKING', 'AVAILABLE', 'IMMEDIATE', 'ON_LEAVE']).withMessage('유효한 근무 상태를 입력해주세요. (WORKING, AVAILABLE, IMMEDIATE, ON_LEAVE)'),

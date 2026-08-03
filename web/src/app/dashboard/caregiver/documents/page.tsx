@@ -152,6 +152,7 @@ export default function CaregiverDocumentsPage() {
   const [preferredRegions, setPreferredRegions] = useState<string[]>([]);
 
   // Certificate form state
+  const [editingCertId, setEditingCertId] = useState<string | null>(null); // 자격증 수정 대상
   const [certName, setCertName] = useState("");
   const [certIssuer, setCertIssuer] = useState("");
   const [certIssueDate, setCertIssueDate] = useState("");
@@ -298,22 +299,50 @@ export default function CaregiverDocumentsPage() {
     }
   };
 
+  // 자격증 수정 시작 — 기존 값을 폼에 채우고 등록 폼을 편집 모드로 전환
+  const startEditCertificate = (cert: any) => {
+    setEditingCertId(cert.id);
+    setCertName(cert.name || "");
+    setCertIssuer(cert.issuer || "");
+    setCertIssueDate(cert.issueDate ? String(cert.issueDate).slice(0, 10) : "");
+    setCertFile(null);
+    const fileInput = document.getElementById("cert-file-input") as HTMLInputElement;
+    if (fileInput) fileInput.value = "";
+    setError("");
+    setSuccessMsg("");
+    document.getElementById("cert-form")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const cancelEditCertificate = () => {
+    setEditingCertId(null);
+    setCertName("");
+    setCertIssuer("");
+    setCertIssueDate("");
+    setCertFile(null);
+    const fileInput = document.getElementById("cert-file-input") as HTMLInputElement;
+    if (fileInput) fileInput.value = "";
+  };
+
   const handleCertificateUpload = async () => {
     if (!certName || !certIssuer || !certIssueDate) {
       setError("자격증 정보를 모두 입력해주세요.");
       return;
     }
-    if (!certFile) {
+    // 수정 시엔 이미지 재첨부가 선택 — 기존 이미지를 그대로 둔다
+    if (!certFile && !editingCertId) {
       setError("자격증 이미지를 선택해주세요.");
       return;
     }
 
     // 매직넘버 클라이언트 검증 (서버에서도 검증되지만 즉시 피드백)
-    const { validateFileMagic } = await import('@/lib/fileMagic');
-    const check = await validateFileMagic(certFile, 'document', { maxSizeMB: 10 });
-    if (!check.ok) {
-      setError(check.reason || '파일 형식이 올바르지 않습니다.');
-      return;
+    let check: { ok: boolean; reason?: string; detectedMime?: string } = { ok: true };
+    if (certFile) {
+      const { validateFileMagic } = await import('@/lib/fileMagic');
+      check = await validateFileMagic(certFile, 'document', { maxSizeMB: 10 });
+      if (!check.ok) {
+        setError(check.reason || '파일 형식이 올바르지 않습니다.');
+        return;
+      }
     }
 
     setUploading(true);
@@ -324,14 +353,21 @@ export default function CaregiverDocumentsPage() {
       formData.append("name", certName);
       formData.append("issuer", certIssuer);
       formData.append("issueDate", certIssueDate);
-      // PDF 는 압축 안 함, 이미지만 압축
-      const isImage = check.detectedMime !== 'application/pdf';
-      const optimized = isImage ? await compressImage(certFile) : certFile;
-      formData.append("image", optimized);
+      if (certFile) {
+        // PDF 는 압축 안 함, 이미지만 압축
+        const isImage = check.detectedMime !== 'application/pdf';
+        const optimized = isImage ? await compressImage(certFile) : certFile;
+        formData.append("image", optimized);
+      }
 
-      await documentAPI.uploadCertificate(formData);
+      if (editingCertId) {
+        await documentAPI.updateCertificate(editingCertId, formData);
+      } else {
+        await documentAPI.uploadCertificate(formData);
+      }
 
       // Reset form
+      setEditingCertId(null);
       setCertName("");
       setCertIssuer("");
       setCertIssueDate("");
@@ -341,7 +377,7 @@ export default function CaregiverDocumentsPage() {
       const fileInput = document.getElementById("cert-file-input") as HTMLInputElement;
       if (fileInput) fileInput.value = "";
 
-      setSuccessMsg("자격증이 등록되었습니다.");
+      setSuccessMsg(editingCertId ? "자격증이 수정되었습니다." : "자격증이 등록되었습니다.");
       setTimeout(() => setSuccessMsg(""), 3000);
 
       // Refresh profile to show new certificate
@@ -565,6 +601,13 @@ export default function CaregiverDocumentsPage() {
                     )}
                     <button
                       type="button"
+                      onClick={() => startEditCertificate(cert)}
+                      className="text-sm text-primary-600 hover:text-primary-700 underline"
+                    >
+                      수정
+                    </button>
+                    <button
+                      type="button"
                       onClick={async () => {
                         if (!confirm(`'${cert.name}' 자격증을 삭제할까요?`)) return;
                         try {
@@ -592,8 +635,15 @@ export default function CaregiverDocumentsPage() {
           )}
 
           {/* Add certificate form */}
-          <div className="border-t border-gray-100 pt-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">자격증 추가</h3>
+          <div id="cert-form" className="border-t border-gray-100 pt-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-4">
+              {editingCertId ? "자격증 수정" : "자격증 추가"}
+            </h3>
+            {editingCertId && (
+              <p className="mb-3 text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                이미지를 다시 첨부하지 않으면 기존 이미지가 그대로 유지됩니다. 이미지를 바꾸면 관리자 확인이 다시 필요합니다.
+              </p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">자격증명</label>
@@ -635,14 +685,26 @@ export default function CaregiverDocumentsPage() {
                 />
               </div>
             </div>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={handleCertificateUpload}
-              disabled={uploading}
-            >
-              {uploading ? "업로드 중..." : "자격증 추가"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleCertificateUpload}
+                disabled={uploading}
+              >
+                {uploading ? "저장 중..." : editingCertId ? "수정 저장" : "자격증 추가"}
+              </button>
+              {editingCertId && (
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-sm font-semibold hover:bg-gray-50"
+                  onClick={cancelEditCertificate}
+                  disabled={uploading}
+                >
+                  취소
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

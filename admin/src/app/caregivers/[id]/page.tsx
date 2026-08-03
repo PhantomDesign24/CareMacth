@@ -560,6 +560,19 @@ export default function CaregiverDetailPage() {
               <span className={statusBadge(data.status)}>
                 {statusLabel(data.status)}
               </span>
+              {/* 근무상태 — 휴직 여부를 상세에서도 바로 확인 */}
+              {(() => {
+                const meta: Record<string, { label: string; cls: string }> = {
+                  WORKING: { label: "근무중", cls: "bg-blue-100 text-blue-700" },
+                  AVAILABLE: { label: "근무 가능", cls: "bg-green-100 text-green-700" },
+                  IMMEDIATE: { label: "즉시 가능", cls: "bg-emerald-100 text-emerald-700" },
+                  ON_LEAVE: { label: "휴직 중", cls: "bg-gray-200 text-gray-600" },
+                };
+                const m = meta[data.workStatus];
+                return m ? (
+                  <span className={`text-xs px-2 py-1 rounded-full font-bold ${m.cls}`}>{m.label}</span>
+                ) : null;
+              })()}
               {data.hasBadge && (
                 <span className="badge-purple">
                   <svg className="mr-0.5 h-3 w-3" fill="currentColor" viewBox="0 0 24 24">

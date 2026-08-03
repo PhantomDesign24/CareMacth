@@ -650,9 +650,11 @@ function SpecialServiceSection() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           {[
-            { image: "/img/main/free_01.png", title: "간병 매칭료 최저가 보장", desc: "업계 최저 수수료로 부담 없이 이용하세요" },
-            { image: "/img/main/free_02.png", title: "간병인 배상책임 100% 가입", desc: "만약의 사고에도 안전하게 보장됩니다" },
-            { image: "/img/main/free_03.png", title: "3중 케어 시스템 운영", desc: "간병인+케어코디+지역센터장 3중 관리" },
+            /* 기존 free_0*.png 는 '매칭 수수료 0원 / 배상보험료 0원 / 초기 물품비 0원' 이미지라
+               지금 항목 문구와 맞지 않는다는 지적(2차 검수 1-3) → 내용에 맞는 아이콘으로 교체 */
+            { image: "/img/main/free_01_lowfee.svg", title: "간병 매칭료 최저가 보장", desc: "업계 최저 수수료로 부담 없이 이용하세요" },
+            { image: "/img/main/free_02_liability.svg", title: "간병인 배상책임 100% 가입", desc: "만약의 사고에도 안전하게 보장됩니다" },
+            { image: "/img/main/free_03_triplecare.svg", title: "3중 케어 시스템 운영", desc: "간병인+케어코디+지역센터장 3중 관리" },
             { image: "/img/main/free_04_insurance.svg", title: "간병보험 청구서류 발급 지원", desc: "간병 서비스 이용 후 보험금 청구에 필요한 간병 확인서와 관련 서류 발급을 지원합니다." },
           ].map((s, i) => (
             <div key={i} className="bg-white rounded-2xl p-4 sm:p-6 text-center shadow-sm hover:shadow-lg transition-shadow">

@@ -285,6 +285,8 @@ export const documentAPI = {
     api.post('/caregiver/certificates', formData),
   deleteCertificate: (id: string) =>
     api.delete(`/caregiver/certificates/${id}`),
+  updateCertificate: (id: string, formData: FormData) =>
+    api.put(`/caregiver/certificates/${id}`, formData),
   uploadIdCard: (formData: FormData) =>
     api.post('/caregiver/id-card', formData),
   uploadCriminalCheck: (formData: FormData) =>

@@ -239,6 +239,20 @@ export default function CaregiversPage() {
                 {row.name}
               </Link>
               <span className={statusBadge(row.status)}>{statusLabel(row.status)}</span>
+              {/* 근무상태 — 휴직/근무중을 목록에서 바로 알 수 있게 (요청: '휴직 중 표시') */}
+              {(() => {
+                const ws = (row as any).workStatus as string;
+                const meta: Record<string, { label: string; cls: string }> = {
+                  WORKING: { label: "근무중", cls: "bg-blue-100 text-blue-700" },
+                  AVAILABLE: { label: "근무 가능", cls: "bg-green-100 text-green-700" },
+                  IMMEDIATE: { label: "즉시 가능", cls: "bg-emerald-100 text-emerald-700" },
+                  ON_LEAVE: { label: "휴직 중", cls: "bg-gray-200 text-gray-600" },
+                };
+                const m = meta[ws];
+                return m ? (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${m.cls}`}>{m.label}</span>
+                ) : null;
+              })()}
               {row.hasBadge && (
                 <span className="badge-purple text-[10px]" title="우수 간병사">⭐ 우수</span>
               )}

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- 간병 매칭료 최저가 보장 : 가격표 + 하락 화살표 -->
+  <defs>
+    <linearGradient id="lf1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFB25E"/>
+      <stop offset="1" stop-color="#FF7A2E"/>
+    </linearGradient>
+  </defs>
+  <circle cx="48" cy="48" r="40" fill="#FFF1E2"/>
+  <!-- 가격표 -->
+  <path d="M50 20h20a6 6 0 0 1 6 6v20a6 6 0 0 1-1.8 4.3L52 72.5a6 6 0 0 1-8.5 0L23.5 52.5a6 6 0 0 1 0-8.5L45.7 21.8A6 6 0 0 1 50 20z" fill="url(#lf1)"/>
+  <circle cx="64" cy="32" r="5" fill="#fff"/>
+  <!-- 원화 표시 -->
+  <g stroke="#fff" stroke-width="3.4" stroke-linecap="round" fill="none">
+    <path d="M38 42l5 13 5-13 5 13 5-13"/>
+    <path d="M35 50h27"/>
+    <path d="M35 56h27"/>
+  </g>
+  <!-- 하락 화살표 -->
+  <g fill="#2FBF9B">
+    <circle cx="26" cy="70" r="14" fill="#E4F7F1"/>
+    <path d="M26 63v10m0 0l-5-5m5 5l5-5" stroke="#2FBF9B" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>

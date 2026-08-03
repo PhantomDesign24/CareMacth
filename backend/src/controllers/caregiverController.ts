@@ -228,6 +228,40 @@ export const deleteCertificate = async (req: AuthRequest, res: Response, next: N
   }
 };
 
+// PUT /certificates/:id - 자격증 수정 (본인 소유)
+//  이미지 재첨부는 선택 — 없으면 기존 이미지를 유지한다.
+//  수정하면 검증 상태(verified)는 초기화해 관리자가 다시 확인하게 한다.
+export const updateCertificate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) throw new AppError(errors.array()[0].msg || '입력값이 올바르지 않습니다.', 400);
+
+    const caregiver = await prisma.caregiver.findUnique({ where: { userId: req.user!.id } });
+    if (!caregiver) throw new AppError('간병인 정보를 찾을 수 없습니다.', 404);
+
+    const { id } = req.params;
+    const cert = await prisma.certificate.findUnique({ where: { id } });
+    if (!cert || cert.caregiverId !== caregiver.id) {
+      throw new AppError('자격증을 찾을 수 없습니다.', 404);
+    }
+
+    const { name, issuer, issueDate } = req.body;
+    const file = (req as any).file;
+    const updated = await prisma.certificate.update({
+      where: { id },
+      data: {
+        ...(name ? { name: String(name).trim() } : {}),
+        ...(issuer ? { issuer: String(issuer).trim() } : {}),
+        ...(issueDate ? { issueDate: new Date(issueDate) } : {}),
+        ...(file ? { imageUrl: `/uploads/${file.filename}`, verified: false } : {}),
+      },
+    });
+    res.json({ success: true, message: '자격증이 수정되었습니다.', data: updated });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // PUT /work-status - 근무 상태 변경
 export const updateWorkStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
