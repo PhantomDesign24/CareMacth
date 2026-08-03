@@ -1035,7 +1035,8 @@ model InsuranceDocRequest {
   insuranceCompany String
   documentType     String // 간병확인서, 영수증 등
   status           InsuranceDocStatus @default(REQUESTED)
-  documentUrl      String? // 발급된 서류 URL
+  documentUrl      String? // 발급된 서류 URL (레거시 단일 — 신규는 documentUrls 사용)
+  documentUrls     String[] @default([]) // 발급 서류 여러 건 (사업자등록증·간병인사용확인서·용역계약서·간병일지 등)
   requestedBy      String // userId 또는 카카오톡 ID
   processedBy      String? // 처리 관리자 ID
 

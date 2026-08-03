@@ -183,8 +183,28 @@ export const adminUpdateInsurance = async (req: AuthRequest, res: Response, next
     if (!req_) throw new AppError('신청을 찾을 수 없습니다.', 404);
 
     // 보험서류 — 민감 파일이므로 비공개 저장(uploadPrivate) + 인증 라우트로만 접근
-    if (req.file) {
-      documentUrl = `/api/files/private/${req.file.filename}`;
+    //  기본 3종(사업자등록증·간병인사용확인서·용역계약서) + 간병일지 등 여러 건 업로드 지원.
+    //  기존 파일에 "추가"되며, 단일 documentUrl 은 하위호환용으로 첫 파일을 유지한다.
+    const uploaded: string[] = [];
+    const multi = (req as any).files as Express.Multer.File[] | undefined;
+    if (Array.isArray(multi) && multi.length > 0) {
+      for (const f of multi) uploaded.push(`/api/files/private/${f.filename}`);
+    } else if (req.file) {
+      uploaded.push(`/api/files/private/${req.file.filename}`);
+    }
+    // 개별 삭제 요청 (removeUrls: JSON 배열 문자열 또는 배열)
+    let removeUrls: string[] = [];
+    try {
+      const raw = (req.body as any)?.removeUrls;
+      if (raw) removeUrls = Array.isArray(raw) ? raw.map(String) : JSON.parse(String(raw));
+    } catch { removeUrls = []; }
+
+    const prevUrls: string[] = (req_ as any).documentUrls?.length
+      ? (req_ as any).documentUrls
+      : (req_.documentUrl ? [req_.documentUrl] : []);
+    const nextUrls = [...prevUrls.filter((u) => !removeUrls.includes(u)), ...uploaded];
+    if (uploaded.length > 0 || removeUrls.length > 0) {
+      documentUrl = nextUrls[0] || null; // 레거시 필드는 대표(첫) 파일
     }
 
     if (status === 'REJECTED' && !(rejectReason || adminNote)) {
@@ -196,6 +216,7 @@ export const adminUpdateInsurance = async (req: AuthRequest, res: Response, next
       data: {
         ...(status && { status }),
         ...(documentUrl !== undefined && { documentUrl: documentUrl || null }),
+        ...((uploaded.length > 0 || removeUrls.length > 0) && { documentUrls: nextUrls }),
         processedBy: req.user!.id,
       },
     });

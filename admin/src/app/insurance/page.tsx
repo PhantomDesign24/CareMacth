@@ -13,6 +13,7 @@ interface InsuranceReq {
   documentType: string;
   status: string;
   documentUrl: string | null;
+  documentUrls?: string[];
   createdAt: string;
   requester?: { id: string; name: string; email: string; phone: string } | null;
 }
@@ -59,7 +60,7 @@ export default function InsuranceAdminPage() {
   }, []);
   const [completeTarget, setCompleteTarget] = useState<InsuranceReq | null>(null);
   const [rejectTarget, setRejectTarget] = useState<InsuranceReq | null>(null);
-  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docFiles, setDocFiles] = useState<File[]>([]);
   const [rejectReason, setRejectReason] = useState("");
   const [updating, setUpdating] = useState(false);
 
@@ -103,7 +104,7 @@ export default function InsuranceAdminPage() {
   };
 
   const handleComplete = async () => {
-    if (!completeTarget || !docFile) {
+    if (!completeTarget || docFiles.length === 0) {
       alert("서류 파일을 선택해주세요.");
       return;
     }
@@ -111,10 +112,10 @@ export default function InsuranceAdminPage() {
     try {
       const fd = new FormData();
       fd.append("status", "COMPLETED");
-      fd.append("document", docFile);
+      for (const f of docFiles) fd.append("documents", f);
       await patchMultipart(`/admin/insurance/${completeTarget.id}`, fd);
       setCompleteTarget(null);
-      setDocFile(null);
+      setDocFiles([]);
       fetchData();
     } catch (err: any) {
       alert(err?.message || "완료 처리 실패");
@@ -220,7 +221,7 @@ export default function InsuranceAdminPage() {
                         )}
                         {/* 완료/거절 포함 모든 상태에서 서류 재업로드(완료) 가능 */}
                         <button
-                          onClick={() => { setCompleteTarget(r); setDocFile(null); }}
+                          onClick={() => { setCompleteTarget(r); setDocFiles([]); }}
                           disabled={updating}
                           className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
                         >
@@ -252,23 +253,29 @@ export default function InsuranceAdminPage() {
                             거절
                           </button>
                         )}
-                        {r.documentUrl && (
-                          <a
-                            href={(() => {
-                              const u = r.documentUrl;
-                              if (u.startsWith("/api/files/private/") && typeof window !== "undefined") {
-                                const t = localStorage.getItem("token");
-                                return t ? `${API_HOST}${u}?token=${encodeURIComponent(t)}` : `${API_HOST}${u}`;
-                              }
-                              return `${API_HOST}${u}`;
-                            })()}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                          >
-                            서류
-                          </a>
-                        )}
+                        {(() => {
+                          // 다중 업로드 지원 — documentUrls 우선, 없으면 레거시 단일 documentUrl
+                          const urls = (r.documentUrls && r.documentUrls.length > 0)
+                            ? r.documentUrls
+                            : (r.documentUrl ? [r.documentUrl] : []);
+                          return urls.map((u, i) => (
+                            <a
+                              key={`${u}_${i}`}
+                              href={(() => {
+                                if (u.startsWith("/api/files/private/") && typeof window !== "undefined") {
+                                  const t = localStorage.getItem("token");
+                                  return t ? `${API_HOST}${u}?token=${encodeURIComponent(t)}` : `${API_HOST}${u}`;
+                                }
+                                return `${API_HOST}${u}`;
+                              })()}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                            >
+                              서류{urls.length > 1 ? ` ${i + 1}` : ""}
+                            </a>
+                          ));
+                        })()}
                       </div>
                     </td>
                   </tr>
@@ -295,19 +302,45 @@ export default function InsuranceAdminPage() {
             </label>
             <input
               type="file"
+              multiple
               accept=".pdf,.jpg,.jpeg,.png,.webp"
-              onChange={(e) => setDocFile(e.target.files?.[0] || null)}
+              onChange={(e) => {
+                const picked = Array.from(e.target.files || []);
+                // 여러 번 나눠서 선택해도 누적되도록 (같은 이름+크기는 중복 제외)
+                setDocFiles((prev) => {
+                  const key = (f: File) => `${f.name}_${f.size}`;
+                  const seen = new Set(prev.map(key));
+                  return [...prev, ...picked.filter((f) => !seen.has(key(f)))];
+                });
+                e.target.value = "";
+              }}
               className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-green-50 file:text-green-700 file:text-sm file:font-semibold hover:file:bg-green-100"
             />
-            <p className="text-xs text-gray-400 mt-1">PDF · JPG · PNG (최대 10MB)</p>
-            {docFile && (
-              <p className="text-xs text-gray-600 mt-2">
-                선택됨: <span className="font-medium">{docFile.name}</span> ({(docFile.size / 1024).toFixed(1)}KB)
-              </p>
+            <p className="text-xs text-gray-400 mt-1">
+              PDF · JPG · PNG (각 최대 10MB) · <b>여러 개 선택 가능</b> (사업자등록증, 간병인사용확인서, 용역계약서, 간병일지 등)
+            </p>
+            {docFiles.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {docFiles.map((f, i) => (
+                  <li key={`${f.name}_${i}`} className="flex items-center justify-between rounded border border-gray-200 bg-gray-50 px-2 py-1 text-xs">
+                    <span className="truncate text-gray-700">
+                      {f.name} <span className="text-gray-400">({(f.size / 1024).toFixed(1)}KB)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDocFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="ml-2 shrink-0 text-red-500 hover:underline"
+                    >
+                      제거
+                    </button>
+                  </li>
+                ))}
+                <li className="text-[11px] text-gray-500">총 {docFiles.length}개 선택됨</li>
+              </ul>
             )}
             <div className="flex gap-2 mt-5">
               <button
-                onClick={() => { setCompleteTarget(null); setDocFile(null); }}
+                onClick={() => { setCompleteTarget(null); setDocFiles([]); }}
                 className="btn-secondary flex-1"
                 disabled={updating}
               >
@@ -315,7 +348,7 @@ export default function InsuranceAdminPage() {
               </button>
               <button
                 onClick={handleComplete}
-                disabled={updating || !docFile}
+                disabled={updating || docFiles.length === 0}
                 className="btn-success flex-1 disabled:opacity-50"
               >
                 {updating ? "처리 중..." : "업로드 + 완료 처리"}

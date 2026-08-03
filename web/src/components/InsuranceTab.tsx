@@ -14,6 +14,7 @@ interface Req {
   createdAt: string;
   updatedAt?: string;
   documentUrl?: string | null;
+  documentUrls?: string[];
   rejectReason?: string | null;
 }
 
@@ -141,24 +142,35 @@ export default function InsuranceTab() {
                       </div>
                     )}
                   </div>
-                  {r.status === "COMPLETED" && r.documentUrl && (
-                    <a
-                      href={(() => {
-                        if (!r.documentUrl) return '#';
-                        // 인증 라우트(/api/files/private/...)는 토큰 쿼리 동봉
-                        if (r.documentUrl.startsWith('/api/files/private/')) {
-                          const token = typeof window !== 'undefined' ? localStorage.getItem('cm_access_token') : null;
-                          return token ? `${r.documentUrl}?token=${encodeURIComponent(token)}` : r.documentUrl;
-                        }
-                        return r.documentUrl;
-                      })()}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 shrink-0"
-                    >
-                      📄 서류 다운로드
-                    </a>
-                  )}
+                  {r.status === "COMPLETED" && (() => {
+                    // 서류가 여러 건이면 모두 표시 (사업자등록증·간병인사용확인서·용역계약서·간병일지 등)
+                    const urls = (r.documentUrls && r.documentUrls.length > 0)
+                      ? r.documentUrls
+                      : (r.documentUrl ? [r.documentUrl] : []);
+                    if (urls.length === 0) return null;
+                    const withToken = (u: string) => {
+                      if (u.startsWith('/api/files/private/')) {
+                        const token = typeof window !== 'undefined' ? localStorage.getItem('cm_access_token') : null;
+                        return token ? `${u}?token=${encodeURIComponent(token)}` : u;
+                      }
+                      return u;
+                    };
+                    return (
+                      <div className="flex flex-col gap-1.5 shrink-0">
+                        {urls.map((u, i) => (
+                          <a
+                            key={`${u}_${i}`}
+                            href={withToken(u)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 whitespace-nowrap"
+                          >
+                            📄 서류 다운로드{urls.length > 1 ? ` ${i + 1}` : ''}
+                          </a>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );

@@ -145,7 +145,19 @@ router.get('/insurance', insuranceController.adminListInsurance);
 // PATCH: multipart(파일업로드) 또는 JSON 둘 다 허용 — 보험서류는 민감 파일로 비공개 저장
 router.patch(
   '/insurance/:id',
-  uploadInsurancePrivate.single('document'),
+  // 단일('document') / 다중('documents') 모두 허용 — 기본 3종 + 필요한 만큼 추가 업로드
+  uploadInsurancePrivate.fields([
+    { name: 'document', maxCount: 1 },
+    { name: 'documents', maxCount: 10 },
+  ]),
+  (req: any, _res: any, next: any) => {
+    // fields() 는 req.files 를 객체로 주므로 컨트롤러가 쓰기 쉽게 평탄화
+    const f = req.files || {};
+    const list = [...(f.documents || []), ...(f.document || [])];
+    req.files = list;
+    if (!req.file && list.length === 1) req.file = list[0];
+    next();
+  },
   handleInsuranceUploadError,
   verifyInsuranceMagic,
   insuranceController.adminUpdateInsurance,
