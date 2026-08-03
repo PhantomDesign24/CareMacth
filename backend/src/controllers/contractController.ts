@@ -314,9 +314,23 @@ export const getContract = async (req: AuthRequest, res: Response, next: NextFun
       ? (dpCfg?.individualFeeFixed ?? 0)
       : (dpCfg?.familyFeeFixed ?? 0);
 
+    // 간병사 표시용 금액 — 매칭수수료(보호자 부담 플랫폼 이용료) 제외 기준.
+    //  공고 목록의 netDailyRate 와 동일 기준이라 계약서·활동이력에서도 같은 금액이 보인다.
+    const feeFixed = (contract as any).platformFeeFixed || 0;
+    const netDailyRate = Math.max(0, contract.dailyRate - feeFixed);
+    const contractDays = Math.max(1, Math.round(contract.totalAmount / (contract.dailyRate || 1)));
+    const netTotalAmount = netDailyRate * contractDays;
+    const netTax = Math.round(netTotalAmount * ((contract.taxRate ?? 3.3) / 100));
+
     res.json({
       success: true,
-      data: { ...contract, directFeePerDay },
+      data: {
+        ...contract,
+        directFeePerDay,
+        netDailyRate,
+        netTotalAmount,
+        netPayoutAmount: Math.max(0, netTotalAmount - netTax), // 원천징수 차감 후 지급 예정액
+      },
     });
   } catch (error) {
     next(error);
@@ -1104,11 +1118,23 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     // 장소는 병원명만 표기 (병원명 없으면 병원/자택 라벨)
     drawTableRow('장소', contract.careRequest.hospitalName || (contract.careRequest.location === 'HOSPITAL' ? '병원' : '자택'));
     drawTableRow('간병 기간', `${new Date(contract.startDate).toLocaleDateString('ko-KR')} ~ ${new Date(contract.endDate).toLocaleDateString('ko-KR')}`);
-    drawTableRow('일당', `${contract.dailyRate.toLocaleString()}원`);
-    drawTableRow('총 금액', `${contract.totalAmount.toLocaleString()}원 (VAT 별도)`);
     // 수수료 표기 — 정액/정률 구분
     const pf = contract.platformFee;
     const ff = (contract as any).platformFeeFixed || 0;
+    // 간병사(을) 기준 금액 = 매칭수수료 제외 (매칭수수료는 보호자가 부담하는 플랫폼 이용료)
+    //  공고 화면(netDailyRate)과 동일 기준으로 맞춘다.
+    const isCaregiverDoc = role === 'CAREGIVER';
+    const netDaily = Math.max(0, contract.dailyRate - ff);
+    const days = Math.max(1, Math.round(contract.totalAmount / (contract.dailyRate || 1)));
+    const shownDaily = isCaregiverDoc ? netDaily : contract.dailyRate;
+    const shownTotal = isCaregiverDoc ? netDaily * days : contract.totalAmount;
+    drawTableRow('일당', `${shownDaily.toLocaleString()}원${isCaregiverDoc && ff > 0 ? ' (매칭수수료 제외)' : ''}`);
+    drawTableRow('총 금액', `${shownTotal.toLocaleString()}원${isCaregiverDoc ? '' : ' (VAT 별도)'}`);
+    if (isCaregiverDoc) {
+      // 원천징수 차감 후 실지급 예정액까지 안내
+      const tax = Math.round(shownTotal * ((contract.taxRate ?? 3.3) / 100));
+      drawTableRow('지급 예정액', `${Math.max(0, shownTotal - tax).toLocaleString()}원 (원천징수 ${tax.toLocaleString()}원 차감)`);
+    }
     const feeText = (ff > 0 && pf > 0)
       ? `${pf}% + ${ff.toLocaleString()}원/일`
       : (ff > 0 ? `${ff.toLocaleString()}원/일 (정액)` : (pf > 0 ? `${pf}%` : '없음'));

@@ -348,7 +348,9 @@ function CaregiverDashboard() {
           contractStatus: c.status || '',
           careType: formatCareType(c.careRequest?.careType || ''),
           location: formatLocation(c.careRequest?.location || ''),
-          earnings: c.totalAmount || 0,
+          // 간병사 표시 금액 = 매칭수수료 제외 순액 (공고·계약서와 동일 기준)
+          earnings: (typeof c.netTotalAmount === 'number' ? c.netTotalAmount : c.totalAmount) || 0,
+          netPayoutAmount: typeof c.netPayoutAmount === 'number' ? c.netPayoutAmount : null,
           hasTodayRecord,
           guardianSigned: !!c.guardianSignedAt,
           caregiverSigned: !!c.caregiverSignedAt,

@@ -510,11 +510,27 @@ export const getActivity = async (req: AuthRequest, res: Response, next: NextFun
       hasBadge: caregiver.hasBadge,
     };
 
+    // 간병사에게 보이는 금액은 매칭수수료(보호자 부담 플랫폼 이용료) 제외 기준으로 통일.
+    //  공고 목록의 netDailyRate 와 동일해야 계약서·활동이력 금액이 어긋나지 않는다.
+    const contractsForCaregiver = contracts.map((c: any) => {
+      const feeFixed = c.platformFeeFixed || 0;
+      const netDailyRate = Math.max(0, (c.dailyRate || 0) - feeFixed);
+      const days = Math.max(1, Math.round((c.totalAmount || 0) / (c.dailyRate || 1)));
+      const netTotalAmount = netDailyRate * days;
+      const tax = Math.round(netTotalAmount * ((c.taxRate ?? 3.3) / 100));
+      return {
+        ...c,
+        netDailyRate,
+        netTotalAmount,
+        netPayoutAmount: Math.max(0, netTotalAmount - tax),
+      };
+    });
+
     res.json({
       success: true,
       data: {
         stats,
-        contracts,
+        contracts: contractsForCaregiver,
         pagination: {
           page,
           limit,
