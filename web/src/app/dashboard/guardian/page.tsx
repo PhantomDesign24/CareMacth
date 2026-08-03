@@ -1189,15 +1189,23 @@ function GuardianDashboard() {
                             📋 간병일지
                           </Link>
                         )}
-                        {!care.isVirtual && (care.contractStatus === 'COMPLETED' || care.isPaid) && (
-                          <button
-                            type="button"
-                            onClick={() => setInsuranceTarget(care)}
-                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
-                          >
-                            🛡 보험서류
-                          </button>
-                        )}
+                        {/* 보험서류는 간병 종료일부터 신청 가능 (클라이언트 요청) */}
+                        {!care.isVirtual && (() => {
+                          const endRaw = (care as any).endDateRaw || care.endDate;
+                          const end = endRaw ? new Date(endRaw) : null;
+                          const started = !!end && !isNaN(end.getTime()) && Date.now() >= end.setHours(0, 0, 0, 0);
+                          const canApply = care.contractStatus === 'COMPLETED' || started;
+                          if (!canApply) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setInsuranceTarget(care)}
+                              className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                            >
+                              🛡 보험서류
+                            </button>
+                          );
+                        })()}
                         {!care.isVirtual && (
                           <button
                             type="button"
@@ -1795,20 +1803,18 @@ function GuardianDashboard() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  서류 종류 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={insuranceForm.documentType}
-                  onChange={(e) => setInsuranceForm({ ...insuranceForm, documentType: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
-                >
-                  <option value="간병확인서">간병확인서</option>
-                  <option value="영수증">영수증</option>
-                  <option value="간병일지">간병일지</option>
-                  <option value="진단서">진단서</option>
-                </select>
+              {/* 서류 종류 선택 제거 — 아래 4종이 일괄 발급됩니다 (클라이언트 요청) */}
+              <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-3">
+                <p className="text-sm font-medium text-indigo-900">발급 서류 (일괄)</p>
+                <ul className="mt-1.5 space-y-0.5 text-xs text-indigo-800">
+                  <li>· 사업자등록증</li>
+                  <li>· 간병인 사용확인서</li>
+                  <li>· 용역계약서</li>
+                  <li>· 간병일지</li>
+                </ul>
+                <p className="mt-2 text-[11px] text-indigo-700">
+                  보험 청구에 필요한 서류가 함께 발급되므로 따로 선택하지 않으셔도 됩니다.
+                </p>
               </div>
             </div>
             <div className="flex gap-2 mt-5">
@@ -1832,7 +1838,7 @@ function GuardianDashboard() {
                       birthDate: "1900-01-01", // 환자 정보에서 더 정확한 값을 넘길 수도 있음
                       carePeriod: `${insuranceTarget.startDate} ~ ${insuranceTarget.endDate}`,
                       insuranceCompany: insuranceForm.insuranceCompany.trim(),
-                      documentType: insuranceForm.documentType,
+                      documentType: '보험청구 서류 일괄(사업자등록증·간병인사용확인서·용역계약서·간병일지)',
                     });
                     showToast("보험서류 신청이 접수되었습니다. 1~2일 내 처리됩니다.", "success");
                     setInsuranceTarget(null);

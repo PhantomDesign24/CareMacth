@@ -1480,23 +1480,19 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   시작 시간
                 </label>
-                <input
-                  type="time"
-                  className="input-field"
+                <TimeSelect
                   id="cr-hourlyStart"
-                  value={form.hourlyStart}
-                  onChange={(e) => update("hourlyStart", e.target.value)}
+                  value={form.hourlyStart || "09:00"}
+                  onChange={(v) => update("hourlyStart", v)}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   종료 시간
                 </label>
-                <input
-                  type="time"
-                  className="input-field"
-                  value={form.hourlyEnd}
-                  onChange={(e) => update("hourlyEnd", e.target.value)}
+                <TimeSelect
+                  value={form.hourlyEnd || "18:00"}
+                  onChange={(v) => update("hourlyEnd", v)}
                 />
               </div>
             </div>
@@ -1669,12 +1665,10 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 시작 시간 <span className="text-red-500">*</span>
               </label>
-              <input
-                type="time"
-                className="input-field"
+              <TimeSelect
                 id="cr-startTime"
                 value={form.startTime}
-                onChange={(e) => update("startTime", e.target.value)}
+                onChange={(v) => update("startTime", v)}
               />
               <p className="mt-1 text-[11px] text-gray-400">이 시각 기준으로 24시간 카운트됩니다.</p>
             </div>
@@ -1863,5 +1857,66 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
         )}
       </div>
     </form>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  시간 선택기 — 오전/오후 · 시 · 분 (값은 "HH:mm" 24시간 형식)          */
+/*  네이티브 <input type="time"> 은 일부 앱 WebView 에서 오전→오후 전환이  */
+/*  동작하지 않아 셀렉트 기반으로 직접 구성한다.                          */
+/* ------------------------------------------------------------------ */
+function TimeSelect({
+  value,
+  onChange,
+  id,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  id?: string;
+}) {
+  const [rawH, rawM] = (value || "09:00").split(":");
+  const h24 = Number.isFinite(parseInt(rawH)) ? parseInt(rawH) : 9;
+  const min = Number.isFinite(parseInt(rawM)) ? parseInt(rawM) : 0;
+  const isPM = h24 >= 12;
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+
+  const emit = (period: "AM" | "PM", hour12: number, minute: number) => {
+    let H = hour12 % 12;
+    if (period === "PM") H += 12;
+    onChange(`${String(H).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
+  };
+
+  return (
+    <div className="flex gap-2" id={id}>
+      <select
+        className="input-field flex-1"
+        value={isPM ? "PM" : "AM"}
+        onChange={(e) => emit(e.target.value as "AM" | "PM", h12, min)}
+        aria-label="오전/오후"
+      >
+        <option value="AM">오전</option>
+        <option value="PM">오후</option>
+      </select>
+      <select
+        className="input-field flex-1"
+        value={h12}
+        onChange={(e) => emit(isPM ? "PM" : "AM", Number(e.target.value), min)}
+        aria-label="시"
+      >
+        {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+          <option key={h} value={h}>{h}시</option>
+        ))}
+      </select>
+      <select
+        className="input-field flex-1"
+        value={min}
+        onChange={(e) => emit(isPM ? "PM" : "AM", h12, Number(e.target.value))}
+        aria-label="분"
+      >
+        {[0, 10, 20, 30, 40, 50].map((m) => (
+          <option key={m} value={m}>{String(m).padStart(2, "0")}분</option>
+        ))}
+      </select>
+    </div>
   );
 }
