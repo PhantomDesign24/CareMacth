@@ -224,7 +224,7 @@ function HeroSection() {
                 src={s.src}
                 alt=""
                 /* 모바일에서 인물 우측이 잘리던 문제 수정 — 우측 여백 확보 + 최대 너비 축소 */
-                className="absolute bottom-0 right-2 sm:right-3 md:right-[3%] h-[38%] sm:h-[62%] md:h-[88%] w-auto max-w-[44%] sm:max-w-[50%] md:max-w-[54%] object-contain object-bottom pointer-events-none select-none"
+                className="hidden sm:block absolute bottom-0 right-3 md:right-[3%] h-[62%] md:h-[88%] w-auto max-w-[48%] md:max-w-[52%] object-contain object-bottom pointer-events-none select-none"
               />
             </>
           )}
@@ -259,7 +259,7 @@ function HeroSection() {
             <button
               type="button"
               onClick={() => handleAuthRedirect("/care-request", "guardian")}
-              className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-primary-500 text-white font-bold rounded-2xl text-sm sm:text-base hover:bg-primary-600 transition-all duration-200 shadow-xl shadow-primary-500/30 w-full sm:w-auto"
+              className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-primary-500 text-white font-bold rounded-2xl text-sm sm:text-base hover:bg-primary-600 transition-all duration-200 shadow-xl shadow-primary-500/30 w-full sm:w-auto sm:min-w-[190px]"
             >
               간병인 찾기
               <FiArrowRight className="w-5 h-5" />
@@ -267,7 +267,7 @@ function HeroSection() {
             <button
               type="button"
               onClick={() => handleAuthRedirect("/find-work", "caregiver")}
-              className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-secondary-500 text-white font-bold rounded-2xl text-sm sm:text-base hover:bg-secondary-600 transition-all duration-200 shadow-xl shadow-secondary-500/30 w-full sm:w-auto"
+              className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-secondary-500 text-white font-bold rounded-2xl text-sm sm:text-base hover:bg-secondary-600 transition-all duration-200 shadow-xl shadow-secondary-500/30 w-full sm:w-auto sm:min-w-[190px]"
             >
               간병일감 찾기
               <FiArrowRight className="w-5 h-5" />
@@ -277,14 +277,14 @@ function HeroSection() {
           {/* App Store Buttons — 앱 내부에서는 숨김. 밝은/어두운 슬라이드 모두 보이게 검은 배지 */}
           {!isApp && (
             <div className="mt-5 sm:mt-7 flex items-center gap-2 sm:gap-3">
-              <a href={SITE.iosStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
+              <a href={SITE.iosStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 min-w-[140px] sm:min-w-[168px] bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
                 <FaApple className="w-4 sm:w-5 h-4 sm:h-5" />
                 <div className="text-left">
                   <div className="text-[9px] sm:text-[10px] opacity-70 leading-none">Download on the</div>
                   <div className="text-xs sm:text-sm font-semibold leading-tight">App Store</div>
                 </div>
               </a>
-              <a href={SITE.androidStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
+              <a href={SITE.androidStoreUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-2.5 min-w-[140px] sm:min-w-[168px] bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all duration-200">
                 <FaGooglePlay className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                 <div className="text-left">
                   <div className="text-[9px] sm:text-[10px] opacity-70 leading-none">GET IT ON</div>
