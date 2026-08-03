@@ -104,7 +104,10 @@ export async function sendAlimtalk(params: SendAlimtalkParams): Promise<{ succes
   }
 
   if (params.failoverSms) {
-    form.append('failover_1', 'Y');
+    // 알리고 대체발송 스위치는 인덱스 없는 전역 파라미터('failover')다.
+    //  'failover_1' 로 보내면 알리고가 무시해 카톡 실패 시 문자가 나가지 않는다.
+    //  (실측: failover_1 → smid=0(미발송) / failover → smid 부여(발송됨))
+    form.append('failover', 'Y');
     form.append('fsubject_1', params.failoverSms.subject || params.subject || '');
     form.append('fmessage_1', params.failoverSms.message || params.message);
     form.append('ftype_1', params.failoverSms.type);

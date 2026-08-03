@@ -405,6 +405,15 @@ export default function NotificationTemplatesPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-700">본문</label>
+                {/* 알림톡은 카카오 승인 본문과 한 글자라도 다르면 전송이 거부된다.
+                    (실제로 이 경고가 없어 본문을 고친 템플릿 2개가 발송 불능이 된 적 있음) */}
+                {editForm.alimtalkTemplateCode && editForm.body !== (editing?.body ?? editForm.body) && (
+                  <div className="mb-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    ⚠️ <b>알림톡 연동 템플릿입니다 ({editForm.alimtalkTemplateCode})</b><br />
+                    본문을 바꾸면 카카오 승인 내용과 달라져 <b>알림톡이 전송 거부</b>됩니다.
+                    문구를 바꾸려면 카카오 재승인(템플릿 재등록 → 검수)이 필요합니다.
+                  </div>
+                )}
                 <textarea
                   value={editForm.body}
                   onChange={(e) => setEditForm({ ...editForm, body: e.target.value })}
