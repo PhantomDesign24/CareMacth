@@ -202,7 +202,7 @@ function HeroSection() {
     : "text-2xl sm:text-4xl md:text-5xl";
 
   return (
-    <section className="relative overflow-hidden min-h-[560px] md:min-h-[660px] flex items-center">
+    <section className="relative overflow-hidden min-h-[460px] md:min-h-[560px] flex items-center">
       {/* Background slides */}
       {slides.map((s, i) => (
         <div
@@ -223,7 +223,8 @@ function HeroSection() {
               <img
                 src={s.src}
                 alt=""
-                className="absolute bottom-0 right-0 md:right-[3%] h-[40%] sm:h-[64%] md:h-[88%] w-auto max-w-[54%] object-contain object-bottom pointer-events-none select-none"
+                /* 모바일에서 인물 우측이 잘리던 문제 수정 — 우측 여백 확보 + 최대 너비 축소 */
+                className="absolute bottom-0 right-2 sm:right-3 md:right-[3%] h-[38%] sm:h-[62%] md:h-[88%] w-auto max-w-[44%] sm:max-w-[50%] md:max-w-[54%] object-contain object-bottom pointer-events-none select-none"
               />
             </>
           )}
@@ -231,7 +232,7 @@ function HeroSection() {
       ))}
 
       {/* Content — 왼쪽 정렬 (옛 사이트 구조 그대로) */}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-14 w-full z-10">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 md:py-10 w-full z-10">
         <div className="max-w-2xl">
           {/* Slide number */}
           <p className={`text-3xl sm:text-5xl font-black mb-2 sm:mb-4 ${isImg ? "text-primary-500" : "text-white/80"}`}>
@@ -548,12 +549,12 @@ function LiveDashboardSection() {
         {/* 상단 카운터 */}
         <div className="grid grid-cols-2 gap-4 mb-8">
           <div ref={counter1.ref} className="rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 p-5 sm:p-8 text-white text-center">
-            <p className="text-primary-100 text-xs sm:text-sm font-medium mb-1">매칭 성공사례</p>
-            <p className="text-2xl sm:text-4xl md:text-5xl font-extrabold">{counter1.count.toLocaleString()}<span className="text-base sm:text-xl ml-1">건</span></p>
+            <p className="text-primary-100 text-sm sm:text-base md:text-lg font-semibold mb-1.5">매칭 성공사례</p>
+            <p className="text-2xl sm:text-3xl md:text-4xl font-extrabold">{counter1.count.toLocaleString()}<span className="text-base sm:text-xl ml-1">건</span></p>
           </div>
           <div ref={counter2.ref} className="rounded-2xl bg-gradient-to-br from-secondary-500 to-secondary-600 p-5 sm:p-8 text-white text-center">
-            <p className="text-secondary-100 text-xs sm:text-sm font-medium mb-1">진행 중 간병</p>
-            <p className="text-2xl sm:text-4xl md:text-5xl font-extrabold">{counter2.count.toLocaleString()}<span className="text-base sm:text-xl ml-1">건</span></p>
+            <p className="text-secondary-100 text-sm sm:text-base md:text-lg font-semibold mb-1.5">진행 중 간병</p>
+            <p className="text-2xl sm:text-3xl md:text-4xl font-extrabold">{counter2.count.toLocaleString()}<span className="text-base sm:text-xl ml-1">건</span></p>
           </div>
         </div>
 
