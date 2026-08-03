@@ -1280,3 +1280,11 @@ export async function adminAddUserRole(userId: string, role: "GUARDIAN" | "CAREG
     { method: "POST", body: { role } },
   );
 }
+
+// 간병비(일당) 관리자 수정 — 가족간병 보험 담보액 등 건별 조정
+export async function updateCareRequestDailyRate(id: string, dailyRate: number) {
+  return apiRequest<{ careRequestId: string; dailyRate: number; contractsUpdated: number }>(
+    `/admin/care-requests/${id}/daily-rate`,
+    { method: "PATCH", body: { dailyRate } },
+  );
+}

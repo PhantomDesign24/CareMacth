@@ -5261,6 +5261,68 @@ export const forceCloseCareRequest = async (req: AuthRequest, res: Response, nex
   }
 };
 
+// PATCH /admin/care-requests/:id/daily-rate — 간병비(일당) 관리자 수정
+//  가족간병은 보험 담보 금액에 따라 건별로 금액이 달라지므로 관리자가 직접 조정한다.
+//  결제가 발생한 건은 금액이 어긋나므로 차단(환불·재결제 필요).
+export const updateCareRequestDailyRate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const dailyRate = parseInt(req.body?.dailyRate);
+    if (!Number.isFinite(dailyRate) || dailyRate <= 0) {
+      throw new AppError('일당(원)을 올바르게 입력해주세요.', 400);
+    }
+
+    const cr = await prisma.careRequest.findUnique({
+      where: { id },
+      select: { id: true, dailyRate: true, durationDays: true, status: true, patient: { select: { name: true } } },
+    });
+    if (!cr) throw new AppError('간병 요청을 찾을 수 없습니다.', 404);
+    if (cr.status === 'COMPLETED' || cr.status === 'CANCELLED') {
+      throw new AppError('종료된 요청의 금액은 수정할 수 없습니다.', 400);
+    }
+
+    // 연결 계약 확인 — 결제가 있으면 금액 정합이 깨지므로 차단
+    const contracts = await prisma.contract.findMany({
+      where: { careRequestId: id, status: { in: ['PENDING_SIGNATURE', 'ACTIVE', 'EXTENDED'] } },
+      select: { id: true, status: true, startDate: true, endDate: true },
+    });
+    if (contracts.length > 0) {
+      const paid = await prisma.payment.count({
+        where: { contractId: { in: contracts.map((c) => c.id) }, status: { in: ['PENDING', 'ESCROW', 'COMPLETED', 'PARTIAL_REFUND'] } },
+      });
+      if (paid > 0) {
+        throw new AppError('이미 결제가 진행된 건은 금액을 수정할 수 없습니다. (환불 후 재진행 필요)', 400);
+      }
+    }
+
+    const before = cr.dailyRate;
+    const updated = await prisma.$transaction(async (tx) => {
+      const r = await tx.careRequest.update({ where: { id }, data: { dailyRate } });
+      // 결제 전 계약이 있으면 총액도 함께 재계산
+      for (const c of contracts) {
+        const days = Math.max(1, Math.ceil((new Date(c.endDate).getTime() - new Date(c.startDate).getTime()) / 86400000));
+        await tx.contract.update({
+          where: { id: c.id },
+          data: { dailyRate, totalAmount: dailyRate * days },
+        });
+      }
+      return r;
+    });
+
+    await logAdminAction(req, 'ADMIN_UPDATE_DAILY_RATE', {
+      targetType: 'careRequest', targetId: id,
+      payload: { before, after: dailyRate, patientName: cr.patient?.name, contractsUpdated: contracts.length },
+    });
+
+    res.json({
+      success: true,
+      data: { careRequestId: id, dailyRate: updated.dailyRate, contractsUpdated: contracts.length },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // POST /admin/users/:userId/add-role — 중복가입 승인(역할 추가)
 //  같은 사람이 보호자↔간병인을 함께 이용하려는 경우, 연락처/이메일이 유니크라
 //  계정을 새로 만들 수 없으므로 기존 계정에 다른 역할 프로필을 추가한다.

@@ -9,6 +9,7 @@ import {
   getAdminCareRequest,
   deleteCareRequestAdmin,
   forceCloseCareRequest,
+  updateCareRequestDailyRate,
   AdminCareRequestRow,
 } from "@/lib/api";
 import { formatPhone } from "@/lib/constants";
@@ -518,7 +519,36 @@ export default function CareRequestsPage() {
                     )}
                     <InfoRow label="기간" value={`${formatDate(detailData.startDate)} ~ ${formatDate(detailData.endDate)} (${detailData.durationDays || "-"}일)`} />
                     {detailData.dailyRate && (
-                      <InfoRow label="일당" value={`${detailData.dailyRate.toLocaleString()}원`} />
+                      <div className="flex items-start justify-between gap-2 py-2 border-b border-gray-50">
+                        <span className="text-sm text-gray-500 shrink-0">일당</span>
+                        <span className="flex items-center gap-2 text-sm text-gray-900 text-right">
+                          {detailData.dailyRate.toLocaleString()}원
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const cur = detailData.dailyRate;
+                              const input = prompt(
+                                `간병비(일당)를 수정합니다.\n\n· 가족간병은 보험 담보 금액에 따라 조정하세요\n· 결제가 진행된 건은 수정할 수 없습니다\n\n현재: ${cur.toLocaleString()}원`,
+                                String(cur),
+                              );
+                              if (input === null) return;
+                              const next = parseInt(input.replace(/[^0-9]/g, ""));
+                              if (!next || next <= 0) { alert("금액을 올바르게 입력해주세요."); return; }
+                              try {
+                                const r: any = await updateCareRequestDailyRate(detailRow!.id, next);
+                                alert(`일당이 ${next.toLocaleString()}원으로 변경되었습니다.${r?.contractsUpdated ? `\n연결 계약 ${r.contractsUpdated}건도 갱신됨` : ""}`);
+                                await openDetail(detailRow!);
+                                await fetchData();
+                              } catch (err: any) {
+                                alert(err?.message || "금액 수정 실패");
+                              }
+                            }}
+                            className="rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700 hover:bg-orange-100"
+                          >
+                            수정
+                          </button>
+                        </span>
+                      </div>
                     )}
                     {detailData.hourlyRate && (
                       <InfoRow label="시급" value={`${detailData.hourlyRate.toLocaleString()}원`} />
