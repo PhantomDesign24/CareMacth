@@ -825,12 +825,14 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
         rightX + 10, y + 66);
 
     // ============ 푸터 ============
-    const footerY = PAGE_H - MARGIN + 8;
+    // pdfkit 은 margin(45) 안쪽까지만 쓸 수 있어 PAGE_H - MARGIN 을 넘기면 자동으로 새 페이지가 열린다.
+    //  기존 +8 이 그 한계를 넘겨 '푸터만 있는 3페이지'가 생기던 문제 → 안쪽으로 내린다.
+    const footerY = PAGE_H - MARGIN - 12;
     doc.lineWidth(0.3).strokeColor(COLOR_BORDER)
       .moveTo(MARGIN, footerY - 10).lineTo(PAGE_W - MARGIN, footerY - 10).stroke();
     doc.font('Kor').fontSize(7).fillColor(COLOR_SUB_TEXT)
       .text('CareMatch Co., Ltd.  |  Business Reg. 173-81-03376  |  carematch.co.kr',
-        MARGIN, footerY, { width: TABLE_WIDTH, align: 'center' });
+        MARGIN, footerY, { width: TABLE_WIDTH, align: 'center', lineBreak: false });
 
     doc.end();
   } catch (error) {

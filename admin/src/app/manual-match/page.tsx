@@ -181,7 +181,7 @@ export default function ManualMatchPage() {
   });
   const [care, setCare] = useState({
     careType: "INDIVIDUAL", scheduleType: "FULL_TIME", location: "HOSPITAL",
-    hospitalName: "", address: "", startDate: "", endDate: "", dailyRate: "",
+    hospitalName: "", address: "", startDate: "", startTime: "09:00", endDate: "", endTime: "18:00", dailyRate: "",
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -217,6 +217,8 @@ export default function ManualMatchPage() {
         hospitalName: care.hospitalName || undefined,
         address: care.address || undefined,
         startDate: care.startDate,
+        startTime: care.startTime,
+        endTime: care.endTime,
         endDate: care.endDate,
         dailyRate: rate,
         patient: {
@@ -239,7 +241,7 @@ export default function ManualMatchPage() {
   const reset = () => {
     setGuardian(null); setCaregiver(null); setCreds([]);
     setPatient({ name: "", birthDate: "", gender: "M", mobilityStatus: "PARTIAL", diagnosis: "", medicalNotes: "" });
-    setCare({ careType: "INDIVIDUAL", scheduleType: "FULL_TIME", location: "HOSPITAL", hospitalName: "", address: "", startDate: "", endDate: "", dailyRate: "" });
+    setCare({ careType: "INDIVIDUAL", scheduleType: "FULL_TIME", location: "HOSPITAL", hospitalName: "", address: "", startDate: "", startTime: "09:00", endDate: "", endTime: "18:00", dailyRate: "" });
     setResult(null);
   };
 
@@ -387,8 +389,16 @@ export default function ManualMatchPage() {
               <input className={inputCls} type="date" value={care.startDate} onChange={(e) => setCare({ ...care, startDate: e.target.value })} />
             </div>
             <div>
+              <label className={labelCls}>시작시간</label>
+              <input className={inputCls} type="time" step={600} value={care.startTime} onChange={(e) => setCare({ ...care, startTime: e.target.value })} />
+            </div>
+            <div>
               <label className={labelCls}>종료일</label>
               <input className={inputCls} type="date" value={care.endDate} onChange={(e) => setCare({ ...care, endDate: e.target.value })} />
+            </div>
+            <div>
+              <label className={labelCls}>종료시간</label>
+              <input className={inputCls} type="time" step={600} value={care.endTime} onChange={(e) => setCare({ ...care, endTime: e.target.value })} />
             </div>
             <div>
               <label className={labelCls}>일당(원)</label>

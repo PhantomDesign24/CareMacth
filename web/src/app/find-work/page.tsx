@@ -202,7 +202,9 @@ export default function FindWorkPage() {
 
   const openProposalModal = (request: CareRequest) => {
     setModalTarget(request);
-    setProposedRate(request.dailyRate ? String(request.dailyRate) : "");
+    // 목록·상세 모두 수수료를 뺀 '내가 받을 금액'을 보여주므로 프리필도 순액으로 맞춘다
+    const net = (request as any).netDailyRate ?? request.dailyRate;
+    setProposedRate(net ? String(net) : "");
     setApplyMessage("");
     setApplyError("");
     setApplySuccess("");
@@ -221,7 +223,8 @@ export default function FindWorkPage() {
     try {
       await caregiverAPI.applyWithProposal(modalTarget.id, {
         isAccepted: false,
-        proposedRate: rate,
+        // 화면은 순액 기준 → 서버는 계약 총액으로 쓰므로 수수료를 다시 더해 보낸다
+        proposedRate: rate + ((modalTarget as any).feePerDay || 0),
         message: applyMessage,
       });
       setShowModal(false);
@@ -798,9 +801,12 @@ export default function FindWorkPage() {
             <div className="space-y-4">
               {/* Guardian's rate */}
               <div className="bg-gray-50 rounded-xl px-4 py-3">
-                <span className="text-xs text-gray-500 block mb-1">보호자 제시 금액</span>
+                <span className="text-xs text-gray-500 block mb-1">보호자 제시 금액 (수수료 제외)</span>
                 <span className="text-lg font-bold text-gray-900">
-                  {modalTarget.dailyRate ? `${modalTarget.dailyRate.toLocaleString()}원` : "협의"}
+                  {(() => {
+                    const net = (modalTarget as any).netDailyRate ?? modalTarget.dailyRate;
+                    return net ? `${net.toLocaleString()}원` : "협의";
+                  })()}
                 </span>
               </div>
 

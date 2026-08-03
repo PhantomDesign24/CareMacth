@@ -23,19 +23,18 @@ export const createInsuranceDocRequest = async (req: AuthRequest, res: Response,
       documentType,
     } = req.body;
 
-    if (!patientName || !birthDate || !carePeriod || !insuranceCompany || !documentType) {
+    if (!patientName || !birthDate || !carePeriod || !insuranceCompany) {
       throw new AppError(
-        '모든 필수 항목을 입력해주세요. (환자명, 생년월일, 간병기간, 보험사, 서류종류)',
+        '모든 필수 항목을 입력해주세요. (환자명, 생년월일, 간병기간, 보험사)',
         400
       );
     }
 
-    const validDocTypes = ['간병확인서', '영수증', '간병일지', '진단서'];
-    if (!validDocTypes.includes(documentType)) {
-      throw new AppError(
-        `유효한 서류 종류를 선택해주세요. (${validDocTypes.join(', ')})`,
-        400
-      );
+    // 서류 종류는 4종 일괄 신청으로 통일 — 미입력 시 기본 문구로 저장
+    const docType = String(documentType || '').trim()
+      || '보험청구 서류 일괄(사업자등록증·간병인사용확인서·용역계약서·간병일지)';
+    if (docType.length > 200) {
+      throw new AppError('서류 종류는 200자 이내로 입력해주세요.', 400);
     }
 
     const docRequest = await prisma.insuranceDocRequest.create({
@@ -44,7 +43,7 @@ export const createInsuranceDocRequest = async (req: AuthRequest, res: Response,
         birthDate,
         carePeriod,
         insuranceCompany,
-        documentType,
+        documentType: docType,
         requestedBy: req.user!.id,
       },
     });
@@ -59,7 +58,7 @@ export const createInsuranceDocRequest = async (req: AuthRequest, res: Response,
         sendFromTemplate({
           userId: admin.id,
           key: 'INSURANCE_REQUESTED_ADMIN',
-          vars: { patientName, documentType, insuranceCompany },
+          vars: { patientName, documentType: docType, insuranceCompany },
           data: { insuranceDocRequestId: docRequest.id } as any,
         }).catch(() => {}),
       ));

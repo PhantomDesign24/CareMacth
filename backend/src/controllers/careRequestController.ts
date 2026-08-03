@@ -849,10 +849,13 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
         throw new AppError('신분증 등록 및 본인 인증이 완료된 후 지원 가능합니다.', 403);
       }
       // workStatus 는 캐시 — 실제 진행 중 계약 존재 여부로 판정 (단일 진실 원천)
+      //  간병 기간이 이미 끝난 계약은 '진행 중'이 아니다 — endDate 가 지났으면 제외한다.
+      //  (크론이 COMPLETED 로 바꾸기 전까지 재지원이 막히던 문제)
       const ongoingContracts = await prisma.contract.count({
         where: {
           caregiverId: caregiver.id,
           status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
+          endDate: { gte: new Date() },
         },
       });
       if (ongoingContracts > 0) {

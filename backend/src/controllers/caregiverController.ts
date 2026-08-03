@@ -264,10 +264,12 @@ export const updateWorkStatus = async (req: AuthRequest, res: Response, next: Ne
     // 간병 매칭이 진행 중이면 근무 상태를 아예 변경할 수 없다.
     //  (기존엔 AVAILABLE/IMMEDIATE 만 막아 매칭 중에도 '휴직'으로 바꿀 수 있었음)
     //  근무 상태는 계약 종료/취소 흐름에서 자동 해제된다.
+    //  기간이 끝난 계약은 잠금 대상이 아니다 (크론 처리 전에도 즉시 풀리도록)
     const ongoing = await prisma.contract.findFirst({
       where: {
         caregiverId: caregiver.id,
         status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
+        endDate: { gte: new Date() },
       },
       select: { endDate: true },
     });
@@ -614,6 +616,12 @@ export const getMyApplications = async (req: AuthRequest, res: Response, next: N
       return '90대 이상';
     };
 
+    // 간병사에게 보이는 금액은 매칭 수수료를 뺀 순액으로 통일 (공고·활동이력·계약서와 동일 기준)
+    const feeCfg = await prisma.platformConfig.findUnique({
+      where: { id: 'default' },
+      select: { individualFeeFixed: true, familyFeeFixed: true },
+    });
+
     const masked = applications.map((a) => {
       const exposedName = exposedNameByRequest.get(a.careRequestId);
       const cr: any = a.careRequest;
@@ -626,10 +634,15 @@ export const getMyApplications = async (req: AuthRequest, res: Response, next: N
           }
         : null;
       // 위치 정보도 결제 전엔 좌표 미노출
+      const feePerDay = cr
+        ? (cr.careType === 'FAMILY' ? (feeCfg?.familyFeeFixed ?? 0) : (feeCfg?.individualFeeFixed ?? 0))
+        : 0;
       const careRequest = cr
         ? {
             ...cr,
             patient,
+            feePerDay,                                                  // 매칭 수수료(정액/일)
+            netDailyRate: Math.max(0, (cr.dailyRate || 0) - feePerDay), // 수수료 제외 일당
             ...(exposedName ? {} : { latitude: null, longitude: null, address: null }),
           }
         : null;

@@ -146,7 +146,7 @@ function HeroSection() {
       num: "01",
       title: "인공지능 AI",
       highlight: "간병 매칭 플랫폼",
-      desc: "병원, 재택, 방문, 생활 돌봄 요양이 필요한 모든 분께",
+      desc: "병원, 재택, 방문, 생활 돌봄 요양이 필요한 모든 분께 최적화된 간병인을 즉시 매칭하여 드립니다.",
     },
     {
       type: "image" as const,
@@ -155,7 +155,8 @@ function HeroSection() {
       num: "02",
       title: "NO.1 케어매치",
       highlight: "매칭 전문가의 실시간 연결",
-      desc: "검증된 간병인 10,000명이 대기하고 있습니다",
+      desc: "오프라인 매칭 코디가 1:1 상담을 통해 요양환자와 간병인 간 요구 사항을 조율한 뒤 즉시 연결하여 드립니다.",
+      imgClass: "max-w-[42%] md:max-w-[46%]", // 인물-문구 간격 확보
     },
     {
       type: "image" as const,
@@ -164,7 +165,7 @@ function HeroSection() {
       num: "03",
       title: "케어매치",
       highlight: "6단계 고객만족 시스템",
-      desc: "체계적인 관리로 최상의 간병 서비스를 제공합니다",
+      desc: "지역 센터장의 현장방문 지원, 케어코디 업무지원, 고객 만족도 해피콜 시스템, 간병인 고객만족 평가제, 우수 간병인 포상제, 실시간 매칭",
     },
     {
       type: "image" as const,
@@ -173,7 +174,8 @@ function HeroSection() {
       num: "04",
       title: "케어매치 AI",
       highlight: "토탈 케어 플랫폼 3.0",
-      desc: "환자 맞춤형 통합 돌봄 솔루션을 제공합니다",
+      desc: "케어매치는 AI 기술을 적용하여 간병인의 인성, 근무능력, 근무기간, 숙련도 등을 검증하여 간병인을 추천하여 드립니다.",
+      imgClass: "max-w-[42%] md:max-w-[46%]",
     },
     {
       type: "image" as const,
@@ -181,8 +183,9 @@ function HeroSection() {
       bg: "from-yellow-50 via-white to-rose-100",
       num: "05",
       title: "걱정 없고 존중받는",
-      highlight: "행복한 노후",
-      desc: "믿을 수 있는 간병으로 편안한 일상을 함께합니다",
+      highlight: "노후는 행복한 삶입니다",
+      desc: "케어매치는 선진 간병 문화를 구현합니다.",
+      imgClass: "max-w-[42%] md:max-w-[46%]",
     },
   ];
 
@@ -227,7 +230,9 @@ function HeroSection() {
                 /* 모바일에서 인물 우측이 잘리던 문제 수정 — 우측 여백 확보 + 최대 너비 축소 */
                 /* 우측 끝을 헤더/본문 컨테이너(max-w-7xl + lg:px-8) 정렬선에 맞춤 —
                    PPT④: '인물 사진이 관리자 오브젝트와 끝이 맞지 않아 눈을 옮겨야 한다' 반영 */
-                className="hidden sm:block absolute bottom-0 right-6 lg:right-[calc(max((100%-80rem)/2,0px)+2rem)] h-[62%] md:h-[88%] w-auto max-w-[48%] md:max-w-[52%] object-contain object-bottom pointer-events-none select-none"
+                className={`hidden sm:block absolute bottom-0 right-6 lg:right-[calc(max((100%-80rem)/2,0px)+2rem)] h-[62%] md:h-[88%] w-auto object-contain object-bottom pointer-events-none select-none ${
+                  (s as any).imgClass || "max-w-[48%] md:max-w-[52%]"
+                }`}
               />
             </>
           )}
@@ -1065,17 +1070,15 @@ function WhyCareMatchSection() {
             케어매치를 선택해야 하는 이유
           </h2>
           <p className="mt-3 sm:mt-4 text-gray-500 text-sm sm:text-lg max-w-2xl mx-auto">
-            7가지 이유로 케어매치가 최선의 선택입니다
+            8가지 이유로 케어매치가 최선의 선택입니다
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
           {reasons.map((r, i) => (
             <div
               key={i}
-              className={`group bg-white rounded-2xl p-4 sm:p-6 border border-gray-100 shadow-[0_2px_16px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-1 ${
-                i === 6 ? "col-span-2 sm:col-span-2 lg:col-span-1" : ""
-              }`}
+              className="group bg-white rounded-2xl p-4 sm:p-6 border border-gray-100 shadow-[0_2px_16px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-1"
             >
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 text-white flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform duration-300">
                 {r.icon}

@@ -107,7 +107,8 @@ interface OpenRequest {
   region: string;
   startDate: string;
   duration: string;
-  dailyRate: number;
+  dailyRate: number;        // 간병사 표시용 = 순액(수수료 제외)
+  feePerDay: number;        // 매칭 수수료(정액/일) — 역제안 시 총액 환산에 필요
   estimatedEarnings: number;
   urgency: string;
   mobilityStatus: string;
@@ -426,6 +427,7 @@ function CaregiverDashboard() {
           duration: r.durationDays ? `${r.durationDays}일` : '-',
           // 간병인에게는 매칭 수수료 제외 금액 노출 (백엔드 netDailyRate)
           dailyRate: (typeof r.netDailyRate === 'number' ? r.netDailyRate : r.dailyRate) || 0,
+          feePerDay: typeof r.feePerDay === 'number' ? r.feePerDay : 0,
           estimatedEarnings: ((typeof r.netDailyRate === 'number' ? r.netDailyRate : r.dailyRate) || 0) * (r.durationDays || 30),
           urgency: daysUntilStart <= 3 ? '급구' : '일반',
           mobilityStatus: r.patient?.mobilityStatus || '',
@@ -491,12 +493,22 @@ function CaregiverDashboard() {
     fetchData();
   }, [fetchData, router]);
 
+  const [statusChanging, setStatusChanging] = useState(false);
   const handleStatusChange = async (status: Status) => {
-    setCurrentStatus(status);
+    if (status === currentStatus || statusChanging) return;
+    const prev = currentStatus;
+    setCurrentStatus(status);          // 낙관적 반영
+    setStatusChanging(true);
     try {
       await caregiverAPI.updateStatus(status);
-    } catch {
-      // Revert on failure is not needed for UI; status will sync on next load
+      showToast("근무 상태가 변경되었습니다.", "success");
+    } catch (err: any) {
+      // 매칭 진행 중이면 서버가 409 로 막는다 — 되돌리고 사유를 알려준다.
+      //  (기존엔 catch 가 비어 있어 바뀐 것처럼 보이다 새로고침 시 원복됐다)
+      setCurrentStatus(prev);
+      showToast(err?.response?.data?.message || "근무 상태를 변경하지 못했습니다.", "error");
+    } finally {
+      setStatusChanging(false);
     }
   };
 
@@ -536,9 +548,12 @@ function CaregiverDashboard() {
     }
     setSubmittingProposal(true);
     try {
+      // 화면 금액은 수수료를 뺀 '내가 받을 금액'이라 그대로 보내면 계약 단가가 수수료만큼 깎인다.
+      //  서버는 proposedRate 를 계약 총액으로 쓰므로 수수료를 다시 더해 보낸다.
+      const grossRate = rate + (proposalTarget.feePerDay || 0);
       await caregiverAPI.applyWithProposal(proposalTarget.id, {
         isAccepted: false,
-        proposedRate: rate,
+        proposedRate: grossRate,
         message: proposalMessage,
       });
       showToast(`${proposalTarget.patientName}님께 ${rate.toLocaleString()}원 역제안 전송 완료`, "success");
@@ -772,8 +787,9 @@ function CaregiverDashboard() {
                     <button
                       key={opt.value}
                       type="button"
+                      disabled={statusChanging}
                       onClick={() => handleStatusChange(opt.value)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-60 ${
                         active ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
                       }`}
                     >
@@ -1272,7 +1288,12 @@ function CaregiverDashboard() {
                         <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-500">
                           {/* 간병 금액(일당) — 역제안 시 내 제안가, 아니면 보호자 제시 일당 */}
                           {(() => {
-                            const amount = (app.isAccepted === false && app.proposedRate) ? app.proposedRate : cr.dailyRate;
+                            // 간병사 화면 금액은 전부 수수료 제외 순액 기준으로 통일
+                            const fee = typeof cr.feePerDay === 'number' ? cr.feePerDay : 0;
+                            const net = (v: any) => (typeof v === 'number' ? Math.max(0, v - fee) : v);
+                            const amount = (app.isAccepted === false && app.proposedRate)
+                              ? net(app.proposedRate)
+                              : (typeof cr.netDailyRate === 'number' ? cr.netDailyRate : cr.dailyRate);
                             return amount ? (
                               <span className="font-semibold text-gray-900">간병 금액: {Number(amount).toLocaleString()}원/일</span>
                             ) : null;
@@ -1295,11 +1316,13 @@ function CaregiverDashboard() {
                         <div className="text-right">
                           <div className="text-xs text-gray-400">보호자 제시 일당</div>
                           <div className="text-base font-bold text-gray-900">
-                            {cr.dailyRate ? `${cr.dailyRate.toLocaleString()}원` : '-'}
+                            {typeof cr.netDailyRate === 'number'
+                              ? `${cr.netDailyRate.toLocaleString()}원`
+                              : cr.dailyRate ? `${cr.dailyRate.toLocaleString()}원` : '-'}
                           </div>
                           {app.proposedRate && (
                             <div className="text-xs text-blue-600 mt-1">
-                              내 제안: {app.proposedRate.toLocaleString()}원
+                              내 제안: {Math.max(0, app.proposedRate - (cr.feePerDay || 0)).toLocaleString()}원
                             </div>
                           )}
                         </div>

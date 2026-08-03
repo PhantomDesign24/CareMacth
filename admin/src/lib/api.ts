@@ -195,7 +195,7 @@ export async function adminCreateManualMatch(data: {
   guardianId: string; caregiverId: string; patientId?: string;
   careType?: string; scheduleType?: string; location?: string;
   hospitalName?: string; address?: string;
-  startDate: string; endDate: string; dailyRate: number; corporateName?: string;
+  startDate: string; endDate: string; startTime?: string; endTime?: string; dailyRate: number; corporateName?: string;
   patient?: { name: string; birthDate: string; gender?: string; mobilityStatus?: string; diagnosis?: string; medicalNotes?: string };
 }) {
   return apiRequest<{ contractId: string; careRequestId: string; patientId: string; totalAmount: number; durationDays: number; status: string }>(
@@ -486,6 +486,7 @@ export async function deleteNotificationTemplate(id: string) {
 // ─── Association Fees ─────────────────────────────────
 export interface AssociationFeeRow {
   caregiverId: string;
+  paymentId?: string | null;
   name: string;
   status: string;
   workStatus: string;
@@ -846,6 +847,11 @@ export async function completeDirectPayment(id: string) {
   return apiRequest(`/admin/direct-payments/${id}/complete`, { method: "POST" });
 }
 
+// 무통장 입금확인 — PG 콜백이 없어 관리자가 통장 확인 후 확정한다
+export async function confirmBankTransferPayment(id: string) {
+  return apiRequest(`/admin/payments/${id}/confirm-deposit`, { method: "POST" });
+}
+
 // ─── 병원·기업 제휴 문의 ────────────────────────────────
 export interface BusinessInquiryItem {
   id: string;
@@ -914,6 +920,23 @@ export async function forceCloseCareRequest(id: string) {
     { method: "POST" },
   );
 }
+export interface ReferralCodeRow {
+  id: string; name: string; phone: string; email: string; role: string;
+  referralCode: string; invitedCount: number;
+  referredByName: string | null; referredByCode: string | null; createdAt: string;
+}
+// 회원별 추천인 코드 조회 (프로모션 화면)
+export async function getReferralCodes(params: { q?: string; role?: string; page?: number; limit?: number } = {}) {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  if (params.role) qs.set("role", params.role);
+  qs.set("page", String(params.page || 1));
+  qs.set("limit", String(params.limit || 20));
+  return apiRequest(`/admin/referral-codes?${qs.toString()}`) as Promise<{
+    rows: ReferralCodeRow[]; total: number; page: number; totalPages: number;
+  }>;
+}
+
 export async function deleteAssociationFee(paymentId: string) {
   return apiRequest(`/admin/association-fees/${paymentId}`, { method: "DELETE" });
 }

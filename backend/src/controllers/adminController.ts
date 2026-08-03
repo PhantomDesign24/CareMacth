@@ -2289,7 +2289,103 @@ export const completeDirectPayment = async (req: AuthRequest, res: Response, nex
       }).catch(() => {});
     }
 
+    // 간병사 예상 정산금액 안내 — 토스/무통장과 동일하게 직접결제 확정 시에도 발송
+    if (payment.contractId) {
+      const { notifyCaregiverSettlementEstimate } = await import('../services/notificationService');
+      notifyCaregiverSettlementEstimate(payment.contractId).catch(() => {});
+    }
+
     res.json({ success: true, data: { id: updated.id, status: updated.status } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /payments/:id/confirm-deposit - 무통장 입금확인
+//  무통장(BANK_TRANSFER)은 PG 콜백이 없어 관리자가 통장을 보고 확정해야 한다.
+//  이 경로가 없어서 무통장 결제가 PENDING 에 영구 고착돼 있었다(2차 검수 7-4).
+//  토스 승인 후처리(paymentController confirmPayment)와 동일한 상태 전이를 수행한다.
+export const confirmBankTransferPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const payment = await prisma.payment.findFirst({
+      where: { id, method: 'BANK_TRANSFER' },
+      include: { contract: true },
+    });
+    if (!payment) throw new AppError('무통장 결제 건을 찾을 수 없습니다.', 404);
+    if (payment.status !== 'PENDING') {
+      throw new AppError(`이미 처리된 결제입니다. (현재 상태: ${payment.status})`, 400);
+    }
+
+    // 연장 결제 여부 판별 (토스 흐름과 동일 기준)
+    const linkedExtension = payment.contractId
+      ? await prisma.contractExtension.findFirst({
+          where: { contractId: payment.contractId, status: 'PENDING_PAYMENT' },
+          orderBy: { createdAt: 'desc' },
+        })
+      : null;
+
+    await prisma.$transaction(async (tx) => {
+      // 동시 확정 방지 — PENDING 인 건만 통과
+      const claim = await tx.payment.updateMany({
+        where: { id: payment.id, status: 'PENDING' },
+        data: { status: 'ESCROW', paidAt: new Date() },
+      });
+      if (claim.count === 0) throw new AppError('이미 처리된 결제입니다.', 409);
+
+      if (linkedExtension && payment.contract) {
+        const ext = await tx.contractExtension.updateMany({
+          where: { id: linkedExtension.id, status: 'PENDING_PAYMENT' },
+          data: { status: 'CONFIRMED', paidAt: new Date() },
+        });
+        if (ext.count === 1) {
+          await tx.contract.update({
+            where: { id: payment.contract.id },
+            data: {
+              endDate: linkedExtension.newEndDate,
+              totalAmount: { increment: linkedExtension.additionalAmount },
+              status: 'EXTENDED',
+            },
+          });
+          await tx.careRequest.update({
+            where: { id: payment.contract.careRequestId },
+            data: { endDate: linkedExtension.newEndDate },
+          });
+        }
+      } else if (payment.contract) {
+        await tx.careRequest.update({
+          where: { id: payment.contract.careRequestId },
+          data: { status: 'IN_PROGRESS' },
+        });
+      }
+
+      // 보호자 결제 완료 알림
+      const guardian = await tx.guardian.findUnique({ where: { id: payment.guardianId } });
+      if (guardian) {
+        await tx.notification.create({
+          data: {
+            userId: guardian.userId,
+            type: 'PAYMENT',
+            title: linkedExtension ? '연장 결제 완료' : '입금이 확인되었습니다',
+            body: linkedExtension
+              ? `연장 입금이 확인되어 ${linkedExtension.additionalDays}일 추가됩니다. (${payment.amount.toLocaleString()}원)`
+              : `무통장 입금이 확인되어 간병이 시작됩니다. 입금금액: ${payment.amount.toLocaleString()}원`,
+            data: { paymentId: payment.id, url: '/dashboard/guardian' },
+          },
+        });
+      }
+    });
+
+    // 간병사 예상 정산금액 안내 (최초 매칭 결제 시)
+    if (payment.contractId && !linkedExtension) {
+      const { notifyCaregiverSettlementEstimate } = await import('../services/notificationService');
+      notifyCaregiverSettlementEstimate(payment.contractId).catch(() => {});
+    }
+
+    await logAdminAction(req, 'ADMIN_CONFIRM_BANK_TRANSFER', {
+      targetType: 'payment', targetId: id, payload: { amount: payment.amount },
+    });
+    res.json({ success: true, data: { id, status: 'ESCROW' } });
   } catch (error) {
     next(error);
   }
@@ -2671,6 +2767,40 @@ export const forceCompleteContract = async (req: AuthRequest, res: Response, nex
       settled = true;
     } catch (e: any) {
       console.error('[forceCompleteContract] settleEarning 실패. contractId=', contractId, e);
+    }
+
+    // 양측 안내 — 강제 취소/매칭 강제종료엔 있었으나 강제 완료에만 알림이 없었다
+    try {
+      const full = await prisma.contract.findUnique({
+        where: { id: contractId },
+        include: {
+          caregiver: { include: { user: { select: { id: true, name: true } } } },
+          guardian: { select: { userId: true } },
+          careRequest: { include: { patient: { select: { name: true } } } },
+        },
+      });
+      if (full) {
+        const c = full as any;
+        const patientName = c.careRequest?.patient?.name || '';
+        const caregiverName = c.caregiver?.user?.name || '';
+        const body = `${patientName ? patientName + ' 환자의 ' : ''}간병이 종료 처리되었습니다.`;
+        sendUserNotification({
+          userId: c.caregiver.userId,
+          type: 'CONTRACT',
+          title: '간병이 종료되었습니다',
+          body: `${body} 정산 내역은 활동 이력에서 확인해주세요.`,
+          data: { url: '/dashboard/caregiver?tab=history', contractId },
+        }).catch(() => {});
+        sendUserNotification({
+          userId: c.guardian.userId,
+          type: 'CONTRACT',
+          title: '간병이 종료되었습니다',
+          body: `${caregiverName ? caregiverName + ' 간병인과의 ' : ''}${body}`,
+          data: { url: '/dashboard/guardian', contractId },
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.error('[forceCompleteContract] 종료 알림 실패:', (e as Error)?.message || e);
     }
 
     await logAdminAction(req, 'CONTRACT_FORCE_COMPLETE', {
@@ -3936,6 +4066,7 @@ export const getAssociationFees = async (req: AuthRequest, res: Response, next: 
       const fee = cg.feePayments[0];
       return {
         caregiverId: cg.id,
+        paymentId: fee?.id || null,   // 선택 삭제용
         name: cg.user.name,
         status: cg.status,
         workStatus: cg.workStatus,
@@ -5523,6 +5654,72 @@ export const deleteCareRequestAdmin = async (req: AuthRequest, res: Response, ne
 };
 
 // DELETE /admin/association-fees/:paymentId - 협회비 납부 이력 1건 삭제
+// GET /referral-codes - 회원별 추천인 코드 조회 (프로모션 화면)
+//  q: 이름·연락처·코드 검색 / role: GUARDIAN|CAREGIVER
+export const getReferralCodes = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const role = String(req.query.role || '').trim().toUpperCase();
+    const page = Math.max(1, parseInt(String(req.query.page || '1')) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '20')) || 20));
+
+    const where: any = {};
+    if (role === 'GUARDIAN' || role === 'CAREGIVER') where.role = role;
+    if (q) {
+      const digits = q.replace(/\D/g, '');
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { referralCode: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+        ...(digits ? [{ phone: { contains: digits } }] : []),
+      ];
+    }
+
+    const [total, users] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true, name: true, phone: true, email: true, role: true,
+          referralCode: true, referredBy: true, createdAt: true,
+        },
+      }),
+    ]);
+
+    // referredBy 에는 '추천인의 User ID' 가 들어간다(코드 아님, authController:200)
+    const userIds = users.map((u) => u.id);
+    const referrerIds = users.map((u) => u.referredBy).filter(Boolean) as string[];
+    const [counts, referrers] = await Promise.all([
+      userIds.length
+        ? prisma.user.groupBy({ by: ['referredBy'], where: { referredBy: { in: userIds } }, _count: { _all: true } })
+        : Promise.resolve([] as any[]),
+      referrerIds.length
+        ? prisma.user.findMany({ where: { id: { in: referrerIds } }, select: { id: true, name: true, referralCode: true } })
+        : Promise.resolve([] as any[]),
+    ]);
+    const countMap = new Map(counts.map((c: any) => [c.referredBy, c._count._all]));
+    const nameMap = new Map(referrers.map((r: any) => [r.id, r]));
+
+    res.json({
+      success: true,
+      data: {
+        rows: users.map((u) => ({
+          ...u,
+          invitedCount: countMap.get(u.id) || 0,
+          referredByName: u.referredBy ? (nameMap.get(u.referredBy) as any)?.name || null : null,
+          referredByCode: u.referredBy ? (nameMap.get(u.referredBy) as any)?.referralCode || null : null,
+        })),
+        total,
+        page,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    });
+  } catch (e) { next(e); }
+};
+
 export const deleteAssociationFee = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { paymentId } = req.params;
@@ -5880,7 +6077,7 @@ export const adminCreateManualMatch = async (req: AuthRequest, res: Response, ne
       guardianId, caregiverId, patientId,
       careType, scheduleType, location,
       hospitalName, address,
-      startDate, endDate, dailyRate,
+      startDate, endDate, startTime, endTime, dailyRate,
       corporateName,
       patient, // { name, birthDate, gender, mobilityStatus, ... }
     } = req.body;
@@ -5891,8 +6088,11 @@ export const adminCreateManualMatch = async (req: AuthRequest, res: Response, ne
     const rate = parseInt(dailyRate);
     if (!rate || rate <= 0) throw new AppError('일당(원)을 올바르게 입력해주세요.', 400);
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    // 웹 신청과 동일하게 시각은 startDate/endDate 의 시간부에 병합 저장한다(별도 컬럼 없음)
+    const t = (v: any, fallback: string) =>
+      /^\d{2}:\d{2}$/.test(String(v || '')) ? String(v) : fallback;
+    const start = new Date(`${String(startDate).slice(0, 10)}T${t(startTime, '09:00')}:00+09:00`);
+    const end = new Date(`${String(endDate).slice(0, 10)}T${t(endTime, '18:00')}:00+09:00`);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) throw new AppError('날짜 형식이 올바르지 않습니다.', 400);
     if (end.getTime() < start.getTime()) throw new AppError('종료일은 시작일 이후여야 합니다.', 400);
 

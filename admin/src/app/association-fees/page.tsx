@@ -6,6 +6,7 @@ import {
   updateAssociationFee,
   exportAssociationFees,
   exemptAssociationFeeMonth,
+  deleteAssociationFee,
   setCaregiverFeeExempt,
   getPlatformConfig,
   AssociationFeeRow,
@@ -157,6 +158,29 @@ export default function AssociationFeesPage() {
       await load();
     } catch {
       alert("일괄 처리 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 선택 삭제 — 잘못 등록한 협회비 내역을 되돌린다(요청: "선택한 사람 삭제")
+  const bulkDelete = async () => {
+    const targets = rows.filter((r) => selected.has(r.caregiverId) && r.paymentId);
+    if (targets.length === 0) {
+      alert("삭제할 협회비 내역이 없습니다. (납부/면제 기록이 있는 사람만 삭제됩니다)");
+      return;
+    }
+    if (!confirm(
+      `선택한 ${targets.length}명의 ${year}년 ${month}월 협회비 내역을 삭제합니다.\n\n` +
+      `납부 확정·면제 기록이 모두 지워지고 미납 상태로 돌아갑니다. 진행하시겠습니까?`
+    )) return;
+    setSaving(true);
+    try {
+      await Promise.all(targets.map((r) => deleteAssociationFee(r.paymentId as string)));
+      setToast(`${targets.length}건 삭제 완료`);
+      await load();
+    } catch {
+      alert("삭제 실패");
     } finally {
       setSaving(false);
     }
@@ -378,6 +402,15 @@ export default function AssociationFeesPage() {
             className="px-4 py-1.5 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 disabled:opacity-50"
           >
             {saving ? "처리 중..." : `${selected.size}명 일괄 납부 처리`}
+          </button>
+        )}
+        {selected.size > 0 && (
+          <button
+            onClick={bulkDelete}
+            disabled={saving}
+            className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 disabled:opacity-50"
+          >
+            {`선택한 ${selected.size}명 삭제`}
           </button>
         )}
       </div>

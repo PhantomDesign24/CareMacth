@@ -107,6 +107,8 @@ router.post('/manual/match', [
   body('startDate').notEmpty().withMessage('시작일을 입력해주세요.'),
   body('endDate').notEmpty().withMessage('종료일을 입력해주세요.'),
   body('dailyRate').isInt({ min: 1 }).withMessage('일당(원)을 올바르게 입력해주세요.'),
+  body('startTime').optional({ values: 'falsy' }).matches(/^\d{2}:\d{2}$/).withMessage('시작시간 형식이 올바르지 않습니다.'),
+  body('endTime').optional({ values: 'falsy' }).matches(/^\d{2}:\d{2}$/).withMessage('종료시간 형식이 올바르지 않습니다.'),
 ], adminController.adminCreateManualMatch);
 
 // 환자 관리
@@ -178,6 +180,7 @@ router.post('/settlements/:id/pay', adminController.paySettlement);
 // 직접결제 요청 (보호자가 간병사에게 직접 지급 + 플랫폼 이용료만 수취)
 router.get('/direct-payments', adminController.getDirectPayments);
 router.post('/direct-payments/:id/complete', adminController.completeDirectPayment);
+router.post('/payments/:id/confirm-deposit', adminController.confirmBankTransferPayment); // 무통장 입금확인
 
 // 병원·기업 제휴 문의
 router.get('/business-inquiries', businessInquiryController.getBusinessInquiries);
@@ -242,6 +245,7 @@ router.put('/platform-config', [
 
 // 프로모션
 router.get('/promotions', adminController.getPromotions);
+router.get('/referral-codes', adminController.getReferralCodes); // 회원별 추천코드 조회
 router.put('/promotions', [
   body('referralPoints').optional().isInt({ min: 0 }).withMessage('추천 포인트는 0 이상이어야 합니다.'),
   body('badgeThreshold').optional().isInt({ min: 1 }).withMessage('뱃지 임계값은 1 이상이어야 합니다.'),

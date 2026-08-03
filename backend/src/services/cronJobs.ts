@@ -120,23 +120,32 @@ export function setupCronJobs() {
       const now = new Date();
 
       // 종료된 계약 조회 후 개별 처리 (간병인별 다른 활성 계약 여부 확인 필요)
+      //  PENDING_SIGNATURE 포함 — 서명 안 된 채 기간이 끝난 계약이 영구히 남아
+      //  간병인의 재지원·근무상태 변경을 계속 막던 문제
       const expiredContracts = await prisma.contract.findMany({
         where: {
-          status: { in: ['ACTIVE', 'EXTENDED'] },
+          status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] },
           endDate: { lt: now },
         },
-        select: { id: true, caregiverId: true },
+        select: { id: true, caregiverId: true, status: true },
       });
 
       let completed = 0;
       const cgsToCheck = new Set<string>();
+      let cancelled = 0;
       for (const c of expiredContracts) {
+        // 서명 전에 기간이 끝난 건은 성사되지 않은 계약 → 취소, 진행 계약 → 완료
+        //  (closeCareRequest 의 정책과 동일하게 맞춘다)
+        const isUnsigned = c.status === 'PENDING_SIGNATURE';
         const claim = await prisma.contract.updateMany({
-          where: { id: c.id, status: { in: ['ACTIVE', 'EXTENDED'] } },
-          data: { status: 'COMPLETED' },
+          where: { id: c.id, status: c.status },
+          data: isUnsigned
+            ? { status: 'CANCELLED', cancelledAt: now, cancellationReason: '서명 전 간병 기간 만료' }
+            : { status: 'COMPLETED' },
         });
         if (claim.count === 1) {
-          completed += 1;
+          if (isUnsigned) cancelled += 1;
+          else completed += 1;
           cgsToCheck.add(c.caregiverId);
         }
       }
@@ -177,7 +186,7 @@ export function setupCronJobs() {
         }
       }
 
-      console.log(`[CRON] 완료 처리된 계약: ${completed}건, workStatus 해제: ${cgsToCheck.size}명, 종료된 간병요청: ${closedRequests}건`);
+      console.log(`[CRON] 완료 처리된 계약: ${completed}건, 미서명 만료 취소: ${cancelled}건, workStatus 해제: ${cgsToCheck.size}명, 종료된 간병요청: ${closedRequests}건`);
     } catch (error) {
       console.error('[CRON] 계약 상태 업데이트 오류:', error);
     }
@@ -491,7 +500,8 @@ export function setupCronJobs() {
         // 1) 후보 ID 조회 (그대로 발송하지 않음 — 이건 미리보기용)
         const candidates = await prisma.careRequest.findMany({
           where: {
-            status: 'OPEN',
+            // 공고는 생성 직후 자동매칭이 MATCHING 으로 바꾼다 — OPEN 만 보면 영구히 발화하지 않는다
+            status: { in: ['OPEN', 'MATCHING'] },
             createdAt: { lt: cutoff },
             [sentAtField]: null,
             applications: { none: {} },
@@ -508,7 +518,7 @@ export function setupCronJobs() {
           const claim = await prisma.careRequest.updateMany({
             where: {
               id,
-              status: 'OPEN',
+              status: { in: ['OPEN', 'MATCHING'] },
               createdAt: { lt: cutoff },
               [sentAtField]: null,
               applications: { none: {} },

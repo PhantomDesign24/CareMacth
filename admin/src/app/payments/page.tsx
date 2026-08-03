@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import DataTable, { Column } from "@/components/DataTable";
 import StatsCard from "@/components/StatsCard";
 import {
+  confirmBankTransferPayment,
   getAdminPayments,
   getAdminSettlements,
   getPlatformConfig,
@@ -448,6 +449,26 @@ export default function PaymentsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const [depositLoading, setDepositLoading] = useState<string | null>(null);
+  const handleConfirmDeposit = async (row: AdminPayment) => {
+    if (!confirm(
+      `무통장 입금을 확인 처리합니다.\n\n` +
+      `환자: ${row.patientName || "-"} / 간병인: ${row.caregiverName || "-"}\n` +
+      `금액: ${row.amount.toLocaleString()}원\n\n` +
+      `확인 시 간병이 시작되고 양측에 알림이 발송됩니다. 진행하시겠습니까?`
+    )) return;
+    setDepositLoading(row.id);
+    try {
+      await confirmBankTransferPayment(row.id);
+      await fetchPayments();
+      alert("입금확인 처리되었습니다.");
+    } catch (e: any) {
+      alert(e?.message || "입금확인 처리에 실패했습니다.");
+    } finally {
+      setDepositLoading(null);
+    }
+  };
+
   const paymentColumns: Column<AdminPayment>[] = [
     { key: "id", label: "결제 ID", render: (v) => <span className="font-mono text-xs text-gray-500">{(v as string).slice(0, 8)}...</span> },
     { key: "contractId", label: "계약 ID", render: (v) => <span className="font-mono text-xs text-primary-600">{v ? (v as string).slice(0, 8) + "..." : "-"}</span> },
@@ -488,6 +509,24 @@ export default function PaymentsPage() {
     },
     { key: "method", label: "결제 방법", align: "center", render: (v) => formatMethod(v as string) },
     { key: "paidAt", label: "결제 일시", render: (v) => formatDateTime(v as string | null) },
+    {
+      // 무통장은 PG 콜백이 없어 관리자가 입금을 직접 확인해줘야 계약이 진행된다
+      key: "method",
+      label: "입금확인",
+      align: "center",
+      render: (_v, row) =>
+        row.method === "BANK_TRANSFER" && row.status === "PENDING" ? (
+          <button
+            disabled={depositLoading === row.id}
+            onClick={() => handleConfirmDeposit(row)}
+            className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {depositLoading === row.id ? "처리 중..." : "입금확인"}
+          </button>
+        ) : (
+          <span className="text-xs text-gray-300">-</span>
+        ),
+    },
   ];
 
   const settlementColumns: Column<AdminSettlement>[] = [
