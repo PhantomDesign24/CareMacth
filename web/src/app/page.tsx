@@ -749,13 +749,6 @@ function CareFeeEstimateSection() {
                 <div className="text-sm font-bold">~135,000원</div>
               </div>
             </div>
-            <div className="hidden sm:flex absolute -bottom-4 -left-4 lg:-left-6 px-4 py-3 rounded-2xl bg-white shadow-lg border border-gray-100 items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-500 flex items-center justify-center text-xl">📊</div>
-              <div>
-                <div className="text-[10px] text-gray-500">매월 업데이트</div>
-                <div className="text-sm font-bold text-gray-900">시장 시세 반영</div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
