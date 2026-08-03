@@ -83,6 +83,8 @@ export default function CareRequestsPage() {
   const [error, setError] = useState("");
 
   const [detailRow, setDetailRow] = useState<AdminCareRequestRow | null>(null);
+  const [rateEdit, setRateEdit] = useState<{ current: number; value: string } | null>(null);
+  const [rateSaving, setRateSaving] = useState(false);
   const [detailData, setDetailData] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -525,24 +527,7 @@ export default function CareRequestsPage() {
                           {detailData.dailyRate.toLocaleString()}원
                           <button
                             type="button"
-                            onClick={async () => {
-                              const cur = detailData.dailyRate;
-                              const input = prompt(
-                                `간병비(일당)를 수정합니다.\n\n· 가족간병은 보험 담보 금액에 따라 조정하세요\n· 결제가 진행된 건은 수정할 수 없습니다\n\n현재: ${cur.toLocaleString()}원`,
-                                String(cur),
-                              );
-                              if (input === null) return;
-                              const next = parseInt(input.replace(/[^0-9]/g, ""));
-                              if (!next || next <= 0) { alert("금액을 올바르게 입력해주세요."); return; }
-                              try {
-                                const r: any = await updateCareRequestDailyRate(detailRow!.id, next);
-                                alert(`일당이 ${next.toLocaleString()}원으로 변경되었습니다.${r?.contractsUpdated ? `\n연결 계약 ${r.contractsUpdated}건도 갱신됨` : ""}`);
-                                await openDetail(detailRow!);
-                                await fetchData();
-                              } catch (err: any) {
-                                alert(err?.message || "금액 수정 실패");
-                              }
-                            }}
+                            onClick={() => setRateEdit({ current: detailData.dailyRate, value: String(detailData.dailyRate) })}
                             className="rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700 hover:bg-orange-100"
                           >
                             수정
@@ -638,6 +623,65 @@ export default function CareRequestsPage() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 간병비(일당) 수정 모달 — prompt 대체 (소수점·음수 오입력 방지) */}
+      {rateEdit && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => !rateSaving && setRateEdit(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900">간병비(일당) 수정</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              가족간병은 보험 담보 금액에 따라 조정하세요.<br />
+              결제가 진행됐거나 양측 서명이 끝난 계약은 수정할 수 없습니다.
+            </p>
+            <div className="mt-4">
+              <label className="mb-1 block text-xs font-medium text-gray-600">
+                현재 {rateEdit.current.toLocaleString()}원 → 변경할 금액
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoFocus
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  value={rateEdit.value}
+                  onChange={(e) => setRateEdit({ ...rateEdit, value: e.target.value.replace(/[^0-9,]/g, "") })}
+                />
+                <span className="shrink-0 text-sm text-gray-600">원</span>
+              </div>
+              <p className="mt-1 text-[11px] text-gray-400">1,000원 ~ 10,000,000원</p>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button className="btn-secondary flex-1" onClick={() => setRateEdit(null)} disabled={rateSaving}>취소</button>
+              <button
+                className="btn-primary flex-1"
+                disabled={rateSaving}
+                onClick={async () => {
+                  const next = parseInt(rateEdit.value.replace(/,/g, ""), 10);
+                  if (!Number.isFinite(next) || next < 1000 || next > 10000000) {
+                    alert("금액은 1,000원 ~ 10,000,000원 사이 숫자로 입력해주세요.");
+                    return;
+                  }
+                  if (!confirm(`일당을 ${rateEdit.current.toLocaleString()}원 → ${next.toLocaleString()}원 으로 변경할까요?\n\n계약이 연결돼 있으면 총액도 함께 재계산되고 당사자에게 알림이 발송됩니다.`)) return;
+                  setRateSaving(true);
+                  try {
+                    const r: any = await updateCareRequestDailyRate(detailRow!.id, next);
+                    setRateEdit(null);
+                    alert(`일당이 ${next.toLocaleString()}원으로 변경되었습니다.${r?.contractsUpdated ? `\n연결 계약 ${r.contractsUpdated}건 갱신` : ""}`);
+                    if (detailRow) await openDetail(detailRow);
+                    await fetchData();
+                  } catch (err: any) {
+                    alert(err?.message || "금액 수정 실패");
+                  } finally {
+                    setRateSaving(false);
+                  }
+                }}
+              >
+                {rateSaving ? "저장 중..." : "변경"}
+              </button>
+            </div>
           </div>
         </div>
       )}

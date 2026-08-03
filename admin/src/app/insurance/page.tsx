@@ -344,9 +344,18 @@ export default function InsuranceAdminPage() {
                 const picked = Array.from(e.target.files || []);
                 // 여러 번 나눠서 선택해도 누적되도록 (같은 이름+크기는 중복 제외)
                 setDocFiles((prev) => {
-                  const key = (f: File) => `${f.name}_${f.size}`;
+                  // 이름+크기만으로 판정하면 서로 다른 파일이 조용히 누락될 수 있어 수정시각까지 포함
+                  const key = (f: File) => `${f.name}_${f.size}_${f.lastModified}`;
                   const seen = new Set(prev.map(key));
-                  return [...prev, ...picked.filter((f) => !seen.has(key(f)))];
+                  const added = picked.filter((f) => !seen.has(key(f)));
+                  const skipped = picked.length - added.length;
+                  if (skipped > 0) alert(`이미 선택된 파일 ${skipped}건은 제외했습니다.`);
+                  const merged = [...prev, ...added];
+                  if (merged.length > 10) {
+                    alert("서류는 한 번에 최대 10건까지 업로드할 수 있습니다.");
+                    return merged.slice(0, 10);
+                  }
+                  return merged;
                 });
                 e.target.value = "";
               }}

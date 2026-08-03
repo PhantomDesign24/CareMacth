@@ -56,6 +56,7 @@ interface ActivityHistory {
   careType: string;
   location: string;
   earnings: number;
+  netPayoutAmount?: number | null; // 원천징수까지 차감한 예상 실수령액
   hasTodayRecord?: boolean; // 오늘 간병일지 작성 여부
   guardianSigned?: boolean;
   caregiverSigned?: boolean;
@@ -1452,9 +1453,16 @@ function CaregiverDashboard() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:shrink-0">
                       <div className="text-right">
+                        <div className="text-[11px] text-gray-400 leading-none mb-0.5">매칭수수료 제외</div>
                         <div className="text-lg font-bold text-gray-900">
                           {activity.earnings.toLocaleString()}원
                         </div>
+                        {typeof activity.netPayoutAmount === 'number' && activity.netPayoutAmount > 0 && (
+                          <div className="text-[11px] text-gray-500 mt-0.5">
+                            예상 실수령 {activity.netPayoutAmount.toLocaleString()}원
+                            <span className="text-gray-400"> (세금 차감)</span>
+                          </div>
+                        )}
                       </div>
                       {/* PENDING_SIGNATURE: 서명 흐름 */}
                       {activity.contractStatus === 'PENDING_SIGNATURE' && !activity.caregiverSigned && (
