@@ -52,6 +52,12 @@ export async function closeCareRequest(
     }
   }
 
+  // 대기중 지원은 종결 처리 (요청이 닫혔으므로 더 이상 선택될 수 없음)
+  await prisma.careApplication.updateMany({
+    where: { careRequestId, status: 'PENDING' },
+    data: { status: 'CANCELLED' },
+  });
+
   await prisma.careRequest.updateMany({
     where: { id: careRequestId, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
     data: { status: 'COMPLETED' },

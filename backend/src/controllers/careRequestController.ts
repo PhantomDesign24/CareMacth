@@ -864,6 +864,9 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
           caregiverId: caregiver.id,
           status: 'ACCEPTED',
           careRequestId: { not: careRequestId },
+          // 종료(완료/취소)된 요청의 과거 수락 이력은 차단 대상이 아니다.
+          // (이 조건이 없으면 한 번 수락받은 간병인이 영구히 재지원 불가)
+          careRequest: { status: { in: ['OPEN', 'MATCHING', 'MATCHED', 'IN_PROGRESS'] } },
         },
       });
       if (acceptedApplications > 0) {
