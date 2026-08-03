@@ -398,8 +398,19 @@ async function sendAlimtalkForTemplate(
   // SMS/LMS 판정은 발송 본문(message) 자체 길이 기준 — prefix는 카운트 제외하여 LMS 강제 전환 방지
   // suppressFailover: 비밀번호 등 민감정보 템플릿은 평문 SMS 대체발송을 막는다(보안 템플릿 정합).
   const compactBody = (message || '').replace(/\s+/g, ' ').trim();
-  const useShortForm = compactBody.length <= 80; // 80자 — '[케어매치] ' (8자) prefix 여유분 포함
-  const fallbackMessage = `[케어매치] ${compactBody}`;
+  // 본문이 이미 '[케어매치]' 로 시작하면 접두어를 덧붙이지 않는다
+  //  (알림톡 템플릿 상당수가 '[케어매치] …' 로 시작해 '[케어매치] [케어매치] …' 로 나갔음)
+  const fallbackMessage = /^\[케어매치\]/.test(compactBody)
+    ? compactBody
+    : `[케어매치] ${compactBody}`;
+  // SMS 는 90바이트 한도(한글 2바이트) — 글자수가 아니라 바이트로 판정해야 잘리지 않는다.
+  //  접두어를 포함한 최종 본문 기준으로 계산한다.
+  const byteLen = (v: string) => {
+    let n = 0;
+    for (const ch of v) n += ch.charCodeAt(0) > 0x7f ? 2 : 1;
+    return n;
+  };
+  const useShortForm = byteLen(fallbackMessage) <= 90;
   const fallbackSms = opts?.suppressFailover
     ? undefined
     : useShortForm
