@@ -68,9 +68,10 @@ export const metadata: Metadata = {
     },
   },
   verification: {
-    // 네이버·구글 사이트 확인 코드 받으면 여기 추가:
+    // 네이버 서치어드바이저 사이트 소유확인 (2026-08-04 등록)
+    other: { "naver-site-verification": "b5b4bed3a1406f3ab532f053c26ff3ad20c52c57" },
+    // 구글 서치콘솔 확인 코드 받으면 여기 추가:
     // google: "xxxxxxxx",
-    // other: { "naver-site-verification": "xxxxxxxx" },
   },
 };
 
