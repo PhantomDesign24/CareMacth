@@ -976,25 +976,16 @@ function CaregiverDashboard() {
               <div className="rounded-2xl border border-gray-100 overflow-hidden">
                 <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                   <h4 className="text-sm font-bold text-gray-900">누적 공제 내역</h4>
-                  <span className="text-[11px] text-gray-500">계산 기준 plaform fee + 세금</span>
+                  <span className="text-[11px] text-gray-500">계산 기준 원천세 3.3%</span>
                 </div>
                 <div className="divide-y divide-gray-100">
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-2">
                       <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
-                      <span className="text-sm text-gray-700">총 매출</span>
+                      <span className="text-sm text-gray-700">간병비 합계</span>
                     </div>
                     <span className="text-sm font-semibold text-gray-900 tabular-nums">
-                      {earnings.totalGross.toLocaleString()}원
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400" />
-                      <span className="text-sm text-gray-700">플랫폼 수수료</span>
-                    </div>
-                    <span className="text-sm font-semibold text-red-600 tabular-nums">
-                      -{earnings.totalPlatformFee.toLocaleString()}원
+                      {Math.max(0, earnings.totalGross - earnings.totalPlatformFee).toLocaleString()}원
                     </span>
                   </div>
                   <div className="flex items-center justify-between px-4 py-3">
@@ -1090,7 +1081,7 @@ function CaregiverDashboard() {
                             )}
                           </div>
                           <div className="text-[11px] text-gray-500 mt-0.5 truncate">
-                            매출 {e.amount.toLocaleString()}원 − 수수료 {e.platformFee.toLocaleString()}원 − 세금 {e.taxAmount.toLocaleString()}원
+                            간병비 {Math.max(0, e.amount - (e.platformFee || 0)).toLocaleString()}원 − 세금 {e.taxAmount.toLocaleString()}원
                           </div>
                         </div>
                         <div className="text-right flex-shrink-0">

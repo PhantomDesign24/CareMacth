@@ -5298,7 +5298,12 @@ export const deleteGuardianMember = async (req: AuthRequest, res: Response, next
   try {
     await requireAdminPassword(req);
     const { id } = req.params;
-    const guardian = await prisma.guardian.findUnique({ where: { id }, include: { user: true } });
+    // 관리자 보호자 목록은 User.id 를 내려주는데 여기서는 Guardian.id 로만 찾고 있어
+    //  '보호자를 찾을 수 없습니다' 로 전건 실패했다. 어느 쪽 id 로 와도 찾도록 한다.
+    const guardian = await prisma.guardian.findFirst({
+      where: { OR: [{ id }, { userId: id }] },
+      include: { user: true },
+    });
     if (!guardian) throw new AppError('보호자를 찾을 수 없습니다.', 404);
     if (guardian.user.deletedAt) throw new AppError('이미 삭제된 회원입니다.', 400);
     const active = await prisma.contract.count({ where: { guardianId: id, status: { in: ['ACTIVE', 'EXTENDED', 'PENDING_SIGNATURE'] } } });
@@ -5338,7 +5343,12 @@ export const resetGuardianPassword = async (req: AuthRequest, res: Response, nex
   try {
     const { id } = req.params;
     const { newPassword } = req.body as { newPassword: string };
-    const guardian = await prisma.guardian.findUnique({ where: { id }, include: { user: true } });
+    // 관리자 보호자 목록은 User.id 를 내려주는데 여기서는 Guardian.id 로만 찾고 있어
+    //  '보호자를 찾을 수 없습니다' 로 전건 실패했다. 어느 쪽 id 로 와도 찾도록 한다.
+    const guardian = await prisma.guardian.findFirst({
+      where: { OR: [{ id }, { userId: id }] },
+      include: { user: true },
+    });
     if (!guardian) throw new AppError('보호자를 찾을 수 없습니다.', 404);
     if (guardian.user.authProvider !== 'LOCAL') throw new AppError('소셜 로그인 계정은 비밀번호를 설정할 수 없습니다.', 400);
     await resetUserPassword(guardian.userId, newPassword);

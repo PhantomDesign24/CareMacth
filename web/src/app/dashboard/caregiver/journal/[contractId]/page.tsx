@@ -168,6 +168,10 @@ function JournalPage() {
     loadData();
   }, [loadData]);
 
+  // 간병 시작일 전에는 출근·PDF 를 막는다 (시작 하루 전에도 눌리던 문제)
+  const notStartedYet = !!contract?.startDate
+    && localDateStrFromToday() < localDateStr(contract.startDate);
+
   const handleCheckIn = async () => {
     try {
       const getPos = (): Promise<GeolocationPosition | null> =>
@@ -269,8 +273,9 @@ function JournalPage() {
           <button
             type="button"
             onClick={handleDownloadPdf}
-            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
-            title="보험사 제출용 PDF"
+            disabled={notStartedYet}
+            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-400"
+            title={notStartedYet ? "간병 시작일 이후 발급 가능합니다" : "보험사 제출용 PDF"}
           >
             <FiDownload className="w-3.5 h-3.5" /> PDF
           </button>
@@ -368,11 +373,17 @@ function JournalPage() {
               </div>
             </div>
           </div>
+          {notStartedYet && (
+            <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+              간병 시작일({contract?.startDate ? new Date(contract.startDate).toLocaleDateString("ko-KR") : "-"})부터
+              출근 체크와 간병일지 발급이 가능합니다.
+            </div>
+          )}
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={handleCheckIn}
-              disabled={checkedIn || selectedDate !== localDateStrFromToday()}
+              disabled={notStartedYet || checkedIn || selectedDate !== localDateStrFromToday()}
               className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-green-500 text-white font-bold text-sm hover:bg-green-600 disabled:bg-gray-200 disabled:text-gray-400"
             >
               <FiLogIn className="w-4 h-4" /> 출근 체크
@@ -380,7 +391,7 @@ function JournalPage() {
             <button
               type="button"
               onClick={handleCheckOut}
-              disabled={!checkedIn || checkedOut || selectedDate !== localDateStrFromToday()}
+              disabled={notStartedYet || !checkedIn || checkedOut || selectedDate !== localDateStrFromToday()}
               className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-orange-500 text-white font-bold text-sm hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400"
             >
               <FiLogOut className="w-4 h-4" /> 퇴근 체크

@@ -9,6 +9,13 @@ import { AppError } from '../middlewares/errorHandler';
 import { AuthRequest } from '../middlewares/auth';
 import { sendFromTemplate } from '../services/notificationService';
 
+// PDF·표기용 날짜는 반드시 KST 기준으로 — toISOString() 은 UTC 라
+//  KST 자정~오전 9시 사이 데이터가 하루 앞당겨 표기된다(간병 시작일·간병일자 오표기 원인).
+const kstYmd = (d: Date | string | null | undefined): string =>
+  d ? new Date(d).toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }) : '-';
+const kstMonthDay = (d: Date | string | null | undefined): string =>
+  d ? kstYmd(d).slice(5).replace('-', '. ') : '';
+
 // POST /check-in - 출근 체크
 export const checkIn = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -46,6 +53,18 @@ export const checkIn = async (req: AuthRequest, res: Response, next: NextFunctio
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    // 간병 시작일 전에는 출근할 수 없다 (시작 하루 전에 출근체크가 되던 문제)
+    if (contract.startDate) {
+      const start = new Date(contract.startDate);
+      start.setHours(0, 0, 0, 0);
+      if (today.getTime() < start.getTime()) {
+        throw new AppError(
+          `간병 시작일(${kstYmd(contract.startDate)})부터 출근 체크가 가능합니다.`,
+          400,
+        );
+      }
+    }
 
     // 오늘 이미 출근했는지 확인
     const existingRecord = await prisma.careRecord.findFirst({
@@ -539,7 +558,7 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
 
     // PDF 생성 (A4, 여백 45pt)
     const doc = new PDFDocument({ size: 'A4', margin: 45 });
-    const filename = `care-journal-${contract.careRequest.patient.name}-${new Date().toISOString().slice(0, 10)}.pdf`;
+    const filename = `care-journal-${contract.careRequest.patient.name}-${kstYmd(new Date())}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
     doc.pipe(res);
@@ -603,7 +622,7 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
     doc.font('Kor').fontSize(8).fillColor(COLOR_SUB_TEXT)
       .text(`문서번호  ${docId}`, MARGIN, 50, { width: TABLE_WIDTH, align: 'right' });
     doc.fontSize(8).fillColor(COLOR_SUB_TEXT)
-      .text(`발행일  ${new Date().toISOString().slice(0, 10)}`, MARGIN, 64, { width: TABLE_WIDTH, align: 'right' });
+      .text(`발행일  ${kstYmd(new Date())}`, MARGIN, 64, { width: TABLE_WIDTH, align: 'right' });
 
     // 중앙 타이틀
     doc.font('KorBold').fontSize(26).fillColor(COLOR_PRIMARY)
@@ -629,8 +648,8 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
 
     const info = [
       ['환자명', patient.name || '-', '성별', patient.gender === 'M' ? '남' : (patient.gender === 'F' ? '여' : '-')],
-      ['생년월일', patient.birthDate ? new Date(patient.birthDate).toISOString().slice(0, 10) : '-', '병원명', contract.careRequest.hospitalName || '-'],
-      ['간병 시작일', contract.startDate ? new Date(contract.startDate).toISOString().slice(0, 10) : '-', '간병 기간', contract.careRequest.durationDays ? `${contract.careRequest.durationDays}일` : '-'],
+      ['생년월일', kstYmd(patient.birthDate), '병원명', contract.careRequest.hospitalName || '-'],
+      ['간병 시작일', kstYmd(contract.startDate), '간병 기간', contract.careRequest.durationDays ? `${contract.careRequest.durationDays}일` : '-'],
       ['간병인 성명', caregiverUser?.name || '-', '간병인 연락처', caregiverUser?.phone || '-'],
       // 법인명은 케어매치 주식회사로 일괄 표기 (클라이언트 요청 2026-07-20)
       ['간병인 사용 법인명', '케어매치 주식회사', '', ''],
@@ -691,7 +710,7 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
       }
 
       const rowBg = i % 2 === 1 ? COLOR_ALT_ROW : undefined;
-      const dateStr = r?.date ? new Date(r.date).toISOString().slice(5, 10).replace('-', '. ') : '';
+      const dateStr = kstMonthDay(r?.date);
       const hrs = r?.careHoursManual ?? r?.careHours ?? null;
       // 시작시간(출근 체크) 표시 — KST HH:MM
       let startStr = '';
@@ -746,7 +765,7 @@ export const generateCareRecordPdf = async (req: AuthRequest, res: Response, nex
         }
 
         const rowBg = i % 2 === 1 ? COLOR_ALT_ROW : undefined;
-        const dateStr = r.date.toISOString().slice(5, 10).replace('-', '. ');
+        const dateStr = kstMonthDay(r.date);
 
         doc.lineWidth(0.6).strokeColor(COLOR_BORDER);
         if (rowBg) {
