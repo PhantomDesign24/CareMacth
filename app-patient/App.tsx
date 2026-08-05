@@ -330,6 +330,15 @@ export default function App() {
       if (data.type === 'CALL') {
         // 전화 걸기
       }
+      // 계약서·영수증·간병일지·수료증 PDF 열기 — WebView 는 PDF 를 렌더링하지 못해
+      //  기기 브라우저/뷰어로 넘긴다 (웹의 openExternal() 이 보냄)
+      if (data.type === 'OPEN_EXTERNAL' && data.url) {
+        addLog('OPEN_EXT', String(data.url).slice(0, 80));
+        Linking.openURL(String(data.url)).catch((err) =>
+          addLog('OPEN_EXT_FAIL', err?.message || 'err'),
+        );
+        return;
+      }
       // 유저 정보 수신
       if (data.type === 'USER_INFO') {
         if (data.name) setUserName(data.name);

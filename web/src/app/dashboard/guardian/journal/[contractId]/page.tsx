@@ -4,6 +4,7 @@ import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { careRecordAPI, contractAPI } from "@/lib/api";
 import { FiArrowLeft, FiDownload } from "react-icons/fi";
+import { openExternal } from "@/lib/openExternal";
 
 interface CareRecord {
   id: string;
@@ -100,10 +101,7 @@ function GuardianJournalPage() {
             type="button"
             onClick={() => {
               const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
-              window.open(
-                `/api/care-records/${contractId}/pdf?token=${encodeURIComponent(t || "")}`,
-                "_blank"
-              );
+              openExternal(`/api/care-records/${contractId}/pdf?token=${encodeURIComponent(t || "")}`);
             }}
             className="flex items-center gap-1 text-xs px-3 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200"
           >

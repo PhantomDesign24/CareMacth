@@ -9,6 +9,7 @@ import { showToast } from "@/components/Toast";
 import InsuranceTab from "@/components/InsuranceTab";
 import SignaturePad from "@/components/SignaturePad";
 import { SITE } from "@/config/site";
+import { openExternal } from "@/lib/openExternal";
 
 interface CareHistory {
   id: string;
@@ -1227,7 +1228,7 @@ function GuardianDashboard() {
                             type="button"
                             onClick={() => {
                               const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
-                              window.open(`/api/contracts/${care.id}/pdf?token=${encodeURIComponent(t || "")}`, "_blank");
+                              openExternal(`/api/contracts/${care.id}/pdf?token=${encodeURIComponent(t || "")}`);
                             }}
                             className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                           >
@@ -1413,7 +1414,7 @@ function GuardianDashboard() {
                                       type="button"
                                       onClick={() => {
                                         const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
-                                        window.open(`/api/payments/${pay.id}/receipt?token=${encodeURIComponent(t || "")}`, "_blank");
+                                        openExternal(`/api/payments/${pay.id}/receipt?token=${encodeURIComponent(t || "")}`);
                                       }}
                                       className="text-xs px-2 py-1 bg-gray-900 text-white rounded"
                                     >
@@ -2017,7 +2018,7 @@ function GuardianDashboard() {
                     type="button"
                     onClick={() => {
                       const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
-                      window.open(`/api/payments/${paymentDetail.id}/receipt?token=${encodeURIComponent(t || "")}`, "_blank");
+                      openExternal(`/api/payments/${paymentDetail.id}/receipt?token=${encodeURIComponent(t || "")}`);
                     }}
                     className="flex-1 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-semibold"
                   >

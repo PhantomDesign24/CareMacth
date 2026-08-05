@@ -496,11 +496,16 @@ export function setupCronJobs() {
     }
   });
 
-  // 매 5분: 지원자 미발생 안내 (10분/60분 시점 단계별 발송 — 환자보호자 단독)
+  // 매 1분: 지원자 미발생 안내 (10분/60분 시점 단계별 발송 — 환자보호자 단독)
+  // — 5분 주기였을 땐 실제 발송이 60~65분에 걸쳐 편차가 컸다 → 1분 주기로 오차 최소화
   // — atomic claim(updateMany) 으로 race 방지: claim 성공한 row 만 발송
   // — 발송 실패 시 sentAt 롤백하여 다음 cron 에서 재시도
   // — 60분 발송은 10분 발송 후에만(noApplicant10minSentAt IS NOT NULL) → 같은 루프 동시 발송 차단
-  cron.schedule('*/5 * * * *', async () => {
+  let noApplicantRunning = false;
+  cron.schedule('* * * * *', async () => {
+    // 주기가 짧아진 만큼 이전 실행이 끝나기 전 겹쳐 도는 것을 막는다
+    if (noApplicantRunning) return;
+    noApplicantRunning = true;
     try {
       const now = Date.now();
       const cut10 = new Date(now - 10 * 60 * 1000);
@@ -607,6 +612,8 @@ export function setupCronJobs() {
       }
     } catch (error) {
       console.error('[CRON] 지원자 미발생 안내 오류:', error);
+    } finally {
+      noApplicantRunning = false;
     }
   });
 

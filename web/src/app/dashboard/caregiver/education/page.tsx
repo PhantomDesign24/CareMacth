@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { educationAPI } from "@/lib/api";
 import { showToast } from "@/components/Toast";
+import { openExternal } from "@/lib/openExternal";
 
 interface Course {
   id: string;
@@ -161,7 +162,7 @@ export default function EducationListPage() {
                           e.preventDefault();
                           e.stopPropagation();
                           const token = localStorage.getItem("cm_access_token") || "";
-                          window.open(educationAPI.getCertificatePdfUrl(c.id, token), "_blank");
+                          openExternal(educationAPI.getCertificatePdfUrl(c.id, token));
                         }}
                         className="w-full mb-2 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 hover:bg-emerald-100 transition"
                       >

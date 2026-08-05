@@ -243,6 +243,12 @@ export default function App() {
   const onMessage = async (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
+      // 계약서·간병일지·수료증 PDF 열기 — WebView 는 PDF 를 렌더링하지 못하므로
+      //  기기 브라우저/뷰어로 넘긴다 (웹의 openExternal() 이 보냄)
+      if (data.type === 'OPEN_EXTERNAL' && data.url) {
+        Linking.openURL(String(data.url)).catch(() => {});
+        return;
+      }
       if (data.type === 'USER_INFO') {
         if (data.name) setUserName(data.name);
         if (data.email) setUserEmail(data.email);
@@ -504,6 +510,14 @@ export default function App() {
               }
             }}
             onMessage={onMessage}
+            /* window.open 이 무시돼 PDF·외부 링크가 열리지 않던 문제 —
+               새 창 요청을 받아 기기 브라우저로 넘긴다 */
+            setSupportMultipleWindows
+            onOpenWindow={(event: any) => {
+              const targetUrl = event?.nativeEvent?.targetUrl;
+              if (!targetUrl) return;
+              Linking.openURL(String(targetUrl)).catch(() => {});
+            }}
             injectedJavaScript={injectedJS}
             injectedJavaScriptBeforeContentLoaded={`window.IS_CAREMATCH_APP=true;window.APP_TYPE='CAREGIVER';true;`}
             javaScriptEnabled

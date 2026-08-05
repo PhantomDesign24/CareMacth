@@ -6,6 +6,7 @@ import { careRecordAPI, contractAPI } from "@/lib/api";
 import { compressImages } from "@/lib/imageCompress";
 import { showToast } from "@/components/Toast";
 import { FiClock, FiLogOut, FiLogIn, FiSave, FiArrowLeft, FiDownload } from "react-icons/fi";
+import { openExternal } from "@/lib/openExternal";
 
 interface CareRecord {
   id: string;
@@ -234,7 +235,7 @@ function JournalPage() {
     // 백엔드 PDF 생성 엔드포인트로 이동 (새 탭)
     const token = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
     const url = `/api/care-records/${contractId}/pdf?token=${encodeURIComponent(token || "")}`;
-    window.open(url, "_blank");
+    openExternal(url);
   };
 
   if (loading) {

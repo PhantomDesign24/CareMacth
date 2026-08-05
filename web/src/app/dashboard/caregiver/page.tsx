@@ -7,6 +7,7 @@ import { dashboardAPI, caregiverAPI, careRequestAPI, contractAPI, reviewAPI, rep
 import { formatDate, formatContractStatus, formatCareType, formatLocation, formatPenaltyType } from "@/lib/format";
 import { showToast } from "@/components/Toast";
 import SignaturePad from "@/components/SignaturePad";
+import { openExternal } from "@/lib/openExternal";
 
 interface EarningItem {
   id: string;
@@ -1563,7 +1564,7 @@ function CaregiverDashboard() {
                         type="button"
                         onClick={() => {
                           const t = typeof window !== "undefined" ? localStorage.getItem("cm_access_token") : "";
-                          window.open(`/api/contracts/${activity.id}/pdf?token=${encodeURIComponent(t || "")}`, "_blank");
+                          openExternal(`/api/contracts/${activity.id}/pdf?token=${encodeURIComponent(t || "")}`);
                         }}
                         className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                         title="계약서 PDF"
