@@ -117,14 +117,26 @@ export default function CompanyPage() {
             <Image src="/img/company/careInfoImg.jpg" alt="케어매치 임직원" fill className="object-cover" sizes="100vw" />
           </div>
 
-          {/* 2단 메시지 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 mb-14 sm:mb-16">
-            <p className="text-sm sm:text-base text-gray-600 leading-loose text-center md:text-right">
-              케어매치의 임직원은 현장에서 일어나는 다양한 일에 대하여 적극적으로 참여하고 해결책을 찾아 드리겠습니다.
-            </p>
-            <p className="text-sm sm:text-base text-gray-600 leading-loose text-center md:text-left">
-              고통받고 있는 환자를 보살피는 일은 천사의 일입니다. 이보다 더 의미 있고 소중한 일은 없습니다.
-            </p>
+          {/* 2단 메시지 — 기존 홈페이지 구성: 문구 첫 글자에 원형 도형이 겹치는 형태 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-12 mb-14 sm:mb-16 max-w-4xl mx-auto">
+            <div className="relative pl-2">
+              <span
+                aria-hidden
+                className="absolute left-0 top-0 -translate-x-2 -translate-y-3 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-teal-200 to-emerald-400 opacity-70"
+              />
+              <p className="relative text-sm sm:text-base font-semibold text-gray-800 leading-loose break-keep">
+                케어매치의 임직원은 현장에서 일어나는 다양한 일에 대하여 적극적으로 참여하고 해결책을 찾아 드리겠습니다.
+              </p>
+            </div>
+            <div className="relative pl-2">
+              <span
+                aria-hidden
+                className="absolute left-0 top-0 -translate-x-2 -translate-y-3 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-orange-200 to-amber-400 opacity-70"
+              />
+              <p className="relative text-sm sm:text-base font-semibold text-gray-800 leading-loose break-keep">
+                고통받고 있는 환자를 보살피는 일은 천사의 일입니다. 이보다 더 의미 있고 소중한 일은 없습니다.
+              </p>
+            </div>
           </div>
 
           {/* 인용구 — 큰 따옴표로 감싼 약속 메시지 */}
