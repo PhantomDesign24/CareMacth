@@ -216,6 +216,28 @@ export default function ApplicantsPage() {
     }
   };
 
+  // 알림톡 '금액 인상'/'지역 확대' 버튼으로 진입하면 해당 모달을 바로 띄운다
+  //  (버튼이 목록만 열어줘서 기능을 못 찾는다는 지적 — 8/5)
+  //  같은 페이지에서 해시만 바뀌는 경우도 처리해야 직전 모달이 남지 않는다.
+  useEffect(() => {
+    if (!careRequest) return;
+    const openByHash = () => {
+      const hash = typeof window !== "undefined" ? window.location.hash : "";
+      if (hash !== "#raise" && hash !== "#region") return;
+      // 다른 모달이 열려 있으면 닫고 요청받은 것만 연다
+      setShowRaiseModal(hash === "#raise");
+      setShowExpandRegionModal(hash === "#region");
+      if (hash === "#region") {
+        setExpandSido(dominantSido(careRequest.regions || []) || "서울");
+        setExpandRegions([]);
+      }
+      history.replaceState(null, "", window.location.pathname);
+    };
+    openByHash();
+    window.addEventListener("hashchange", openByHash);
+    return () => window.removeEventListener("hashchange", openByHash);
+  }, [careRequest]);
+
   const handleRaiseRate = async () => {
     const current = careRequest?.dailyRate || 0;
     if (!raiseAmount || raiseAmount <= 0) {

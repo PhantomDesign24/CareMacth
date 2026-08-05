@@ -359,7 +359,7 @@ async function sendAlimtalkForTemplate(
   message: string,
   subject?: string,
   overrideButtons?: AligoButton[],
-  opts?: { suppressFailover?: boolean },
+  opts?: { suppressFailover?: boolean; vars?: Record<string, string | number | null | undefined> },
 ) {
   if (!template.alimtalkTemplateCode) return;
   const user = await prisma.user.findUnique({
@@ -381,9 +381,18 @@ async function sendAlimtalkForTemplate(
   if (buttons && buttons.length > 0) {
     const baseUrl = process.env.WEB_BASE_URL || 'https://care-match.kr';
     const webBase = baseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const vars = opts?.vars || {};
     const subst = (s: string | undefined): string | undefined => {
       if (!s) return s;
-      return s.replace(/\{\{webBase\}\}/g, webBase).replace(/#\{webBase\}/g, webBase);
+      let out = s.replace(/\{\{webBase\}\}/g, webBase).replace(/#\{webBase\}/g, webBase);
+      // 본문과 동일하게 버튼 URL 에도 변수를 채운다 (예: #{careRequestId} → 실제 공고 ID)
+      //  → 버튼이 목록이 아니라 해당 공고 화면으로 바로 연결된다
+      out = out.replace(/\{\{(\w+)\}\}|#\{(\w+)\}/g, (m, a, b) => {
+        const k = a || b;
+        const v = (vars as any)[k];
+        return v === undefined || v === null ? m : encodeURIComponent(String(v));
+      });
+      return out;
     };
     buttons = buttons.map((b) => ({
       ...b,
@@ -465,7 +474,7 @@ export async function sendFromTemplate(params: {
 
   // 알림톡 발송 (백그라운드)
   if (useAlimtalk && template?.alimtalkTemplateCode) {
-    void sendAlimtalkForTemplate(userId, template, body, title, overrideAlimtalkButtons).catch(() => {});
+    void sendAlimtalkForTemplate(userId, template, body, title, overrideAlimtalkButtons, { vars: params.vars }).catch(() => {});
   }
 
   // 이메일 발송 (백그라운드) — 사용자 이메일이 있으면 단순 텍스트 본문으로 발송

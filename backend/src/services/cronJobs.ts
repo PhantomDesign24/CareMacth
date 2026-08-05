@@ -561,7 +561,9 @@ export function setupCronJobs() {
             await sendFromTemplate({
               userId: r.guardian.userId,
               key: templateKey,
-              vars: { patientName },
+              // careRequestId 는 알림톡 버튼 URL 에 채워져 '금액 인상'/'지역 확대' 버튼이
+              //  해당 공고 화면의 모달로 바로 열리게 한다
+              vars: { patientName, careRequestId: id },
               fallbackTitle: fb.title,
               fallbackBody: fb.body,
               fallbackType: 'MATCHING',
