@@ -5529,6 +5529,7 @@ export const updateCareRequestDailyRate = async (req: AuthRequest, res: Response
             userId: sc.userId,
             key: 'MATCHING_RATE_RAISED',
             vars: {
+              patientName: cr.patient?.name || '',
               currentRate: (before ?? 0).toLocaleString(),
               newRate: dailyRate.toLocaleString(),
             },

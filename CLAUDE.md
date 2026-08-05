@@ -4,20 +4,30 @@
 
 | 서비스 | 포트 | 경로 | 실행 방법 |
 |--------|------|------|-----------|
-| Backend API | **4000** | `/var/www/carematch/backend` | `npm run build && pm2 restart carematch-backend` |
-| Web Frontend | **3000** | `/var/www/carematch/web` | `rm -rf .next && npm run build && pm2 restart carematch-web` |
-| Admin Panel | **3010** | `/var/www/carematch/admin` | `rm -rf .next && npm run build && pm2 restart carematch-admin` |
+| Backend API | **4000** | `/var/www/carematch/backend` | `npm run build && sudo systemctl restart carematch-api.service` |
+| Web Frontend | **3000** | `/var/www/carematch/web` | `rm -rf .next && npm run build && sudo systemctl restart carematch-web.service` |
+| Admin Panel | **3010** | `/var/www/carematch/admin` | `rm -rf .next && npm run build && sudo systemctl restart carematch-admin.service` |
 | PostgreSQL | 5432 | - | 시스템 서비스 |
 | Redis | 6379 | - | 시스템 서비스 |
 
-## PM2 프로세스 관리
+## 프로세스 관리 — systemd (pm2 아님)
+
+세 서비스 모두 systemd 로 돌아간다. **`pm2 restart carematch-web` 은 그런 프로세스가 없어
+조용히 실패하고, 빌드해도 배포가 반영되지 않는다.** (2026-08-05 실제로 이 때문에 하루치
+웹 수정이 미반영 상태로 남았음)
 
 ```bash
-pm2 list                          # 전체 상태 확인
-pm2 restart carematch-backend     # 백엔드 재시작
-pm2 restart carematch-web         # 웹 재시작
-pm2 restart carematch-admin       # 어드민 재시작
-pm2 logs carematch-backend        # 백엔드 로그
+systemctl status carematch-{api,web,admin}.service   # 상태 확인
+sudo systemctl restart carematch-api.service         # 백엔드 재시작
+sudo systemctl restart carematch-web.service         # 웹 재시작
+sudo systemctl restart carematch-admin.service       # 어드민 재시작
+sudo journalctl -u carematch-api.service -n 100      # 로그
+```
+
+웹/어드민은 `output: 'standalone'` 이라 **`.next` 를 지우지 않고 빌드하면 옛 산출물이 남을 수 있다.**
+반드시 `rm -rf .next` 후 빌드하고, 배포 후에는 실제 응답으로 반영을 확인할 것.
+```bash
+curl -s https://care-match.kr/ | grep -c '바뀐 문구'
 ```
 
 ## Git 저장소
@@ -40,17 +50,17 @@ pm2 logs carematch-backend        # 백엔드 로그
 # 1. 백엔드
 cd /var/www/carematch/backend
 npm run build
-pm2 restart carematch-backend
+sudo systemctl restart carematch-api.service
 
 # 2. 웹
 cd /var/www/carematch/web
 rm -rf .next && npm run build
-pm2 restart carematch-web
+sudo systemctl restart carematch-web.service
 
 # 3. 어드민
 cd /var/www/carematch/admin
 rm -rf .next && npm run build
-pm2 restart carematch-admin
+sudo systemctl restart carematch-admin.service
 ```
 
 ## 모바일 앱 빌드 (사용자 Windows PowerShell)

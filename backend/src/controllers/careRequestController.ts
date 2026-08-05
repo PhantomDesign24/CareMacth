@@ -1020,6 +1020,7 @@ export const raiseRate = async (req: AuthRequest, res: Response, next: NextFunct
     const careRequest = await prisma.careRequest.findFirst({
       where: { id, guardianId: guardian.id },
       include: {
+        patient: { select: { name: true } },
         matchScores: {
           include: {
             careRequest: false,
@@ -1063,6 +1064,7 @@ export const raiseRate = async (req: AuthRequest, res: Response, next: NextFunct
             userId: cg.userId,
             key: 'MATCHING_RATE_RAISED',
             vars: {
+              patientName: careRequest.patient?.name || '',
               currentRate: (currentRate ?? 0).toLocaleString(),
               newRate: newDailyRate.toLocaleString(),
             },
