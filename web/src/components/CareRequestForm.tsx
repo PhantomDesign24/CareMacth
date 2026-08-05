@@ -469,11 +469,48 @@ function openDaumPostcode(onComplete: (data: DaumPostcodeResult) => void) {
     .then(() => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const Postcode = (window as any).daum.Postcode;
+      // .open() 은 새 창을 띄우는데 앱 WebView 에서는 차단돼 아무 반응이 없다.
+      //  → 화면 안에 레이어로 embed 해 앱·웹 모두 동일하게 동작하게 한다.
+      const wrap = document.createElement('div');
+      wrap.setAttribute('data-postcode-layer', '');
+      wrap.style.cssText =
+        'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px';
+      const box = document.createElement('div');
+      box.style.cssText =
+        'position:relative;width:100%;max-width:520px;height:min(560px,80vh);background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.2)';
+      const bar = document.createElement('div');
+      bar.style.cssText =
+        'display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #eee;font-weight:700;font-size:15px;color:#111';
+      bar.innerHTML = '<span>주소 검색</span>';
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.textContent = '닫기';
+      closeBtn.style.cssText =
+        'border:0;background:#f3f4f6;color:#374151;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer';
+      bar.appendChild(closeBtn);
+      const host = document.createElement('div');
+      host.style.cssText = 'width:100%;height:calc(100% - 49px)';
+      box.appendChild(bar);
+      box.appendChild(host);
+      wrap.appendChild(box);
+      document.body.appendChild(wrap);
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      const cleanup = () => {
+        document.body.style.overflow = prevOverflow;
+        wrap.remove();
+      };
+      closeBtn.onclick = cleanup;
+      wrap.onclick = (ev) => { if (ev.target === wrap) cleanup(); };
       new Postcode({
         oncomplete: (data: DaumPostcodeResult) => {
           onComplete(data);
+          cleanup();
         },
-      }).open();
+        onclose: cleanup,
+        width: '100%',
+        height: '100%',
+      }).embed(host);
     })
     .catch((e) => {
       alert(typeof e === 'string' ? e : (e?.message || '주소 검색을 불러올 수 없습니다.'));
@@ -1550,7 +1587,7 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                   placeholder={
                     form.locationType === "hospital"
                       ? "병원 이름을 입력하면 검색됩니다"
-                      : "주소 검색을 눌러주세요"
+                      : "주소 검색 또는 직접 입력"
                   }
                   id="cr-locationName"
                   value={form.locationName}
@@ -1564,7 +1601,6 @@ export default function CareRequestForm({ onSubmit, submitting = false }: Props)
                   }}
                   onFocus={() => { if (form.locationType === "hospital" && hospResults.length > 0) setHospOpen(true); }}
                   onBlur={() => setTimeout(() => setHospOpen(false), 150)}
-                  readOnly={form.locationType === 'home'}
                   autoComplete="off"
                 />
                 <button
