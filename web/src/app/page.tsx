@@ -350,9 +350,8 @@ function HomeBannerSection() {
       cta: "지금 매칭 신청",
       target: "/care-request",
       role: "guardian",
-      gradient: "from-primary-600 via-primary-500 to-primary-400",
-      pattern: "radial-gradient(circle at 85% 20%, rgba(255,255,255,0.2), transparent 40%), radial-gradient(circle at 15% 80%, rgba(255,255,255,0.15), transparent 35%)",
-      emoji: "🤝",
+      accent: "primary",
+      icon: "match",
     },
     {
       id: "b2",
@@ -362,9 +361,8 @@ function HomeBannerSection() {
       cta: "일감 탐색하기",
       target: "/find-work",
       role: "caregiver",
-      gradient: "from-emerald-600 via-emerald-500 to-teal-400",
-      pattern: "radial-gradient(circle at 75% 25%, rgba(255,255,255,0.25), transparent 40%), radial-gradient(circle at 20% 75%, rgba(255,255,255,0.15), transparent 35%)",
-      emoji: "💼",
+      accent: "teal",
+      icon: "work",
     },
     {
       id: "b3",
@@ -374,9 +372,8 @@ function HomeBannerSection() {
       cta: "서비스 자세히",
       target: "/home-care",
       role: undefined,
-      gradient: "from-violet-600 via-purple-500 to-fuchsia-400",
-      pattern: "radial-gradient(circle at 80% 30%, rgba(255,255,255,0.25), transparent 40%), radial-gradient(circle at 15% 70%, rgba(255,255,255,0.15), transparent 35%)",
-      emoji: "🛡️",
+      accent: "violet",
+      icon: "shield",
     },
     {
       id: "b4",
@@ -386,9 +383,8 @@ function HomeBannerSection() {
       cta: "코드 받기",
       target: "/auth/register",
       role: undefined,
-      gradient: "from-amber-500 via-orange-500 to-rose-400",
-      pattern: "radial-gradient(circle at 70% 20%, rgba(255,255,255,0.25), transparent 40%), radial-gradient(circle at 20% 85%, rgba(255,255,255,0.15), transparent 35%)",
-      emoji: "🎁",
+      accent: "amber",
+      icon: "gift",
     },
   ];
 
@@ -402,13 +398,10 @@ function HomeBannerSection() {
         cta: b.ctaLabel || "자세히 보기",
         target: b.linkUrl || "/",
         role: undefined as string | undefined,
-        gradient: "from-primary-600 via-primary-500 to-primary-400",
-        pattern: b.imageUrl
-          ? `url(${b.imageUrl})`
-          : "radial-gradient(circle at 85% 20%, rgba(255,255,255,0.2), transparent 40%)",
+        accent: "primary",
+        icon: "notice",
         bgColor: b.bgColor || undefined,
         imageUrl: b.imageUrl || undefined,
-        emoji: b.imageUrl ? "" : "📢",
         _i: i,
       }))
     : defaultBanners;
@@ -440,65 +433,95 @@ function HomeBannerSection() {
     }
   };
 
+  const ACC: Record<string, { bar: string; chip: string; btn: string; soft: string }> = {
+    primary: { bar: "bg-primary-500", chip: "bg-primary-50 text-primary-700", btn: "bg-primary-500 hover:bg-primary-600", soft: "bg-primary-50" },
+    teal:    { bar: "bg-secondary-500", chip: "bg-secondary-50 text-secondary-700", btn: "bg-secondary-500 hover:bg-secondary-600", soft: "bg-secondary-50" },
+    violet:  { bar: "bg-violet-500", chip: "bg-violet-50 text-violet-700", btn: "bg-violet-500 hover:bg-violet-600", soft: "bg-violet-50" },
+    amber:   { bar: "bg-amber-500", chip: "bg-amber-50 text-amber-700", btn: "bg-amber-500 hover:bg-amber-600", soft: "bg-amber-50" },
+  };
+  // SVG path 문자열 — JSX 를 객체 값으로 두면 파서가 걸려 문자열로 보관한다
+  const ICON: Record<string, string> = {
+    match: "M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z",
+    work: "M20.25 14.15v4.073a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a12.765 12.765 0 0 1-7.036 0l-1.32-.377A2.25 2.25 0 0 1 7.5 18.223V14.15M16.5 6.75V5.25a2.25 2.25 0 0 0-2.25-2.25h-4.5A2.25 2.25 0 0 0 7.5 5.25v1.5m9 0h3a2.25 2.25 0 0 1 2.25 2.25v3.026a48.5 48.5 0 0 1-19.5 0V9a2.25 2.25 0 0 1 2.25-2.25h3m9 0h-9",
+    shield: "M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z",
+    gift: "M21 11.25v8.25a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 1 0 9.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1 1 14.625 7.5H12m0 0V21m-8.625-9.75h18a.375.375 0 0 0 .375-.375V8.25a.375.375 0 0 0-.375-.375h-18A.375.375 0 0 0 3 8.25v2.625c0 .207.168.375.375.375Z",
+    notice: "M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 0 8.835-2.535m0 0A23.74 23.74 0 0 0 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46",
+  };
+
   return (
     <section className="relative py-4 sm:py-10 bg-gray-50">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div
-          className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg bg-white border border-gray-100 h-[340px] sm:h-[300px]"
+          className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-gray-200 shadow-[0_2px_20px_rgba(0,0,0,0.05)] h-[220px] sm:h-[230px]"
           onMouseEnter={() => setPaused(true)}
           onMouseLeave={() => setPaused(false)}
         >
-          {/* 슬라이드들 */}
-          {banners.map((b, i) => (
-            <div
-              key={b.id}
-              className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
-                i === activeIndex ? "opacity-100 z-10" : "opacity-0 z-0"
-              }`}
-            >
-              <div className="flex flex-col md:grid md:grid-cols-2 h-full">
-                {/* 비주얼 — 모바일 상단 / 데스크탑 우측 */}
-                <div
-                  className={`order-1 md:order-2 relative h-24 sm:h-28 md:h-full ${(b as any).imageUrl ? "" : `bg-gradient-to-br ${b.gradient}`} flex items-center justify-center overflow-hidden`}
-                  style={(b as any).imageUrl ? undefined : ((b as any).bgColor ? { background: (b as any).bgColor } : undefined)}
-                >
-                  <div
-                    className="absolute inset-0"
-                    style={(b as any).imageUrl
-                      ? { backgroundImage: `url(${(b as any).imageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-                      : { backgroundImage: b.pattern }}
-                  />
-                  <div className="relative text-6xl sm:text-7xl md:text-9xl drop-shadow-lg">{b.emoji}</div>
-                  <div className="absolute top-3 right-4 text-white/40 font-black text-base sm:text-2xl tabular-nums">
-                    {String(i + 1).padStart(2, "0")}
-                    <span className="text-xs sm:text-base">/{String(banners.length).padStart(2, "0")}</span>
+          {banners.map((b, i) => {
+            const a = ACC[(b as any).accent] || ACC.primary;
+            const img = (b as any).imageUrl as string | undefined;
+            return (
+              <div
+                key={b.id}
+                className={`absolute inset-0 transition-opacity duration-500 ease-in-out ${
+                  i === activeIndex ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
+                }`}
+              >
+                {/* 좌측 컬러 액센트 바 */}
+                <span className={`absolute left-0 top-0 bottom-0 w-1 sm:w-1.5 ${a.bar}`} />
+
+                {img ? (
+                  /* CMS 이미지가 있으면 이미지를 배경으로 두고 텍스트를 왼쪽에 */
+                  <>
+                    <div className="absolute inset-0" style={{ backgroundImage: `url(${img})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+                    <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
+                    <div className="relative h-full flex flex-col justify-center pl-7 sm:pl-12 pr-6 max-w-2xl">
+                      {b.subtitle && (
+                        <span className="inline-flex self-start items-center px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold bg-white/90 text-gray-800 mb-2">
+                          {b.subtitle}
+                        </span>
+                      )}
+                      <h3 className="text-xl sm:text-3xl font-black text-white leading-tight mb-3 break-keep">{b.title}</h3>
+                      <button
+                        type="button"
+                        onClick={() => go(b.target, b.role)}
+                        className="inline-flex self-start items-center gap-1.5 px-5 py-2.5 rounded-lg text-xs sm:text-sm font-bold text-gray-900 bg-white hover:bg-gray-100 transition-colors"
+                      >
+                        {b.cta}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  /* 기본형 — 흰 배경에 라인 아이콘, 이모지 없이 */
+                  <div className="relative h-full flex items-center gap-5 sm:gap-10 pl-7 sm:pl-12 pr-5 sm:pr-10">
+                    <div className="flex-1 min-w-0">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold ${a.chip} mb-2 sm:mb-2.5`}>
+                        {b.subtitle}
+                      </span>
+                      <h3 className="text-xl sm:text-3xl font-black text-gray-900 leading-tight mb-1.5 sm:mb-2 break-keep">
+                        {b.title}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-gray-500 leading-relaxed mb-3 sm:mb-4 line-clamp-2 break-keep">
+                        {b.desc}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => go(b.target, b.role)}
+                        className={`inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-xs sm:text-sm font-bold text-white ${a.btn} transition-colors`}
+                      >
+                        {b.cta}
+                      </button>
+                    </div>
+                    {/* 아이콘 — 데스크톱에서만, 은은한 원형 배경 */}
+                    <div className={`hidden md:flex shrink-0 w-32 h-32 rounded-2xl ${a.soft} items-center justify-center`}>
+                      <svg className="w-14 h-14 text-gray-700 opacity-70" fill="none" viewBox="0 0 24 24" strokeWidth={1.4} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d={ICON[(b as any).icon] || ICON.notice} />
+                      </svg>
+                    </div>
                   </div>
-                </div>
-
-                {/* 텍스트 — 모바일 하단 / 데스크탑 좌측 */}
-                <div className="order-2 md:order-1 flex-1 flex flex-col justify-center px-6 sm:px-10 md:px-12 py-5 md:py-8">
-                  <span className={`inline-flex self-start items-center gap-1.5 px-3 py-1 rounded-full text-[11px] sm:text-sm font-semibold text-white bg-gradient-to-r ${b.gradient} mb-2.5 sm:mb-4`}>
-                    {b.subtitle}
-                  </span>
-                  <h3 className="text-2xl sm:text-4xl font-black text-gray-900 leading-tight mb-2 sm:mb-3">
-                    {b.title}
-                  </h3>
-                  <p className="text-sm sm:text-base text-gray-500 leading-relaxed mb-4 sm:mb-6 max-w-md line-clamp-2">
-                    {b.desc}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => go(b.target, b.role)}
-                    className={`inline-flex self-start items-center gap-1.5 px-5 sm:px-7 py-2.5 sm:py-3.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r ${b.gradient} shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all`}
-                  >
-                    {b.cta}
-                    <FiArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  </button>
-                </div>
+                )}
               </div>
-            </div>
-          ))}
-
+            );
+          })}
         </div>
 
         {/* 인디케이터 — 카드 아래 가운데 */}
