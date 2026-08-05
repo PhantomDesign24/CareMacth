@@ -134,6 +134,16 @@ export default function PaymentPage() {
     fetchContract();
   }, [fetchContract]);
 
+  // 서명 미완료 상태로 결제 페이지에 들어오면 안내 후 계약서로 유도(8/5 검수)
+  useEffect(() => {
+    if (!contract || signGuideShown) return;
+    if (contract.status !== "PENDING_SIGNATURE") return;
+    setSignGuideShown(true);
+    if (window.confirm("간병인과 보호자 간 계약서 서명이 완료되어야 결제가 가능합니다.\n\n계약서 서명 화면으로 이동할까요?")) {
+      router.push("/dashboard/guardian");
+    }
+  }, [contract, signGuideShown, router]);
+
   // Calculated amounts
   // 직접결제(DIRECT): 간병비는 간병사에게 직접 지급, 플랫폼은 매칭 이용료(정액수수료×일수)만 수취.
   const isDirect = method === "DIRECT";
@@ -329,15 +339,6 @@ export default function PaymentPage() {
     { value: "DIRECT", label: "직접결제", desc: "간병비는 간병사님께 직접 지급, 플랫폼 이용료만 결제" },
   ];
 
-  // 서명 미완료 상태로 결제 페이지에 들어오면 안내 후 계약서로 유도(8/5 검수)
-  useEffect(() => {
-    if (!contract || signGuideShown) return;
-    if (contract.status !== "PENDING_SIGNATURE") return;
-    setSignGuideShown(true);
-    if (window.confirm("간병인과 보호자 간 계약서 서명이 완료되어야 결제가 가능합니다.\n\n계약서 서명 화면으로 이동할까요?")) {
-      router.push("/dashboard/guardian");
-    }
-  }, [contract, signGuideShown, router]);
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gray-50 py-8 px-4">
