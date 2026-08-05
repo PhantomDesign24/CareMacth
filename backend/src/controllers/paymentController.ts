@@ -1570,13 +1570,16 @@ export const confirmOfflineRefund = async (req: AuthRequest, res: Response, next
 export const getRefundRequests = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const VALID_STATUSES = ['PENDING', 'PROCESSING', 'APPROVED', 'REJECTED'] as const;
-    const rawStatus = (req.query.status as string) || 'PENDING';
-    if (!VALID_STATUSES.includes(rawStatus as any)) {
+    const rawStatus = (req.query.status as string) ?? 'PENDING';
+    // status=all 또는 빈 값이면 전체(요청 이력이 있는 건 전부) 조회
+    const isAll = rawStatus === '' || rawStatus === 'all';
+    if (!isAll && !VALID_STATUSES.includes(rawStatus as any)) {
       throw new AppError('지원하지 않는 환불 상태입니다.', 400);
     }
-    const status = rawStatus as typeof VALID_STATUSES[number];
     const payments = await prisma.payment.findMany({
-      where: { refundRequestStatus: status as any },
+      where: isAll
+        ? { refundRequestStatus: { in: VALID_STATUSES as unknown as any[] } }
+        : { refundRequestStatus: rawStatus as any },
       include: {
         contract: {
           include: {

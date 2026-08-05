@@ -375,7 +375,8 @@ export default function PaymentsPage() {
     } else if (activeTab === "fees") {
       fetchFeeConfig();
     }
-  }, [activeTab, fetchPayments, fetchSettlements, fetchFeeConfig]);
+    // 필터(상태 등)가 바뀌면 해당 fetch 의 참조가 바뀌므로 의존성에 모두 넣어야 재조회된다
+  }, [activeTab, fetchPayments, fetchSettlements, fetchFeeConfig, fetchRefundRequests, fetchMidContracts, fetchAdditionalFees]);
 
   // Reset page on filter change
   useEffect(() => {
@@ -468,6 +469,19 @@ export default function PaymentsPage() {
       setDepositLoading(null);
     }
   };
+
+  // 환불 요청은 실시간성이 필요해 자동 갱신한다(매번 새로고침을 누르지 않도록)
+  const [refundAutoAt, setRefundAutoAt] = useState<string>("");
+  useEffect(() => {
+    if (activeTab !== "refunds") return;
+    const stamp = () => setRefundAutoAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    stamp();
+    // 30초 주기 외에, 탭·필터가 바뀐 직후에도 바로 반영
+    const tick = setInterval(() => { fetchRefundRequests(); stamp(); }, 30000);
+    const onFocus = () => { fetchRefundRequests(); stamp(); };
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(tick); window.removeEventListener("focus", onFocus); };
+  }, [activeTab, fetchRefundRequests]);
 
   const paymentColumns: Column<AdminPayment>[] = [
     { key: "id", label: "결제 ID", render: (v) => <span className="font-mono text-xs text-gray-500">{(v as string).slice(0, 8)}...</span> },
@@ -1004,10 +1018,15 @@ export default function PaymentsPage() {
                 className="input-field w-auto"
               >
                 <option value="PENDING">대기중</option>
+                <option value="all">전체</option>
+                <option value="PROCESSING">처리중</option>
                 <option value="APPROVED">승인됨</option>
                 <option value="REJECTED">거절됨</option>
               </select>
-              <button onClick={fetchRefundRequests} className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 ml-auto">
+              <span className="ml-auto text-xs text-gray-400">
+                {refundAutoAt ? `${refundAutoAt} 기준` : ""}
+              </span>
+              <button onClick={fetchRefundRequests} className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50">
                 새로고침
               </button>
             </div>
