@@ -166,6 +166,7 @@ function HeroSection() {
       title: "케어매치",
       highlight: "6단계 고객만족 시스템",
       desc: "지역 센터장의 현장방문 지원, 케어코디 업무지원, 고객 만족도 해피콜 시스템, 간병인 고객만족 평가제, 우수 간병인 포상제, 실시간 매칭",
+      imgClass: "max-w-[34%] md:max-w-[38%]", // 설명이 길어 인물과 겹치던 문제(8/5 검수)
     },
     {
       type: "image" as const,
@@ -954,10 +955,12 @@ function CareFieldsSection() {
             <div key={i} className="group relative h-52 sm:h-72 rounded-2xl overflow-hidden cursor-pointer">
               <img src={f.image} alt={f.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent group-hover:from-black/90 transition-all duration-300" />
+              {/* 제목 줄은 카드마다 같은 높이에 오도록 하단 고정, 설명은 그 위에 겹쳐 띄운다
+                  (설명 길이가 달라 제목 위치가 카드마다 어긋나던 문제 — 8/5 검수) */}
               <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
+                <p className="text-xs sm:text-sm text-gray-300 leading-relaxed mb-1 line-clamp-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 md:absolute md:bottom-full md:left-4 md:right-4 sm:md:left-6 sm:md:right-6">{f.desc}</p>
                 <div className="text-primary-400 text-xs font-bold mb-1">{f.count} 매칭</div>
-                <h3 className="text-base sm:text-xl font-bold text-white mb-1">{f.title}</h3>
-                <p className="text-xs sm:text-sm text-gray-300 leading-relaxed opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300">{f.desc}</p>
+                <h3 className="text-base sm:text-xl font-bold text-white">{f.title}</h3>
               </div>
             </div>
           ))}
@@ -1022,37 +1025,37 @@ function WhyCareMatchSection() {
     {
       icon: <FaSearch className="w-6 h-6" />,
       title: "편리한 간병 연결 플랫폼",
-      desc: "앱과 웹에서 간편하게 간병인을 검색하고 매칭할 수 있습니다.",
+      desc: "환자와 간병인 모두 장소와 시간에 구애됨 없이 간편하게 이용할 수 있도록 설계된 플랫폼입니다.",
     },
     {
       icon: <FaUserCheck className="w-6 h-6" />,
       title: "검증된 간병인",
-      desc: "신원인증, 교육이수, 경력검증을 거친 전문 간병인만 활동합니다.",
+      desc: "간병인의 인성 및 능력을 온오프라인에서 분석하고 회사의 규정에 따라 정식 간병인으로 등록합니다.",
     },
     {
       icon: <FaHandshake className="w-6 h-6" />,
       title: "1:1 맞춤형 매칭",
-      desc: "환자의 상태와 요구에 맞는 최적의 간병인을 1:1로 매칭합니다.",
+      desc: "환자의 성별, 나이, 몸무게, 병명, 증상 등을 면밀히 분석하여 1:1 맞춤형 간병인을 추천하여 드립니다.",
     },
     {
       icon: <FaShieldAlt className="w-6 h-6" />,
       title: "보험 및 교육",
-      desc: "간병인 보험 가입과 전문 교육으로 안전한 간병을 보장합니다.",
+      desc: "케어매치의 간병인으로 등록하기 위해서는 간병 교육을 이수하고 배상책임보험을 가입하여야 합니다.",
     },
     {
       icon: <FaBrain className="w-6 h-6" />,
       title: "AI + 케어코디",
-      desc: "인공지능 매칭과 전담 케어코디네이터의 이중 관리 시스템입니다.",
+      desc: "AI 간병 매칭 플랫폼과 케어코디가 유기적 관계를 형성해 온오프라인 모든 환경에서 최상의 간병인을 제공합니다.",
     },
     {
       icon: <FaLayerGroup className="w-6 h-6" />,
       title: "3중 케어 시스템",
-      desc: "간병인-케어코디-센터장의 3중 관리로 빈틈없는 케어를 제공합니다.",
+      desc: "간병인, 본사 케어코디, 지역센터장이 3중 CARE 시스템을 구축하고 간병인 혼자 할 수 없는 간병을 제공합니다.",
     },
     {
       icon: <FaClipboardList className="w-6 h-6" />,
       title: "간병일지",
-      desc: "실시간 간병일지를 통해 환자 상태를 투명하게 확인할 수 있습니다.",
+      desc: "매일 요양환자의 상태를 파악하여 정해진 시간에 카톡 또는 문자메시지를 통해 보호자에게 제공해 드립니다.",
     },
     {
       icon: <FaFileMedical className="w-6 h-6" />,
@@ -1114,10 +1117,10 @@ function CareEducationSection() {
   }, []);
 
   const programs = [
-    { image: "/img/main/prog_01.jpg", title: "사전 심층면접", desc: "지원자의 자질과 적합성을 철저하게 검증합니다.", step: "01" },
-    { image: "/img/main/prog_02.jpg", title: "직무 소양 교육", desc: "간병인의 기본 소양과 윤리를 교육합니다.", step: "02" },
-    { image: "/img/main/prog_03.jpg", title: "실무 직무 교육", desc: "현장 실무 기술과 전문 지식을 교육합니다.", step: "03" },
-    { image: "/img/main/prog_04.jpg", title: "재교육", desc: "정기 재교육으로 전문성을 향상시킵니다.", step: "04" },
+    { image: "/img/main/prog_01.jpg", title: "사전 심층면접", desc: "케어매치 간병인 회원가입 이후 온·오프라인 면접을 실시하고 직업의식, 용모단정, 의사소통, 공감능력, 책임감, 경력사항 등을 파악하여 간병인 등록여부를 결정합니다.", step: "하나." },
+    { image: "/img/main/prog_02.jpg", title: "직무 소양 교육", desc: "간병인의 직업윤리 및 의사 소통의 방법, 섬김의 방법, 친절예절 교육, 의식주 도움 교육, 심리적 안정감 회복 교육, 합병증 및 낙상 예방 교육을 정해진 시간에 실시합니다.", step: "둘." },
+    { image: "/img/main/prog_03.jpg", title: "실무 직무 교육", desc: "요양환자의 식사돕기, 이동 돕기, 청결돕기, 침상정리, 안전(화상·낙상방지요령·감염예방) 관리, 투약돕기, 배설돕기, 안위증진을 위한 환자의 일상 활동돕기, 감염예방 등 구체적 교육을 시행합니다.", step: "셋." },
+    { image: "/img/main/prog_04.jpg", title: "재교육", desc: "케어매치에 소속된 간병인은 누구나 인성 교육과 함께 간병 실무와 이론 교육을 6개월로 받아야 합니다. 다만, 현장에서 근무하는 간병인에게는 온라인 동영상 시청 시 교육 이수를 인정합니다.", step: "넷." },
   ];
 
   return (
@@ -1162,7 +1165,7 @@ function CareEducationSection() {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-black/10" />
                   <div className="absolute top-3 left-3">
                     <span className="inline-block px-3 py-1 bg-primary-500 text-white text-[11px] font-bold rounded-full shadow-lg">
-                      STEP {p.step}
+                      {p.step}
                     </span>
                   </div>
                   <div className="absolute bottom-3 left-3 right-3">

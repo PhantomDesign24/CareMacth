@@ -92,8 +92,8 @@ export default function CompanyPage() {
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {VALUES.map((v) => (
               <div key={v.name} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-7 text-center">
-                <div className="relative w-24 h-24 sm:w-32 sm:h-32 mx-auto mb-4 rounded-full overflow-hidden">
-                  <Image src={v.img} alt={v.name} fill className="object-cover" sizes="128px" />
+                <div className="relative w-32 h-32 sm:w-44 sm:h-44 mx-auto mb-4 rounded-full overflow-hidden">
+                  <Image src={v.img} alt={v.name} fill className="object-cover" sizes="176px" />
                 </div>
                 <h3 className="text-lg font-bold text-primary-500 mb-2">{v.name}</h3>
                 <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">{v.desc}</p>

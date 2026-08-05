@@ -96,6 +96,7 @@ function RegisterPageInner() {
   const [step, setStep] = useState(1); // 1 = role select, 2 = form
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [duplicateMessage, setDuplicateMessage] = useState<string | null>(null); // 중복가입 안내창
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Common fields
@@ -268,13 +269,14 @@ function RegisterPageInner() {
         const respData = err.response.data;
         // 409 충돌 — 이미 가입된 소셜/이메일/전화번호. 사용자에게 안내하고 로그인 페이지로 자동 이동.
         if (err.response.status === 409) {
-          const msg = respData?.message || '이미 가입된 계정입니다. 로그인 페이지로 이동합니다.';
-          setErrorMessage(msg);
+          const msg = respData?.message || '이미 가입된 계정입니다.';
+          // 배너로만 띄우면 1.5초 뒤 자동 이동해 못 보고 지나친다는 지적(8/5 검수)
+          //  → 안내창으로 띄우고 '확인'을 눌러야 로그인 페이지로 이동
+          setDuplicateMessage(msg);
           // sessionStorage 의 stale signupToken/payload 정리 (재시도 루프 방지)
           try { sessionStorage.removeItem('cm_signup_payload'); } catch {}
           try { sessionStorage.removeItem('kakao_oauth_state'); } catch {}
           try { sessionStorage.removeItem('naver_oauth_state'); } catch {}
-          setTimeout(() => router.push('/auth/login'), 1500);
           return;
         }
         // 입력 검증 오류 — express-validator(400, errors 배열) + 전통적 422(errors 객체) 둘 다 처리
@@ -593,6 +595,22 @@ function RegisterPageInner() {
           <p className="text-gray-500 mt-1">필수 정보를 입력해 주세요</p>
         </div>
 
+        {duplicateMessage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+              <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-2xl">!</div>
+              <h3 className="text-base font-bold text-gray-900 mb-2">중복 가입 안내</h3>
+              <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{duplicateMessage}</p>
+              <button
+                type="button"
+                onClick={() => { setDuplicateMessage(null); router.push('/auth/login'); }}
+                className="mt-5 w-full py-3 rounded-xl bg-primary-500 text-white font-bold hover:bg-primary-600"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        )}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-8">
           {/* Global error message */}
           {errorMessage && (

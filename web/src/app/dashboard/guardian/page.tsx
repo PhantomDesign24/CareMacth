@@ -1100,6 +1100,13 @@ function GuardianDashboard() {
                                   ⏱ {Math.floor(elapsedMin / 60)}시간 {elapsedMin % 60}분 경과
                                 </span>
                               )}
+                              {/* 금액 올리기 진입점 — 지원자 화면 안에만 있어 못 찾는다는 지적(8/5 검수) */}
+                              <Link
+                                href={`/dashboard/guardian/applicants/${care.careRequestId}#raise`}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold text-amber-800 bg-amber-100 rounded-lg hover:bg-amber-200 transition-colors"
+                              >
+                                💰 금액 올리기
+                              </Link>
                               {showConsultationButtons && (
                                 isMobile ? (
                                   <a

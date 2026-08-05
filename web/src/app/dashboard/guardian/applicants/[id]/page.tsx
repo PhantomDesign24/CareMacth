@@ -452,6 +452,9 @@ export default function ApplicantsPage() {
 
         {/* 금액 올리기 섹션 */}
         {showRaiseRateButton && (
+          <div id="raise" />
+        )}
+        {showRaiseRateButton && (
           <div className="card mb-8 bg-amber-50 border-amber-200">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>

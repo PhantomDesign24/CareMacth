@@ -5508,6 +5508,41 @@ export const updateCareRequestDailyRate = async (req: AuthRequest, res: Response
       }
     }
 
+    // 아직 계약 전(모집 중)이라면, 이 공고를 추천받은 간병인들에게 금액 변경을 알린다.
+    //  보호자 화면의 '금액 올리기'와 동일한 안내 — 관리자가 올렸을 때만 알림이 없던 문제(8/5 검수)
+    if (contracts.length === 0 && (before ?? 0) < dailyRate) {
+      try {
+        const scores = await prisma.matchScore.findMany({
+          where: { careRequestId: id },
+          select: { caregiverId: true },
+        });
+        const cgs = scores.length
+          ? await prisma.caregiver.findMany({
+              where: { id: { in: scores.map((x) => x.caregiverId) } },
+              select: { userId: true },
+            })
+          : [];
+        const { sendFromTemplate } = await import('../services/notificationService');
+        for (const sc of cgs) {
+          if (!sc.userId) continue;
+          await sendFromTemplate({
+            userId: sc.userId,
+            key: 'MATCHING_RATE_RAISED',
+            vars: {
+              currentRate: (before ?? 0).toLocaleString(),
+              newRate: dailyRate.toLocaleString(),
+            },
+            fallbackTitle: '간병 요청 금액 인상',
+            fallbackBody: `일당이 ${(before ?? 0).toLocaleString()}원 → ${dailyRate.toLocaleString()}원으로 인상되었습니다`,
+            fallbackType: 'MATCHING',
+            data: { careRequestId: id, url: '/find-work' },
+          }).catch(() => {});
+        }
+      } catch (e) {
+        console.error('[updateCareRequestDailyRate] 후보 알림 실패:', (e as Error)?.message || e);
+      }
+    }
+
     res.json({
       success: true,
       data: { careRequestId: id, dailyRate: updated.dailyRate, contractsUpdated: contracts.length },
