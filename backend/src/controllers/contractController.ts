@@ -961,6 +961,8 @@ export const extendContract = async (req: AuthRequest, res: Response, next: Next
         userId: contract.guardian.userId,
         key: 'PAYMENT_EXTENSION_REQUIRED',
         vars: {
+          patientName: (contract as any).careRequest?.patient?.name || '',
+          period: `${additionalDays}일 연장`,
           additionalDays: String(additionalDays),
           additionalAmount: additionalAmount.toLocaleString(),
         },
@@ -1571,6 +1573,8 @@ export const approveExtension = async (req: AuthRequest, res: Response, next: Ne
       userId: ext.contract.guardian.userId,
       key: 'PAYMENT_EXTENSION_REQUIRED',
       vars: {
+        patientName: (ext.contract as any).careRequest?.patient?.name || '',
+        period: `${ext.additionalDays}일 연장`,
         additionalDays: String(ext.additionalDays),
         additionalAmount: ext.additionalAmount.toLocaleString(),
       },
