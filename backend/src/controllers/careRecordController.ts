@@ -275,6 +275,9 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
         caregiverId: caregiver.id,
         status: { in: ['ACTIVE', 'EXTENDED', 'COMPLETED'] },
       },
+      // 알림 본문의 {{patientName}} 을 채우려면 환자가 필요하다
+      //  (미포함이라 '▶ 환자 : ' 가 공란으로 발송되고 있었음)
+      include: { careRequest: { select: { patient: { select: { name: true } } } } },
     });
 
     if (!contract) {
@@ -341,7 +344,11 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
       await sendFromTemplate({
         userId: guardian.userId,
         key: 'CARE_RECORD_CREATED',
-        vars: { guardianName: guardian.user?.name || '', contractId },
+        vars: {
+          guardianName: guardian.user?.name || '',
+          patientName: (contract as any).careRequest?.patient?.name || '',
+          contractId,
+        },
         fallbackTitle: '간병 일지 작성',
         fallbackBody: '오늘의 간병 일지가 작성되었습니다. 확인해 주세요.',
         fallbackType: 'CARE_RECORD',
