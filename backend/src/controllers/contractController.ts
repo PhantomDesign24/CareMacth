@@ -1508,6 +1508,7 @@ export const rejectExtension = async (req: AuthRequest, res: Response, next: Nex
       vars: {
         patientName: ext.contract.careRequest.patient.name,
         reason: reason || '취소됨',
+        contractId,
       },
       fallbackTitle: '연장 신청이 취소되었습니다',
       fallbackBody: `${ext.contract.careRequest.patient.name} 환자 연장이 취소되었습니다. ${reason ? `사유: ${reason}` : ''}`,

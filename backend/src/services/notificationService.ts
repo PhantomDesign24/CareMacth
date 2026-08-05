@@ -190,7 +190,7 @@ export async function sendExtensionReminder(contractId: string, daysLeft: number
   await sendFromTemplate({
     userId: contract.guardian.userId,
     key,
-    vars: { patientName, daysLeft },
+    vars: { patientName, daysLeft, contractId },
     fallbackTitle: '간병 종료 예정 안내',
     fallbackBody: `${patientName} 환자의 간병 서비스가 ${daysLeft}일 후 종료됩니다. 연장을 원하시면 마이페이지에서 연장 요청해주세요.`,
     fallbackType: 'EXTENSION',

@@ -985,7 +985,7 @@ export const applyToCareRequest = async (req: AuthRequest, res: Response, next: 
       await sendFromTemplate({
         userId: guardian.userId,
         key: 'APPLICATION_GUARDIAN_NEW',
-        vars: { patientName },
+        vars: { patientName, careRequestId },
         data: { careRequestId, applicationId: application.id },
       }).catch(() => {});
     }

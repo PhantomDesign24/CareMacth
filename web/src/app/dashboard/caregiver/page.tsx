@@ -455,6 +455,22 @@ function CaregiverDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // 알림톡 버튼(?contract=<계약ID>)으로 진입하면 해당 활동 건으로 스크롤 + 강조
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  useEffect(() => {
+    const cid = searchParams.get("contract");
+    if (!cid || activityHistory.length === 0) return;
+    const el = document.getElementById(`care-${cid}`);
+    if (!el) return;
+    setHighlightId(cid);
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => setHighlightId(null), 3000);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("contract");
+    router.replace(`${pathname}${params.toString() ? `?${params}` : ""}`, { scroll: false });
+    return () => clearTimeout(t);
+  }, [searchParams, activityHistory, pathname, router]);
+
   const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
@@ -1362,8 +1378,11 @@ function CaregiverDashboard() {
                   return (
                     <Link
                       key={a.id}
+                      id={`care-${a.id}`}
                       href={`/dashboard/caregiver/journal/${a.id}`}
-                      className="block p-6 hover:bg-gray-50 transition-colors"
+                      className={`block p-6 hover:bg-gray-50 transition-colors ${
+                        highlightId === a.id ? "bg-amber-50 ring-2 ring-amber-300 rounded-xl" : ""
+                      }`}
                     >
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">

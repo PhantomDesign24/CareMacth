@@ -725,6 +725,29 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
       throw new AppError('결제는 승인되었으나 후속 처리 중 오류가 발생했습니다. 관리자가 확인 중입니다.', 500);
     }
 
+    // 보호자 결제 완료 알림톡 — 템플릿(PAYMENT_COMPLETED)이 승인돼 있는데
+    //  발송 코드가 없어 그동안 인앱 알림만 나가고 카톡은 한 번도 나가지 않았다.
+    if (payment.guardianId) {
+      const guardianForAlim = await prisma.guardian.findUnique({
+        where: { id: payment.guardianId },
+        select: { userId: true },
+      });
+      if (guardianForAlim?.userId) {
+        sendFromTemplate({
+          userId: guardianForAlim.userId,
+          key: 'PAYMENT_COMPLETED',
+          vars: {
+            amount: parseInt(amount).toLocaleString(),
+            contractId: payment.contractId || '',
+          },
+          fallbackTitle: '결제가 완료되었습니다',
+          fallbackBody: `결제가 완료되었습니다. 결제금액: ${parseInt(amount).toLocaleString()}원`,
+          fallbackType: 'PAYMENT',
+          data: { paymentId: payment.id, contractId: payment.contractId },
+        }).catch(() => {});
+      }
+    }
+
     // 간병사에게 예상 정산금액 안내 (최초 매칭 결제 시 — 연장 결제는 제외)
     if (payment.contractId && !linkedExtension) {
       notifyCaregiverSettlementEstimate(payment.contractId).catch(() => {});

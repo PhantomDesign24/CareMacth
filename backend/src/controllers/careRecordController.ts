@@ -341,7 +341,7 @@ export const createDailyLog = async (req: AuthRequest, res: Response, next: Next
       await sendFromTemplate({
         userId: guardian.userId,
         key: 'CARE_RECORD_CREATED',
-        vars: { guardianName: guardian.user?.name || '' },
+        vars: { guardianName: guardian.user?.name || '', contractId },
         fallbackTitle: '간병 일지 작성',
         fallbackBody: '오늘의 간병 일지가 작성되었습니다. 확인해 주세요.',
         fallbackType: 'CARE_RECORD',

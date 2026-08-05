@@ -703,6 +703,7 @@ export function setupCronJobs() {
           vars: {
             patientName: ext.contract.careRequest.patient.name,
             additionalDays: String(ext.additionalDays),
+            contractId: ext.contractId,
           },
           fallbackTitle: '연장 신청이 만료되었습니다',
           fallbackBody: `결제 미완료로 ${ext.contract.careRequest.patient.name} 환자 연장 신청이 자동 만료되었습니다.`,
@@ -756,6 +757,7 @@ export function setupCronJobs() {
           vars: {
             patientName: ext.contract.careRequest.patient.name,
             additionalDays: String(ext.additionalDays),
+            contractId: ext.contractId,
           },
           fallbackTitle: '연장 요청이 만료되었습니다',
           fallbackBody: `간병인 응답 시간(24시간) 초과로 ${ext.contract.careRequest.patient.name} 환자 연장 요청이 자동 만료되었습니다.`,

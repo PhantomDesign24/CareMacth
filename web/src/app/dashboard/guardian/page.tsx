@@ -537,6 +537,23 @@ function GuardianDashboard() {
 
   const referralCode = summary?.referralCode ?? "";
 
+  // 알림톡 버튼(?contract=<계약ID>)으로 진입하면 해당 간병 건으로 스크롤 + 강조
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  useEffect(() => {
+    const cid = searchParams.get("contract");
+    if (!cid || careHistory.length === 0) return;
+    const el = document.getElementById(`care-${cid}`);
+    if (!el) return;
+    setHighlightId(cid);
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => setHighlightId(null), 3000);
+    // 주소에서 파라미터만 정리 (탭은 유지)
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("contract");
+    router.replace(`${pathname}${params.toString() ? `?${params}` : ""}`, { scroll: false });
+    return () => clearTimeout(t);
+  }, [searchParams, careHistory, pathname, router]);
+
   const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
@@ -1008,7 +1025,11 @@ function GuardianDashboard() {
                 if (historyFilter === "CANCELLED") return care.requestStatus === 'CANCELLED' || care.contractStatus === 'CANCELLED';
                 return true;
               }).map((care) => (
-                <div key={care.id} className="p-6">
+                <div
+                  key={care.id}
+                  id={`care-${care.id}`}
+                  className={`p-6 transition-colors ${highlightId === care.id ? "bg-amber-50 ring-2 ring-amber-300 rounded-xl" : ""}`}
+                >
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
