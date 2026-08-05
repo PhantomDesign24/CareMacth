@@ -41,6 +41,7 @@ export default function PaymentPage() {
   const [error, setError] = useState("");
 
   const [contract, setContract] = useState<ContractInfo | null>(null);
+  const [signGuideShown, setSignGuideShown] = useState(false); // 서명 전 진입 안내창 1회 노출
   const [method, setMethod] = useState<PaymentMethod>("CARD");
   const [pointsAvailable, setPointsAvailable] = useState(0);
   const [pointsUsed, setPointsUsed] = useState(0);
@@ -328,6 +329,16 @@ export default function PaymentPage() {
     { value: "DIRECT", label: "직접결제", desc: "간병비는 간병사님께 직접 지급, 플랫폼 이용료만 결제" },
   ];
 
+  // 서명 미완료 상태로 결제 페이지에 들어오면 안내 후 계약서로 유도(8/5 검수)
+  useEffect(() => {
+    if (!contract || signGuideShown) return;
+    if (contract.status !== "PENDING_SIGNATURE") return;
+    setSignGuideShown(true);
+    if (window.confirm("간병인과 보호자 간 계약서 서명이 완료되어야 결제가 가능합니다.\n\n계약서 서명 화면으로 이동할까요?")) {
+      router.push("/dashboard/guardian");
+    }
+  }, [contract, signGuideShown, router]);
+
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -408,12 +419,19 @@ export default function PaymentPage() {
           {contract?.status === "PENDING_SIGNATURE" && (
             <div className="mb-6 flex items-start gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
               <span className="text-xl">✍️</span>
-              <div>
+              <div className="flex-1">
                 <p className="font-bold text-amber-900 text-sm">계약서 서명이 아직 완료되지 않았습니다</p>
                 <p className="text-xs text-amber-800 mt-1 leading-relaxed">
                   간병인과 보호자 간 계약서 서명이 완료되어야 결제가 가능합니다.
                   간병 현황에서 계약서 서명을 먼저 진행해주세요.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard/guardian")}
+                  className="mt-2.5 inline-flex items-center px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600"
+                >
+                  계약서 서명하러 가기
+                </button>
               </div>
             </div>
           )}
