@@ -561,15 +561,30 @@ function LiveDashboardSection() {
     <section className="py-8 md:py-12 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-        {/* 상단 카운터 */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <div ref={counter1.ref} className="rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 p-5 sm:p-8 text-white text-center">
-            <p className="text-primary-100 text-sm sm:text-base md:text-lg font-semibold mb-1.5">매칭 성공사례</p>
-            <p className="text-2xl sm:text-3xl md:text-4xl font-extrabold">{counter1.count.toLocaleString()}<span className="text-base sm:text-xl ml-1">건</span></p>
-          </div>
-          <div ref={counter2.ref} className="rounded-2xl bg-gradient-to-br from-secondary-500 to-secondary-600 p-5 sm:p-8 text-white text-center">
-            <p className="text-secondary-100 text-sm sm:text-base md:text-lg font-semibold mb-1.5">진행 중 간병</p>
-            <p className="text-2xl sm:text-3xl md:text-4xl font-extrabold">{counter2.count.toLocaleString()}<span className="text-base sm:text-xl ml-1">건</span></p>
+        {/* 상단 카운터 — 연한 배경 한 덩어리에 두 지표를 나란히, 가운데 세로 구분선 */}
+        <div className="mb-8 rounded-2xl bg-white border border-gray-200 shadow-[0_2px_16px_rgba(0,0,0,0.04)] overflow-hidden">
+          <div className="grid grid-cols-2 divide-x divide-gray-200">
+            <div ref={counter1.ref} className="px-4 py-6 sm:px-8 sm:py-8 text-center">
+              <p className="text-xs sm:text-sm font-semibold text-gray-500 mb-2">매칭 성공사례</p>
+              <p className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-gray-900 tabular-nums leading-none">
+                {counter1.count.toLocaleString()}
+                <span className="text-base sm:text-lg font-bold text-gray-400 ml-1">건</span>
+              </p>
+              <span className="mt-3 block mx-auto w-10 h-[3px] rounded-full bg-primary-500" />
+              <p className="mt-2 text-[11px] sm:text-xs text-gray-400">누적 기준</p>
+            </div>
+            <div ref={counter2.ref} className="px-4 py-6 sm:px-8 sm:py-8 text-center">
+              <p className="text-xs sm:text-sm font-semibold text-gray-500 mb-2">진행 중 간병</p>
+              <p className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-gray-900 tabular-nums leading-none">
+                {counter2.count.toLocaleString()}
+                <span className="text-base sm:text-lg font-bold text-gray-400 ml-1">건</span>
+              </p>
+              <span className="mt-3 block mx-auto w-10 h-[3px] rounded-full bg-secondary-500" />
+              <p className="mt-2 text-[11px] sm:text-xs text-gray-400 flex items-center justify-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-secondary-500 animate-pulse" />
+                실시간
+              </p>
+            </div>
           </div>
         </div>
 
