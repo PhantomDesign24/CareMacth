@@ -657,7 +657,7 @@ export default function FindWorkPage() {
                           const netDaily = (req as any).netDailyRate ?? req.dailyRate ?? 0;
                           return (
                             <>
-                              <span className="text-xs text-orange-600 font-medium block">예상 일당 (수수료 제외)</span>
+                              <span className="text-xs text-orange-600 font-medium block">예상 일당</span>
                               <span className="text-xl sm:text-2xl font-extrabold text-orange-600">
                                 {netDaily ? `${netDaily.toLocaleString()}원` : "협의"}
                               </span>
@@ -672,7 +672,7 @@ export default function FindWorkPage() {
                           return (
                             <div className="mt-2 pt-2 border-t border-orange-200 text-[11px] text-left space-y-0.5">
                               <div className="flex justify-between">
-                                <span className="text-gray-500">수수료 제외 ({req.durationDays}일)</span>
+                                <span className="text-gray-500">총 {req.durationDays}일</span>
                                 <span className="text-gray-700 font-medium">{afterFee.toLocaleString()}원</span>
                               </div>
                               <div className="flex justify-between">
@@ -801,7 +801,7 @@ export default function FindWorkPage() {
             <div className="space-y-4">
               {/* Guardian's rate */}
               <div className="bg-gray-50 rounded-xl px-4 py-3">
-                <span className="text-xs text-gray-500 block mb-1">보호자 제시 금액 (수수료 제외)</span>
+                <span className="text-xs text-gray-500 block mb-1">제시 금액</span>
                 <span className="text-lg font-bold text-gray-900">
                   {(() => {
                     const net = (modalTarget as any).netDailyRate ?? modalTarget.dailyRate;

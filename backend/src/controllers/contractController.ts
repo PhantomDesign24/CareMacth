@@ -1151,7 +1151,8 @@ export const generateContractPdf = async (req: AuthRequest, res: Response, next:
     const netTotalDoc = Math.max(0, contract.totalAmount - calcDoc.platformFee);
     const shownDaily = isCaregiverDoc ? Math.round(netTotalDoc / days) : contract.dailyRate;
     const shownTotal = isCaregiverDoc ? netTotalDoc : contract.totalAmount;
-    drawTableRow('일당', `${shownDaily.toLocaleString()}원${isCaregiverDoc && calcDoc.platformFee > 0 ? ' (매칭수수료 제외)' : ''}`);
+    // 간병사 계약서엔 이미 순액만 표기 — '수수료 제외' 문구까지 빼 수수료 존재를 노출하지 않는다
+    drawTableRow('일당', `${shownDaily.toLocaleString()}원`);
     drawTableRow('총 금액', `${shownTotal.toLocaleString()}원${isCaregiverDoc ? '' : ' (VAT 별도)'}`);
     // 취소 계약은 실제 사용일수 기준으로 일할 정산되므로 '예정액'을 표기하지 않는다
     if (isCaregiverDoc && contract.status !== 'CANCELLED') {

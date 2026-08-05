@@ -1186,7 +1186,7 @@ function CaregiverDashboard() {
                     </div>
                     <div className="flex md:flex-col items-center md:items-stretch gap-3 shrink-0 md:w-44">
                       <div className="flex-1 md:flex-none bg-orange-50 rounded-xl px-4 py-3 text-center">
-                        <div className="text-xs text-orange-600">일당 (수수료 제외)</div>
+                        <div className="text-xs text-orange-600">일당</div>
                         <div className="text-base font-bold text-orange-600">
                           {req.dailyRate ? `${req.dailyRate.toLocaleString()}원` : "협의"}
                         </div>
@@ -1487,7 +1487,7 @@ function CaregiverDashboard() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:shrink-0">
                       <div className="text-right">
-                        <div className="text-[11px] text-gray-400 leading-none mb-0.5">매칭수수료 제외</div>
+                        <div className="text-[11px] text-gray-400 leading-none mb-0.5">실 수령 기준</div>
                         <div className="text-lg font-bold text-gray-900">
                           {activity.earnings.toLocaleString()}원
                         </div>
