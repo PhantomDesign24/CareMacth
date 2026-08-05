@@ -515,11 +515,13 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
         manualNeeded: false,
       };
 
-      if (cashRefund > 0) {
-        if (forceManualReview) {
-          // 보호자 취소 — 카드든 무통장이든 관리자 검토 큐로. 관리자가 위약금 차감액 확인 후 승인.
-          plan.manualNeeded = true;
-        } else if (p.method === 'CARD' && p.tossPaymentKey) {
+      if (forceManualReview) {
+        // 보호자 취소 — 카드든 무통장이든 관리자 검토 큐로. 관리자가 위약금 차감액 확인 후 승인.
+        //  환불액이 0원(잔여 없음·위약금 상계)이어도 큐에 올린다.
+        //  '관리자 확인 후 취소' 안내대로 취소 사실 자체가 관리자에게 보여야 하기 때문.
+        plan.manualNeeded = true;
+      } else if (cashRefund > 0) {
+        if (p.method === 'CARD' && p.tossPaymentKey) {
           // 간병인/관리자 강제 취소 — 카드는 즉시 자동 환불
           try {
             const secretKey = config.toss.secretKey;
@@ -699,8 +701,9 @@ export const cancelContract = async (req: AuthRequest, res: Response, next: Next
             }
           }
           totalCashRefundedNow += plan.cashRefund;
-        } else if (plan.manualNeeded && plan.cashRefund > 0) {
+        } else if (plan.manualNeeded) {
           // 자동 환불 불가 → 관리자 환불 요청 큐로 등록 (Payment.status 미변경)
+          //  cashRefund 가 0 이어도 등록해야 관리자가 취소 건을 확인할 수 있다
           await tx.payment.update({
             where: { id: original.id },
             data: {
